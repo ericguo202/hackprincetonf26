@@ -265,7 +265,8 @@ def test_a_crumpled_open_door_becomes_a_slab_and_a_round_thing_does_not():
 
 def test_a_wall_no_camera_saw_takes_its_rooms_wall_colour():
     def plane(kind, room, seen, colour):
-        p = rb.Plane(kind, np.zeros(3), np.eye(3)[0], np.eye(3)[2], np.eye(3)[1], 1.0, 1.0, None, room=room)
+        unit = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+        p = rb.Plane(kind, np.zeros(3), np.eye(3)[0], np.eye(3)[2], np.eye(3)[1], 1.0, 1.0, unit, room=room)
         p.image = np.full((4, 4, 4), 200, np.uint8)
         p.image[..., :3] = colour
         p.shape_mask = np.ones((4, 4), bool)
@@ -281,3 +282,116 @@ def test_a_wall_no_camera_saw_takes_its_rooms_wall_colour():
     rb._paint_unseen_planes(planes)
     assert tuple(hidden.image[0, 0, :3]) == white
     assert tuple(closet.image[0, 0, :3]) == tan  # the house's most common wall colour
+
+
+# ---------------------------------------------------------------- single view, synthesis, ledges, small boxes
+
+
+def test_shade_single_takes_a_face_from_one_camera_and_matches_the_next(tmp_path):
+    from worldgen.panos import shade_single
+
+    # Two cameras look down at a floor; a wall between them hides each one's far half.
+    panos = pano_set(tmp_path, [(1.0, 1.5, 1.5), (3.0, 1.5, 1.5)])
+    floor = [[(0, 0, 0), (4, 0, 0), (4, 3, 0)], [(0, 0, 0), (4, 3, 0), (0, 3, 0)]]
+    wall = [[(2, 0, 0), (2, 3, 0), (2, 3, 2.5)], [(2, 0, 0), (2, 3, 2.5), (2, 0, 2.5)]]
+    rays = Raycaster(np.array(floor + wall, dtype=float))
+    xs = np.r_[np.linspace(0.1, 0.4, 60), np.linspace(3.6, 3.9, 60)]
+    pts = np.c_[xs, np.full(120, 0.3), np.zeros(120)]
+    rgb, valid = shade_single(pts, np.tile([0.0, 0.0, 1.0], (120, 1)), panos, rays)
+    assert valid.all()
+    assert np.abs(rgb - COLOURS[5]).max() < 12  # every point from a down face, of whichever camera sees it
+
+
+def test_fill_gives_a_big_hole_the_texture_of_the_seen_part():
+    rng = np.random.default_rng(0)
+    img = np.clip(150 + rng.normal(0, 12, (300, 300, 3)), 0, 255).astype(np.uint8)  # a popcorn ceiling
+    valid = np.ones((300, 300), bool)
+    valid[100:200, 100:200] = False  # where the fan was
+    smooth = rb._fill(img, valid, detail=False)
+    textured = rb._fill(img, valid)
+    assert (textured[valid] == img[valid]).all()
+    assert smooth[130:170, 130:170].std() < 2  # a smear
+    assert textured[130:170, 130:170].std() > 6  # grain like the rest
+    assert abs(float(textured[130:170, 130:170].mean()) - 150) < 4  # same colour
+
+
+def test_lone_small_rectangles_are_not_boxes_but_parts_of_a_big_one_are():
+    res = rb.RELIEF_RES
+    fridge = (100, 140, 40, 125, 0.86)  # tall
+    fridge_bit = (140, 152, 60, 100, 0.84)  # small, touching it, same front
+    counter = (10, 90, 80, 125, 0.62)  # big
+    bump = (155, 190, 0, 125, 0.21)  # a wall bump from floor to ceiling
+    tank = (160, 183, 84, 107, 0.29)  # a toilet tank in front of the bump: small, nothing beside it
+    bowl = (165, 179, 99, 125, 0.69)
+    kept = rb._drop_lone_small([fridge, fridge_bit, counter, bump, tank, bowl], res)
+    assert kept == [fridge, fridge_bit, counter, bump]
+    # A microwave 8 cm proud of the wall cabinets on either side of it is built in, and stays a box.
+    left, right = (0, 55, 20, 40, 0.32), (70, 130, 20, 40, 0.32)
+    microwave = (55, 70, 22, 40, 0.40)
+    assert rb._drop_lone_small([left, right, microwave], res) == [left, right, microwave]
+    assert rb._drop_lone_small([left, microwave], res) == [left]  # with a cabinet on one side only: not
+
+
+def test_a_scanned_bar_ledge_becomes_a_slab():
+    rng = np.random.default_rng(2)
+    n = 9
+    gx, gy = np.meshgrid(np.linspace(1.0, 3.0, n), np.linspace(1.2, 1.5, 4))
+    top = np.dstack([gx, gy, 1.15 + rng.normal(0, 0.008, gx.shape)])
+    under = np.dstack([gx, gy, 1.10 + rng.normal(0, 0.008, gx.shape)])
+    tris = []
+    for i in range(3):
+        for j in range(n - 1):
+            a, b, c, d = top[i, j], top[i, j + 1], top[i + 1, j + 1], top[i + 1, j]
+            tris += [[a, b, c], [a, c, d]]  # facing up
+            a, b, c, d = under[i, j], under[i, j + 1], under[i + 1, j + 1], under[i + 1, j]
+            tris += [[a, c, b], [a, d, c]]  # facing down
+    for j in range(n - 1):  # the front edge joins the two sheets into one piece
+        a, b, c, d = top[0, j], top[0, j + 1], under[0, j + 1], under[0, j]
+        tris += [[a, c, b], [a, d, c]]
+    scan = soup_scan(tris)
+    boxes = rb.ledge_boxes(scan, np.arange(len(scan.tris)), [room()])
+    assert len(boxes) == 1
+    b = boxes[0]
+    assert not b.attached
+    assert sorted([round(b.s1 - b.s0, 1), round(b.depth, 1)]) == [0.3, 2.0]
+    assert b.t1 == pytest.approx(1.15, abs=0.02) and b.t0 == pytest.approx(1.10, abs=0.02)
+    assert rb.in_boxes(np.array([[2.0, 1.35, 1.13]]), boxes).all()
+    assert len(rb.box_planes(boxes)) == 6  # floating and free-standing: all six faces
+
+
+def test_two_cabinet_fronts_at_one_depth_meet_without_a_slit():
+    o, u, n = np.zeros(3), np.array([1.0, 0, 0]), np.array([0, 1.0, 0])
+    upper = rb.Box(o, u, n, 0.0, 2.0, 1.6, 2.2, 0.3)
+    lower = rb.Box(o, u, n, 0.5, 1.5, 1.4, 1.8, 0.3)  # overlaps the upper one between z 1.6 and 1.8
+    fronts = [p for p in rb.box_planes([upper, lower]) if abs(p.n @ n) > 0.9 and p.n @ n > 0]
+    area = sum(p.shape.area for p in fronts)
+    assert area == pytest.approx(2.0 * 0.6 + 1.0 * 0.2, abs=1e-6)  # the union exactly: no gap, no overlap
+
+
+def test_fixtures_at_the_far_end_of_a_long_house_still_find_their_camera(tmp_path):
+    # 14 cameras in a row, 15 m apart, over one long floor. shade() looks at the 12 nearest to the centre
+    # of the points it is given, so points at both ends together lose their own cameras.
+    panos = pano_set(tmp_path, [(15.0 * i, 1.5, 1.5) for i in range(14)])
+    floor = [[(-5, 0, 0), (200, 0, 0), (200, 3, 0)], [(-5, 0, 0), (200, 3, 0), (-5, 3, 0)]]
+    rays = Raycaster(np.array(floor, dtype=float))
+    pts = np.array([[1.5, 1.5, 0.0], [196.5, 1.5, 0.0]])
+    up = np.tile([0.0, 0.0, 1.0], (2, 1))
+    _, together = shade(pts, up, panos, rays, snap=False)
+    assert not together.any()
+    rgb, valid = rb._shade_local(pts, up, panos, rays)
+    assert valid.all() and np.abs(rgb - COLOURS[5]).max() < 12
+
+
+def test_the_sample_patch_avoids_a_ceiling_light():
+    rng = np.random.default_rng(3)
+    img = np.clip(150 + rng.normal(0, 10, (200, 400, 3)), 0, 255).astype(np.uint8)
+    img[60:100, 40:80] = 250  # a light
+    patches = rb._plain_patches(img, np.ones((200, 400), bool), 96)
+    assert patches and all(p.shape == (96, 96, 3) and p.max() < 215 for p in patches)  # grain only
+    tile = rb._detail_tile(img, np.ones((200, 400), bool), 300, 300)
+    assert tile is not None and 5 < tile.std() < 15
+    # When every seen square holds a feature (here thin dark lines, closer than the smallest sample
+    # square), nothing is copied at all.
+    lined = img[:, 200:].copy()
+    lined[::16] = 60
+    assert rb._detail_tile(lined, np.ones((200, 200), bool), 300, 300) is None

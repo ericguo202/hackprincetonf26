@@ -30,12 +30,13 @@ from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
 from worldgen import house_mesh as hm
-from worldgen.panos import SNAP, PanoSet, Raycaster, shade
+from worldgen.panos import SNAP, PanoSet, Raycaster, shade, shade_single
 
 WALL_INSET = 0.05  # wall surface sits about half a wall thickness inside the centreline polygon
 SHELL_TOL = 0.08  # scan faces this close to (and parallel to) a shell plane are replaced by it
 PAGE = 2048
 PAD = 4
+SINGLE_VIEW_MAX = 600_000  # texels; box faces up to this size are textured from one panorama at a time
 UNSEEN_PLANE = 0.05  # a shell plane cameras saw less of than this is painted in its room's colour
 
 
@@ -280,7 +281,11 @@ def bake_plane(
     hit[mask] = near
     k = max(3, int(0.12 * res) | 1)
     smooth = base + ndimage.uniform_filter(off, k) / np.maximum(ndimage.uniform_filter(hit, k), 1e-6)
-    rgb, valid = shade(pts + nrm * smooth[mask][:, None], nrm, panos, scan.eyes, snap=False)
+    at = pts + nrm * smooth[mask][:, None]
+    if p.kind == "box" and len(at) <= SINGLE_VIEW_MAX:
+        rgb, valid = shade_single(at, nrm, panos, scan.eyes)  # one photo per face where possible
+    else:
+        rgb, valid = shade(at, nrm, panos, scan.eyes, snap=False)
     img = np.zeros((H, W, 3), np.uint8)
     img[mask] = np.clip(rgb, 0, 255).astype(np.uint8)
     ok = np.zeros((H, W), bool)
@@ -302,7 +307,8 @@ def bake_plane(
         alpha[e] = 0
         ok &= ~e
         carved = float(e.sum()) / res / res
-    p.image = np.dstack([_fill(img, ok), alpha])
+    # Outside the plane's shape nothing is drawn: count it as seen so the fill does no work there.
+    p.image = np.dstack([_fill(img, ok | ~mask) if ok.any() else np.full_like(img, 200), alpha])
     stats = {"area": p.shape.area, "seen": float(ok.sum()) / max(1, mask.sum()), "carved_m2": carved}
     p.seen = stats["seen"]
     p.unseen = mask & ~ok & (alpha > 0)
@@ -402,9 +408,70 @@ def see_through(
     return no_surface, out
 
 
-def _fill(img: np.ndarray, valid: np.ndarray) -> np.ndarray:
-    """Fill texels no camera saw with a smooth blend of nearby seen texels (normalised convolution, finest
-    scale that has data), so they read as plain surface instead of streaks."""
+DETAIL_PATCH = 96  # texels; side of the sample square whose fine texture is repeated over unseen areas
+DETAIL_GRAIN = 4.0  # texels; structure broader than this is not copied
+DETAIL_MAX_PEAK = 5.0  # a patch whose strongest detail is this many times its typical detail is not grain
+
+
+def _plain_patches(img: np.ndarray, valid: np.ndarray, size: int) -> list[np.ndarray]:
+    """Candidate size x size squares of the image that cameras saw completely and that look like ordinary
+    surface (8 texel steps): the square at the lower quartile of "strongest edge inside it", then the one
+    with the weakest. A square with a light switch, a ceiling light or a door edge has a strong edge; the
+    weakest one is sometimes blurred or blown out, so it is the second choice."""
+    H, W = valid.shape
+    if H < size or W < size:
+        return []
+    c = np.pad(valid.astype(np.float64), ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    full = (c[size:, size:] - c[:-size, size:] - c[size:, :-size] + c[:-size, :-size])[::8, ::8]
+    full = full >= size * size - 0.5
+    lum = ndimage.gaussian_filter(img[..., :3].astype(np.float32).mean(-1), 2)  # edges, not grain
+    gy, gx = np.gradient(lum)
+    edge = np.hypot(gx, gy)
+    h8, w8 = H // 8, W // 8
+    blocks = edge[: h8 * 8, : w8 * 8].reshape(h8, 8, w8, 8).max((1, 3))
+    k = size // 8
+    peak = ndimage.maximum_filter(blocks, size=k, origin=-(k // 2), mode="nearest")  # max over [i, i + k)
+    peak = peak[: full.shape[0], : full.shape[1]]
+    full = full[: peak.shape[0], : peak.shape[1]]
+    if not full.any():
+        return []
+    values, where = peak[full], np.argwhere(full)
+    out = []
+    for i in (int(np.argmin(np.abs(values - np.quantile(values, 0.25)))), int(np.argmin(values))):
+        r, c0 = int(where[i][0]) * 8, int(where[i][1]) * 8
+        out.append(img[r : r + size, c0 : c0 + size, :3].astype(np.float32))
+    return out
+
+
+def _detail_tile(img: np.ndarray, valid: np.ndarray, H: int, W: int) -> np.ndarray | None:
+    """Fine texture (H, W, 3, zero mean) to lay over a smooth fill: the grain of an ordinary seen patch of
+    `img`, mirrored so that it repeats without seams. None when there is no suitable patch (the fill then
+    stays smooth, which is never wrong).
+
+    Only grain is copied: structure broader than DETAIL_GRAIN is removed, and a patch whose detail has
+    outliers (a line, a rim, a screw: 99th percentile over DETAIL_MAX_PEAK times the median) is rejected,
+    because a feature repeated every 2 x DETAIL_PATCH texels reads as a grid."""
+    for size in (DETAIL_PATCH, DETAIL_PATCH // 2, DETAIL_PATCH // 4):
+        for patch in _plain_patches(img, valid, size):
+            low = [ndimage.gaussian_filter(patch[..., c], DETAIL_GRAIN, mode="reflect") for c in range(3)]
+            d = patch - np.stack(low, -1)
+            mag = np.abs(d).mean(-1)
+            typical = float(np.median(mag))
+            if np.quantile(mag, 0.99) > DETAIL_MAX_PEAK * typical + 1.0:
+                continue
+            limit = 3.0 * typical + 1.0
+            d = np.clip(d, -limit, limit)
+            d = np.concatenate([d, d[::-1]], 0)
+            d = np.concatenate([d, d[:, ::-1]], 1)
+            return np.tile(d, (math.ceil(H / (2 * size)), math.ceil(W / (2 * size)), 1))[:H, :W]
+    return None
+
+
+def _fill(img: np.ndarray, valid: np.ndarray, detail: bool = True) -> np.ndarray:
+    """Fill texels no camera saw. Colour: a smooth blend of nearby seen texels (normalised convolution,
+    finest scale that has data), so they read as plain surface instead of streaks. Texture: in holes more
+    than a few texels across, the fine detail of a seen patch of the same image is laid over the blend
+    (`_detail_tile`), so a filled patch of popcorn ceiling, carpet or wood grain is not a smooth smear."""
     if valid.all():
         return img
     if not valid.any():
@@ -423,6 +490,12 @@ def _fill(img: np.ndarray, valid: np.ndarray) -> np.ndarray:
             break
     if todo.any():
         out[todo] = img[valid].mean(0)
+    if detail:
+        depth = ndimage.distance_transform_edt(~valid)
+        if (depth > 8).sum() > 300:
+            tile = _detail_tile(img, valid, *valid.shape)
+            if tile is not None:
+                out += tile * np.clip((depth - 2) / 8, 0, 1)[..., None]  # fades in from the hole's edge
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
@@ -503,6 +576,7 @@ class Box:
     attached: bool = True
     wall_ends: tuple[bool, bool] = (False, False)  # the box touches a wall at its s0 / s1 end
     to_ceiling: bool = False  # the box reaches the ceiling (no top face)
+    room: int = -1  # index of the room the box was found in
     back: float = 0.0  # unattached boxes: how far the fixture reaches behind the outline (a half wall)
 
     def footprint(self, grow: float = 0.0) -> Polygon:
@@ -767,6 +841,66 @@ def relief_rects(depth: np.ndarray, res: float = RELIEF_RES) -> list[tuple[int, 
     return out
 
 
+RELIEF_BIG_WIDTH = 0.5  # m; a rectangle at least this wide ...
+RELIEF_BIG_AREA = 0.25  # m2; ... and this large is a fixture in its own right, and so is one ...
+RELIEF_TALL = 1.5  # m; ... at least this tall (a wall bump, a door folded back against the wall)
+RELIEF_SAME_FRONT = 0.07  # m; a small rectangle continues a big one when their depths differ by less
+RELIEF_BUILT_IN = 0.15  # m; ... or is built in between two when its depth is within this of theirs
+
+
+def _drop_lone_small(rects: list, res: float = RELIEF_RES) -> list:
+    """Keep the rectangles that are fixtures in their own right (cabinets, appliances, tub fronts, doors)
+    and the small ones that belong to such a fixture:
+    - continuing it: touching it along a side with the front within RELIEF_SAME_FRONT (the rest of a
+      fridge, the stove's control panel), or
+    - built in: kept rectangles on two opposite sides of it, fronts within RELIEF_BUILT_IN (a microwave
+      between wall cabinets, a stove between counters).
+    A small rectangle on its own, or standing in front of a single larger one (a toilet's tank against a
+    wall bump, a pedestal sink's column), is the flat part of something round and would turn half of that
+    object into a block; it stays scan geometry."""
+
+    def big(r) -> bool:
+        w, h = (r[1] - r[0]) / res, (r[3] - r[2]) / res
+        return (w >= RELIEF_BIG_WIDTH and w * h >= RELIEF_BIG_AREA) or h >= RELIEF_TALL
+
+    gap = int(0.08 * res)
+
+    def side(r, q) -> str | None:
+        """Which side of r the rectangle q lies on (touching, not overlapping r's middle), if any."""
+        dx, dy = max(q[0] - r[1], r[0] - q[1]), max(q[2] - r[3], r[2] - q[3])  # gaps; negative = overlap
+        cx, cy = (r[0] + r[1]) / 2, (r[2] + r[3]) / 2
+        if q[0] <= cx <= q[1] and q[2] <= cy <= q[3]:
+            return None  # q covers r's middle: r stands in front of it
+        if max(dx, dy) > gap or min(dx, dy) >= 0:
+            return None  # apart, or corner to corner
+        if dy < 0 and dx >= -gap:
+            return "left" if q[1] <= cx else "right"
+        if dx < 0 and dy >= -gap:
+            return "above" if q[3] <= cy else "below"
+        return None
+
+    keep = [big(r) for r in rects]
+    grew = True
+    while grew:
+        grew = False
+        for i, r in enumerate(rects):
+            if keep[i]:
+                continue
+            sides = set()
+            for j, q in enumerate(rects):
+                where = side(r, q) if keep[j] else None
+                if where is None:
+                    continue
+                diff = abs(q[4] - r[4])
+                if diff <= RELIEF_SAME_FRONT:
+                    sides.add("same")
+                if diff <= RELIEF_BUILT_IN:
+                    sides.add(where)
+            if "same" in sides or {"left", "right"} <= sides or {"above", "below"} <= sides:
+                keep[i] = grew = True
+    return [r for r, k in zip(rects, keep, strict=True) if k]
+
+
 def _snap_depths(rects: list[tuple[int, int, int, int, float]], tol: float = 0.035) -> list:
     """Give rectangles on one wall whose depths differ by less than tol the same depth (area-weighted mean),
     so the pieces of one cabinet run or one fridge do not step by a centimetre or two where they meet."""
@@ -802,7 +936,7 @@ def relief_boxes(scan: Scan, rooms: list[ShellRoom], debug: Path | None = None) 
             wall_before = any(b > prev[2] - 0.3 for _, b in prev[3])
             wall_after = any(a < 0.3 for a, _ in nxt[3])
             D = wall_relief(scan, r, p0, p1, length)
-            rects = _snap_depths(relief_rects(D))
+            rects = _snap_depths(_drop_lone_small(relief_rects(D)))
             if debug is not None:
                 _relief_debug(D, rects, debug / f"relief_room{ri + 1}_wall{wi}.png")
             u = np.array([p1[0] - p0[0], p1[1] - p0[1], 0.0]) / length
@@ -817,7 +951,7 @@ def relief_boxes(scan: Scan, rooms: list[ShellRoom], debug: Path | None = None) 
                 on_wall = sum(max(0.0, min(b, s1) - max(a, s0)) for a, b in covered)
                 ends = (wall_before and s0 < 0.03, wall_after and s1 > length - 0.03)
                 attached = on_wall > 0.5 * (s1 - s0)
-                b = Box(origin, u, n, s0, s1, t0, t1, d, attached, ends, to_ceiling=r0 == 0)
+                b = Box(origin, u, n, s0, s1, t0, t1, d, attached, ends, to_ceiling=r0 == 0, room=ri)
                 if not attached:
                     b.back = _back_extent(scan, b)
                 boxes.append(b)
@@ -880,7 +1014,8 @@ def leaf_boxes(scan: Scan, faces: np.ndarray, rooms: list[ShellRoom]) -> list[Bo
         s = (pts - mu) @ u
         s0, s1 = np.quantile(s, [0.02, 0.98])
         z0, z1 = np.quantile(pts[:, 2], [0.02, 0.98])
-        floor = next((r.floor_z for r in rooms if r.poly.contains(Point(mu[0], mu[1]))), None)
+        ri = next((i for i, r in enumerate(rooms) if r.poly.contains(Point(mu[0], mu[1]))), None)
+        floor = None if ri is None else rooms[ri].floor_z
         if floor is None or z1 - floor < 1.6 or z0 - floor > 0.25 or not 0.4 <= s1 - s0 <= 1.3:
             continue
         if area.sum() < 0.5 * (s1 - s0) * (z1 - z0):
@@ -888,7 +1023,69 @@ def leaf_boxes(scan: Scan, faces: np.ndarray, rooms: list[ShellRoom]) -> list[Bo
         thick = max(0.04, 2 * float(np.median(dist)))
         origin = mu + u * s0 - n * thick / 2
         origin[2] = floor
-        out.append(Box(origin, u, n, 0.0, float(s1 - s0), 0.0, float(z1 - floor), thick, attached=False))
+        leaf = Box(origin, u, n, 0.0, float(s1 - s0), 0.0, float(z1 - floor), thick, attached=False, room=ri)
+        out.append(leaf)
+    return out
+
+
+LEDGE_MIN_AREA = 0.25  # m2 of flat top
+LEDGE_Z = (0.5, 1.6)  # m above the floor: bars, shelves, window seats (lower is a hearth or a step)
+
+
+def ledge_boxes(scan: Scan, faces: np.ndarray, rooms: list[ShellRoom]) -> list[Box]:
+    """Flat, level slabs that stand free of the walls' fronts (a breakfast bar's ledge, a deep shelf) as
+    boxes. No wall "sees" them in its relief map: from the side a ledge is a strip a few cm high.
+
+    A connected piece of the left-over scan qualifies when its upward-facing triangles have at least
+    LEDGE_MIN_AREA within 4 cm of one height (and that is 60% of all its upward-facing area), the height is
+    within LEDGE_Z above the floor, and those triangles fill 60% of their bounding rectangle, taken along
+    the direction of the nearest room's walls that makes it smallest. The slab is as thick as the scan says
+    (down to the piece's downward-facing triangles, 3 to 15 cm; 4 cm when it has none)."""
+    if not len(faces):
+        return []
+    soup = scan.tris[faces].reshape(-1, 3)
+    m = trimesh.Trimesh(soup, np.arange(len(soup)).reshape(-1, 3), process=False)
+    m.merge_vertices()
+    out = []
+    for comp in trimesh.graph.connected_components(m.face_adjacency, nodes=np.arange(len(faces))):
+        f = faces[comp]
+        up = f[scan.normals[f, 2] > 0.7]
+        if scan.areas[up].sum() < LEDGE_MIN_AREA:
+            continue
+        z = scan.tris[up].mean(1)[:, 2]
+        order = np.argsort(z)
+        top = float(z[order][np.searchsorted(np.cumsum(scan.areas[up][order]), 0.5 * scan.areas[up].sum())])
+        flat = up[np.abs(z - top) < 0.04]
+        area = float(scan.areas[flat].sum())
+        if area < LEDGE_MIN_AREA or area < 0.6 * scan.areas[up].sum():
+            continue
+        pts = scan.tris[flat].reshape(-1, 3)
+        mid = pts[:, :2].mean(0)
+        ri = next((i for i, r in enumerate(rooms) if r.poly.contains(Point(mid))), None)
+        if ri is None or not LEDGE_Z[0] <= top - rooms[ri].floor_z <= LEDGE_Z[1]:
+            continue
+        best = None
+        for p0, p1, length, _ in wall_runs(rooms[ri]):
+            u = (p1 - p0) / length
+            n = np.array([-u[1], u[0]])
+            s, d = (pts[:, :2] - mid) @ u, (pts[:, :2] - mid) @ n
+            (s0, s1), (d0, d1) = np.quantile(s, [0.02, 0.98]), np.quantile(d, [0.02, 0.98])
+            if best is None or (s1 - s0) * (d1 - d0) < best[0]:
+                best = ((s1 - s0) * (d1 - d0), u, n, s0, s1, d0, d1)
+        if best is None:
+            continue
+        rect, u, n, s0, s1, d0, d1 = best
+        if area < 0.6 * rect or min(s1 - s0, d1 - d0) < 0.12:
+            continue
+        down = f[scan.normals[f, 2] < -0.7]
+        under = scan.tris[down].mean(1)[:, 2] if len(down) else np.zeros(0)
+        under = under[(under < top - 0.03) & (under > top - 0.15)]
+        bottom = float(np.median(under)) if len(under) else top - 0.04
+        floor = rooms[ri].floor_z
+        origin = np.array([*(mid + u * s0 + n * d0), floor])
+        u3, n3 = np.array([u[0], u[1], 0.0]), np.array([n[0], n[1], 0.0])
+        z0, z1 = bottom - floor, top - floor
+        out.append(Box(origin, u3, n3, 0.0, float(s1 - s0), z0, z1, float(d1 - d0), False, room=ri))
     return out
 
 
@@ -936,17 +1133,18 @@ def _hidden(shape: Polygon, face_origin, fu, fv, fn, fw: float, own: Box, others
         tie = any(float(fn @ m) > 0.99 and abs(offset - o) < 0.012 for m, o in other.face_planes())
         if tie and j > idx:
             continue
+        g = 0.0 if tie else grow  # a tie is cut exactly: any margin leaves a slit between the two faces
         if abs(fn[2]) > 0.5:  # top or bottom: buried where the other box spans this height
             z = face_origin[2]
             if not (other.z0 - grow < z < other.z1 + grow):
                 continue
-            ring = np.asarray(other.footprint(grow).exterior.coords)[:-1] - face_origin[:2]
+            ring = np.asarray(other.footprint(g).exterior.coords)[:-1] - face_origin[:2]
             cut = Polygon(np.c_[ring @ fu[:2], ring @ fv[:2]])
         else:  # vertical face: buried along the stretch of its line that lies inside the other footprint
             a = face_origin[:2]
             line = LineString([a, a + fu[:2] * fw])
-            lo, hi = other.z0 - grow - face_origin[2], other.z1 + grow - face_origin[2]
-            cuts = [box(s0, lo, s1, hi) for s0, s1 in _intervals(line, other.footprint(grow))]
+            lo, hi = other.z0 - g - face_origin[2], other.z1 + g - face_origin[2]
+            cuts = [box(s0, lo, s1, hi) for s0, s1 in _intervals(line, other.footprint(g))]
             if not cuts:
                 continue
             cut = unary_union(cuts)
@@ -986,26 +1184,44 @@ def box_planes(boxes: list[Box]) -> list[Plane]:
     return planes
 
 
+def _paint(p: Plane, colour: np.ndarray, source: Plane | None) -> None:
+    """Give the unseen texels of p a colour plus, when `source` (a well-seen plane of the same material)
+    has an ordinary patch, that patch's fine texture."""
+    H, W = p.unseen.shape
+    paint = np.tile(colour.astype(float), (H, W, 1))
+    if source is not None:
+        tile = _detail_tile(source.image[..., :3], source.shape_mask & ~source.unseen, H, W)
+        if tile is not None:
+            paint += tile
+    p.image[..., :3][p.unseen] = np.clip(paint, 0, 255).astype(np.uint8)[p.unseen]
+
+
 def _paint_unseen_planes(planes: list[Plane]) -> None:
     """A wall, floor or ceiling that no camera saw (the wall behind a shower curtain, a closet nobody
-    scanned) takes the median colour of what cameras did see of the same kind of surface in its room, or in
-    the whole house when its room has none. Without this it is a flat grey that belongs to no room."""
+    scanned) takes the median colour, and the fine texture, of what cameras did see of the same kind of
+    surface in its room, or in the whole house when its room has none. Without this it is a flat grey that
+    belongs to no room."""
 
     def colour_of(group: list[Plane]) -> np.ndarray | None:
         px = [p.image[..., :3][p.shape_mask & ~p.unseen][::17] for p in group if p.seen >= 0.3]
         px = [x for x in px if len(x)]
         return np.median(np.concatenate(px), axis=0).astype(np.uint8) if px else None
 
+    def best_of(group: list[Plane]) -> Plane | None:
+        group = [p for p in group if p.seen >= 0.3]
+        return max(group, key=lambda p: p.seen * p.shape.area) if group else None
+
     for kind in ("wall", "floor", "ceiling"):
         of_kind = [p for p in planes if p.kind == kind]
-        house = colour_of(of_kind)
         for p in of_kind:
             if p.seen >= UNSEEN_PLANE:
                 continue
-            colour = colour_of([q for q in of_kind if q.room == p.room and q.room >= 0])
-            colour = house if colour is None else colour
+            group = [q for q in of_kind if q.room == p.room and q.room >= 0]
+            if colour_of(group) is None:
+                group = of_kind
+            colour = colour_of(group)
             if colour is not None:
-                p.image[..., :3][p.unseen] = colour
+                _paint(p, colour, best_of(group))
 
 
 BOX_MIN_SEEN = 0.35  # a box whose front the cameras see less of than this is not trusted
@@ -1033,8 +1249,8 @@ def seen_boxes(boxes: list[Box], scan: Scan, panos: PanoSet) -> tuple[list[Box],
 
 def _paint_unseen_faces(faces: list[Plane]) -> None:
     """Box faces that cameras saw almost nothing of (the top of a tall cabinet, the side of a fridge in a
-    corner) take the median colour of the best-seen face of their box where nothing was seen, instead of a
-    blur of the few texels that were."""
+    corner) take the median colour and the fine texture of the best-seen face of their box where nothing
+    was seen: the side of a wooden cabinet becomes plain wood, not a blur of the few texels that were."""
     by_box: dict[int, list[Plane]] = {}
     for p in faces:
         by_box.setdefault(p.box, []).append(p)
@@ -1042,10 +1258,11 @@ def _paint_unseen_faces(faces: list[Plane]) -> None:
         best = max(group, key=lambda p: p.seen * p.shape.area)
         if best.seen < 0.2:
             continue
-        colour = np.median(best.image[..., :3][~best.unseen].reshape(-1, 3), axis=0).astype(np.uint8)
+        seen = best.shape_mask & ~best.unseen
+        colour = np.median(best.image[..., :3][seen].reshape(-1, 3), axis=0)
         for p in group:
             if p.seen < 0.15:
-                p.image[..., :3][p.unseen] = colour
+                _paint(p, colour, best)
 
 
 def in_boxes(pts: np.ndarray, boxes: list[Box], grow: float = BOX_TOL) -> np.ndarray:
@@ -1217,13 +1434,34 @@ def hanging_solids(scan: Scan, faces: np.ndarray, rooms: list[ShellRoom]) -> lis
     return out
 
 
+def _shade_local(
+    pts: np.ndarray, normals: np.ndarray, panos: PanoSet, rays: Raycaster, cell: float = 3.0
+) -> tuple[np.ndarray, np.ndarray]:
+    """`shade` for points scattered over the whole house, called once per 3 m grid cell.
+
+    `shade` considers the 12 panoramas nearest to the centre of the points it is given. That suits one
+    wall; given every fixture triangle of a house at once, the centre is the middle of the house and a
+    bathroom at the far end has no candidate camera: its toilet counted as unseen and was dropped, and its
+    shower curtain was coloured from the MatterPak texture instead of the photos."""
+    rgb = np.zeros((len(pts), 3))
+    valid = np.zeros(len(pts), dtype=bool)
+    if not len(pts):
+        return rgb, valid
+    key = np.floor(pts[:, :2] / cell).astype(np.int64)
+    key = key[:, 0] * 100003 + key[:, 1]
+    for k in np.unique(key):
+        sel = np.nonzero(key == k)[0]
+        rgb[sel], valid[sel] = shade(pts[sel], normals[sel], panos, rays, snap=False)
+    return rgb, valid
+
+
 def _seen(scan: Scan, faces: np.ndarray, panos: PanoSet) -> np.ndarray:
     """The faces whose centre at least one panorama sees from its front side."""
     if not len(faces):
         return faces
     # Tested against the scan alone, not the stand-in solids: the ceiling above a removed fan stays (its
     # texels fall back to the scan's own texture) instead of leaving a hole.
-    _, valid = shade(scan.tris[faces].mean(1), scan.normals[faces], panos, scan.rays, snap=False)
+    _, valid = _shade_local(scan.tris[faces].mean(1), scan.normals[faces], panos, scan.rays)
     return faces[valid]
 
 
@@ -1289,7 +1527,7 @@ def bake_triangles(
         y2 = (gj[None, :] + 0.5 - pad) / r[grp, None]
         pts = A[grp, None, :] + x2[..., None] * ex[grp, None, :] + y2[..., None] * ey[grp, None, :]
         nrm = np.broadcast_to(scan.normals[faces[grp], None, :], pts.shape)
-        rgb, valid = shade(pts.reshape(-1, 3), nrm.reshape(-1, 3), panos, scan.eyes, snap=False)
+        rgb, valid = _shade_local(pts.reshape(-1, 3), nrm.reshape(-1, 3), panos, scan.eyes)
         miss = ~valid
         if miss.any():
             lc = y2 / cy[grp, None]
@@ -1350,10 +1588,14 @@ def write_rebaked_interior_glb(
     debug: Path | None = None,
     fit_boxes: bool = True,
     drop_boxes: list[tuple[float, float, float]] | None = None,
+    only: set[int] | None = None,
 ) -> tuple[dict, np.ndarray]:
-    """interior.glb: shell nodes `floor_N`, `walls_N`, `ceiling_N` and scan-geometry nodes `fixtures_N`,
-    `ceiling_scan_N`, all textured from the panoramas. Returns (stats for the build report, the fixture
-    triangles (n, 3, 3) in Z-up coordinates, for collision.glb)."""
+    """interior.glb: shell nodes `floor_N`, `walls_N`, `ceiling_N`, box nodes `fixtures_box_N` and
+    scan-geometry nodes `fixtures_N`, `ceiling_scan_N`, all textured from the panoramas. Returns (stats for
+    the build report, the fixture triangles (n, 3, 3) in Z-up coordinates, for collision.glb).
+
+    `only` (room indices) bakes just those rooms, with the whole house still deciding what cameras see:
+    a quick partial glb for looking at a change (scripts/preview/bake_rooms.py), never a pack."""
     # Indoor cameras only: outdoor sweeps see doors open that indoor ones saw closed, and see the roof.
     indoors = unary_union([r.poly for r in rooms]).buffer(0.1)
     panos = panos.subset(
@@ -1365,7 +1607,40 @@ def write_rebaked_interior_glb(
     solids = hanging_solids(scan, hanging, rooms)
     if solids:
         scan.sight = Raycaster(np.concatenate([scan.tris, *solids]))
+    # Wall-attached fixtures with flat fronts (cabinets, counters, fridges, tub surrounds) become boxes.
+    boxes = relief_boxes(scan, rooms, debug) if fit_boxes else []
+    leaves: list[Box] = []
+    ledges: list[Box] = []
+    if fit_boxes:
+        # Free-standing door leaves, from what the wall boxes left over (plus the dropped tops of doors).
+        loose = np.concatenate([fixtures[~in_boxes(scan.tris[fixtures].mean(1), boxes)], hanging])
+        leaves = leaf_boxes(scan, loose, rooms)
+        ledges = ledge_boxes(scan, loose[~in_boxes(scan.tris[loose].mean(1), leaves)], rooms)
+        boxes += leaves + ledges
+    boxes, phantom = seen_boxes(boxes, scan, panos)
+    # Hand fixes (overrides/<model>.json "drop_boxes"): a box that contains one of these points is not a
+    # real fixture (the scan bulges in front of a mirror, say) and goes back to being scan triangles.
+    if drop_boxes:
+        pts = np.asarray(drop_boxes, float).reshape(-1, 3)
+        boxes = [b for b in boxes if not b.contains(pts).any()]
+    if debug is not None:
+        _write_box_list(boxes, debug / "boxes.json")
+    if boxes:
+        # From here on, what a camera sees is decided by the clean model: the scan with every triangle a
+        # box replaces taken out and the boxes put in. The crumpled scan of a fridge otherwise decides,
+        # texel by texel, which camera sees the fridge's flat face (holes and smears on the box), and
+        # throws a ragged shadow on the wall beside it.
+        inside = in_boxes(scan.tris.mean(1), boxes)
+        scan.sight = Raycaster(np.concatenate([scan.tris[~inside], *[b.triangles() for b in boxes], *solids]))
     planes = shell_planes(rooms)
+    if only is not None:
+        planes = [p for p in planes if p.room in only]
+        boxes_baked = [b for b in boxes if b.room in only]
+        region = unary_union([rooms[i].poly for i in only])
+        fixtures = fixtures[shapely.contains_xy(region, *scan.tris[fixtures].mean(1)[:, :2].T)]
+        ceilings = ceilings[shapely.contains_xy(region, *scan.tris[ceilings].mean(1)[:, :2].T)]
+    else:
+        boxes_baked = boxes
     behind = unary_union([r.poly for r in rooms]).buffer(-0.02)
     stats, frames = [], []
     for p in planes:
@@ -1376,22 +1651,7 @@ def write_rebaked_interior_glb(
         frames += fr
     for p in frames:
         bake_plane(p, scan, panos, res)
-    # Wall-attached fixtures with flat fronts (cabinets, counters, fridges, tub surrounds) become boxes.
-    boxes = relief_boxes(scan, rooms, debug) if fit_boxes else []
-    if fit_boxes:
-        # Free-standing door leaves, from what the wall boxes left over (plus the dropped tops of doors).
-        loose = np.concatenate([fixtures[~in_boxes(scan.tris[fixtures].mean(1), boxes)], hanging])
-        leaves = leaf_boxes(scan, loose, rooms)
-        boxes += leaves
-    boxes, phantom = seen_boxes(boxes, scan, panos)
-    # Hand fixes (overrides/<model>.json "drop_boxes"): a box that contains one of these points is not a
-    # real fixture (the scan bulges in front of a mirror, say) and goes back to being scan triangles.
-    if drop_boxes:
-        pts = np.asarray(drop_boxes, float).reshape(-1, 3)
-        boxes = [b for b in boxes if not b.contains(pts).any()]
-    if debug is not None:
-        _write_box_list(boxes, debug / "boxes.json")
-    faces = box_planes(boxes)
+    faces = box_planes(boxes_baked)
     for p in faces:
         bake_plane(p, scan, panos, res)
     _paint_unseen_faces(faces)
@@ -1430,7 +1690,8 @@ def write_rebaked_interior_glb(
     report = {
         "planes": {k: sum(p.kind == k for p in planes) for k in ("wall", "floor", "ceiling", "box")},
         "relief_boxes": len(boxes),
-        "door_leaf_slabs": len(leaves) if fit_boxes else 0,
+        "door_leaf_slabs": len(leaves),
+        "ledge_slabs": len(ledges),
         "relief_boxes_unseen_dropped": phantom,
         "hanging_objects_removed": len(solids),
         "vaulted_rooms": sum(not r.flat_ceiling for r in rooms),
