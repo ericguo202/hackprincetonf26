@@ -1,0 +1,1 @@
+costar-hackathon-kit/data/*.jsonl filter=lfs diff=lfs merge=lfs -text

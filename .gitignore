@@ -28,5 +28,3 @@ Thumbs.db
 # raw sponsor downloads (convert before committing)
 data/raw/
 
-# sponsor data kit (too large for GitHub; share separately)
-costar-hackathon-kit/
