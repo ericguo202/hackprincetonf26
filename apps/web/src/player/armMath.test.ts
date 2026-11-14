@@ -19,6 +19,7 @@ import {
   type V3,
 } from "./armMath";
 import { MOVEMENT } from "./movement";
+import { FOOT_BELOW_CENTRE_M } from "./characterAsset";
 
 const close = (a: V3, b: V3) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 9));
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -141,6 +142,12 @@ describe("first person", () => {
 
   it("a wall close behind you reads as first person", () => {
     expect(hideBody(clampArm(3.03, 1.5), H_16_9)).toBe(true);
+  });
+});
+
+describe("eye height", () => {
+  it("puts the camera at an adult 1.6 m eye height when standing", () => {
+    expect(FOOT_BELOW_CENTRE_M + ARM.headOffsetY).toBeCloseTo(1.6, 9);
   });
 });
 

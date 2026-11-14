@@ -34,8 +34,14 @@ import { MOVEMENT } from "./movement.ts";
 export type V3 = [number, number, number];
 
 export const ARM = {
-  /** Head above the body's centre (capsule centre), metres. Camera sits at this height. */
-  headOffsetY: 0.5,
+  /**
+   * Eye above the body's centre (capsule centre), metres. The camera, the shot
+   * origin and the arm's ray all start here. Standing, the centre is 0.95 m up
+   * (float 0.3 + capsule half 0.65), so this puts the eye at 1.6 m: adult eye
+   * height, so the house reads at real scale, even though the model is 1.3 m
+   * (the full 1.75 m scale-up is specced in docs/lane-c-status.md).
+   */
+  headOffsetY: 0.65,
   /**
    * Default distance behind the head on the block. Must frame the whole body:
    * at 50 deg vertical FOV the view is 2 * d * tan(25 deg) tall, and the
