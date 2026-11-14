@@ -529,7 +529,7 @@ function loadFixtures(fx: FixtureText): LoadedPack {
   for (const h of manifest.houses) {
     roomsByHouse[h.listing_id] = rooms.filter((r) => r.id.startsWith(`${h.listing_id}.`));
   }
-  return withDerivedSpawns({
+  return {
     source: "fixture",
     base: null,
     manifest,
@@ -537,7 +537,7 @@ function loadFixtures(fx: FixtureText): LoadedPack {
     roomsByHouse,
     catalog,
     doors: blockDoors(manifest, listings, roomsByHouse),
-  });
+  };
 }
 
 function unwrap<T>(p: Parsed<T>, what: string): T {
@@ -554,7 +554,17 @@ export async function loadPack(opts: {
   base: string | null | undefined;
   fixtures: FixtureText;
   fetch?: FetchJson;
+  /**
+   * Listing id of the hero house (VITE_HERO_LISTING, e.g. hou_236595179). When
+   * the manifest has no spawns, the derived spawn goes in front of this house's
+   * door; unset or not on the block, the first house in manifest order.
+   */
+  heroListing?: string | null;
 }): Promise<LoadedPack> {
+  return withDerivedSpawns(await loadPackRaw(opts), opts.heroListing);
+}
+
+async function loadPackRaw(opts: { base: string | null | undefined; fixtures: FixtureText; fetch?: FetchJson }): Promise<LoadedPack> {
   const get = opts.fetch ?? fetchJson;
   const base = normalizeBase(opts.base);
 
@@ -598,7 +608,7 @@ export async function loadPack(opts: {
   const roomsByHouse: Record<string, Room[]> = {};
   manifest.houses.forEach((h, i) => (roomsByHouse[h.listing_id] = roomLists[i]));
 
-  return withDerivedSpawns({
+  return {
     source: "pack",
     base,
     manifest,
@@ -606,7 +616,7 @@ export async function loadPack(opts: {
     roomsByHouse,
     catalog,
     doors: blockDoors(manifest, listings, roomsByHouse),
-  });
+  };
 }
 
 /** Block-frame spawn: the manifest's first sidewalk spawn, else the origin. */
@@ -720,12 +730,18 @@ export function deriveStreet(doors: Door[], roomsByHouse: Record<string, Room[]>
 }
 
 /**
- * A spawn on the street near the first house's door (manifest order: the
- * pack author lists the hero house first), on the house's side of the
- * street, facing a short walk to the door. Null with no doors.
+ * A spawn on the street near the hero house's door (heroListing), or the
+ * first house's door in manifest order when no hero is named or it has no
+ * door here; on the house's side of the street, a short walk from the door.
+ * Null with no doors.
  */
-export function deriveSpawn(doors: Door[], roomsByHouse: Record<string, Room[]>): Vec3 | null {
-  const d = doors[0];
+export function deriveSpawn(
+  doors: Door[],
+  roomsByHouse: Record<string, Room[]>,
+  heroListing?: string | null,
+): Vec3 | null {
+  // The named hero house if it has a door here; else the first in manifest order.
+  const d = (heroListing && doors.find((x) => x.listing_id === heroListing)) || doors[0];
   if (!d) return null;
   const [ox, oz] = doorOutwardBlock(d, roomsByHouse[d.listing_id] ?? []);
   const k = FRONT_TO_STREET_M - STREET_WIDTH_M / 2 - 1.5; // kerb side of the street
@@ -774,8 +790,8 @@ export function blockLayout(pack: Pick<LoadedPack, "manifest" | "doors" | "rooms
  * the street near the first house's door, instead of the block origin about
  * 95 m from any house. A manifest that lists spawns is left alone.
  */
-function withDerivedSpawns(pack: LoadedPack): LoadedPack {
+function withDerivedSpawns(pack: LoadedPack, heroListing?: string | null): LoadedPack {
   if (pack.manifest.spawns.length) return pack;
-  const spawn = deriveSpawn(pack.doors, pack.roomsByHouse);
+  const spawn = deriveSpawn(pack.doors, pack.roomsByHouse, heroListing);
   return spawn ? { ...pack, manifest: { ...pack.manifest, spawns: [spawn] } } : pack;
 }

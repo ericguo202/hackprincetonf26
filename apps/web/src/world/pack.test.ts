@@ -569,6 +569,34 @@ describe("Navidad block layout (Lane A's HANDOFF 16:46 numbers as the fixture)",
     expect(Math.hypot(s[0], s[2])).toBeGreaterThan(80); // not the origin, ~95 m from any door
   });
 
+  it("prefers the named hero house (VITE_HERO_LISTING) whatever the manifest order", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const near = (s: Vec3, id: string) => {
+      const d = door(id);
+      return Math.hypot(s[0] - d.block[0], s[2] - d.block[2]) < FRONT_TO_STREET_M;
+    };
+    const load = (houses: PackManifest["houses"], heroListing?: string) =>
+      loadPack({
+        base: "/packs/packs/hou_navidad_01/v1",
+        fixtures: FIXTURES,
+        heroListing,
+        fetch: async (u) => {
+          if (u.endsWith("manifest.json")) return { ...navManifest, houses };
+          if (u.endsWith("listings/index.json")) return listings;
+          throw new Error("HTTP 404");
+        },
+      });
+    const heroFirst = navManifest.houses;
+    const heroSecond = [...navManifest.houses].reverse(); // Lane A lists 6915 first
+    for (const houses of [heroFirst, heroSecond]) {
+      expect(near(blockSpawn((await load(houses, H7014)).manifest), H7014)).toBe(true);
+    }
+    // No hero named, or one not on this block: the first house in manifest order.
+    expect(near(blockSpawn((await load(heroSecond)).manifest), H6915)).toBe(true);
+    expect(near(blockSpawn((await load(heroSecond, "hou_999")).manifest), H6915)).toBe(true);
+    expect(near(blockSpawn((await load(heroFirst)).manifest), H7014)).toBe(true);
+  });
+
   it("keeps the manifest's own spawns when it lists any", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const p = await loadPack({ base: undefined, fixtures: FIXTURES });
