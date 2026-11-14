@@ -1,0 +1,273 @@
+# ABO product_type -> our furniture categories (AGENTS.md section 7.6, stage 2).
+# Built from the real product_type counts of ABO listings that have a 3dmodel_id
+# (run `uv run python -m worldgen.sources.abo types` to reprint them).
+#
+# Per category:
+#   product_types  ABO product_type values to consider
+#   include        regex on the English item_name (case-insensitive); optional
+#   exclude        regex that rejects an item; optional
+#   height_m       [min, max] on the model's Y extent (meters); optional
+#   footprint_m    [min, max] on the larger of the X/Z extents; optional
+#   count          how many to keep (3 to 8; living room gets the most)
+#   tags, placement, clearance_front_m   copied into the selection for build_catalog
+#
+# Not available as ABO 3D models (checked by name and keyword over all 7,953 models):
+#   TV set, refrigerator / kitchen appliances, crib, changing table, soccer goal.
+#   Fill these from Poly Haven (CC0) or KayKit / Kenney (CC0).
+
+categories:
+  # ---- living room (demo) ----
+  sofa:
+    product_types: [SOFA]
+    exclude: "sectional|sleeper|futon|cover|slipcover|loveseat|settee|chaise|ottoman|outdoor|patio"
+    footprint_m: [1.6, 2.6]
+    count: 8
+    tags: [living_room, seating, movie_night, cover]
+    placement: wall
+    clearance_front_m: 0.75
+  sectional:
+    product_types: [SOFA, OUTDOOR_LIVING]
+    include: "sectional"
+    exclude: "cover|slipcover|outdoor|patio|wicker"
+    count: 5
+    tags: [living_room, seating, movie_night, cover]
+    placement: corner
+    clearance_front_m: 0.75
+  loveseat:
+    product_types: [SOFA]
+    include: "loveseat|settee"
+    exclude: "cover|outdoor|patio"
+    count: 4
+    tags: [living_room, seating, cover]
+    placement: wall
+    clearance_front_m: 0.75
+  armchair:
+    product_types: [CHAIR, SOFA, HOME_FURNITURE_AND_DECOR]
+    include: "accent chair|armchair|club chair|lounge chair|recliner|swivel chair"
+    exclude: "office|desk|gaming|dining|outdoor|patio|chaise|cover|rocking|rocker"
+    count: 7
+    tags: [living_room, seating, cover]
+    placement: free
+    clearance_front_m: 0.6
+  coffee_table:
+    product_types: [TABLE, HOME_FURNITURE_AND_DECOR, FURNITURE]
+    include: "coffee table|cocktail table"
+    exclude: "stool"
+    count: 6
+    tags: [living_room, table, movie_night]
+    placement: center
+    clearance_front_m: 0.45
+  side_table:
+    product_types: [TABLE]
+    include: "side table|end table|accent table"
+    count: 4
+    tags: [living_room, table]
+    placement: beside
+    clearance_front_m: 0.0
+  tv_stand:
+    product_types: [HOME_FURNITURE_AND_DECOR, FLAT_SCREEN_DISPLAY_MOUNT, CABINET, TABLE]
+    include: "tv stand|tv cabinet|tv console|media console|media stand|tv board|tv unit"
+    exclude: "mount|ceiling|arm"
+    count: 6
+    tags: [living_room, storage, movie_night, cover]
+    placement: wall
+    clearance_front_m: 0.9
+  rug:
+    product_types: [RUG]
+    exclude: "runner|doormat|door mat|mat,|bath"
+    footprint_m: [1.4, 4.0]
+    count: 6
+    tags: [living_room, bedroom, floor]
+    placement: center
+    clearance_front_m: 0.0
+  bookshelf:
+    product_types: [SHELF, CABINET, HOME_FURNITURE_AND_DECOR]
+    include: "bookcase|bookshelf|shelving unit|shelf"
+    exclude: "wall shelf|floating|wall-mounted|wall mounted|toy|children|kids|shoe|bathroom|ladder shelf mount"
+    height_m: [1.0, 2.2]
+    count: 6
+    tags: [living_room, office, storage, cover]
+    placement: wall
+    clearance_front_m: 0.6
+  floor_lamp:
+    product_types: [LAMP]
+    include: "floor lamp|arc lamp|torchiere"
+    height_m: [1.2, 2.2]
+    count: 5
+    tags: [living_room, bedroom, lighting]
+    placement: corner
+    clearance_front_m: 0.0
+  table_lamp:
+    product_types: [LAMP]
+    include: "table lamp|desk lamp|bedside lamp"
+    height_m: [0.2, 0.9]
+    count: 4
+    tags: [bedroom, office, lighting]
+    placement: on_surface
+    clearance_front_m: 0.0
+  ottoman:
+    product_types: [OTTOMAN]
+    exclude: "cover"
+    count: 4
+    tags: [living_room, seating]
+    placement: free
+    clearance_front_m: 0.0
+  plant:
+    product_types: [PLANTER, ARTIFICIAL_PLANT]
+    exclude: "hanging|wall"
+    height_m: [0.3, 2.0]
+    count: 4
+    tags: [living_room, decor]
+    placement: corner
+    clearance_front_m: 0.0
+
+  # ---- bedroom ----
+  bed:
+    product_types: [BED, BED_FRAME, STORAGE_BOX, HEADBOARD]
+    include: "bed"
+    exclude: "headboard only|underbed|under bed|bed rail|bedding|bed skirt|sofa|dog|pet|canopy|cover|nightstand|bedside"
+    footprint_m: [1.8, 2.6]
+    height_m: [0.25, 1.8]
+    count: 8
+    tags: [bedroom, primary_bedroom, sleeping, cover]
+    placement: wall
+    clearance_front_m: 0.6
+  nightstand:
+    product_types: [HOME_FURNITURE_AND_DECOR, TABLE, CABINET, STORAGE_BOX, DRESSER]
+    include: "nightstand|night stand|bedside table|bedside cabinet"
+    count: 5
+    tags: [bedroom, storage]
+    placement: beside
+    clearance_front_m: 0.4
+  dresser:
+    product_types: [DRESSER, STORAGE_BOX, CABINET]
+    include: "dresser|chest of drawers|drawer chest|drawers"
+    exclude: "nightstand|bedside|jewelry|desktop"
+    height_m: [0.6, 1.6]
+    count: 5
+    tags: [bedroom, storage, cover]
+    placement: wall
+    clearance_front_m: 0.75
+  wardrobe:
+    product_types: [CABINET, DESK, SHELF]
+    include: "wardrobe"
+    exclude: "panel"
+    count: 3
+    tags: [bedroom, storage, cover]
+    placement: wall
+    clearance_front_m: 0.75
+
+  # ---- office ----
+  desk:
+    product_types: [DESK, TABLE]
+    include: "desk"
+    exclude: "wardrobe|kid|children|lamp|organizer|converter|riser"
+    footprint_m: [0.8, 2.0]
+    count: 5
+    tags: [office, bedroom, table]
+    placement: wall
+    clearance_front_m: 0.9
+  office_chair:
+    product_types: [CHAIR]
+    include: "office chair|desk chair|task chair|gaming chair|executive chair"
+    count: 4
+    tags: [office, seating]
+    placement: free
+    clearance_front_m: 0.0
+
+  # ---- dining / kitchen ----
+  dining_table:
+    product_types: [TABLE, HOME_FURNITURE_AND_DECOR]
+    include: "dining table|kitchen table|dining set|breakfast table"
+    exclude: "kid|chair cover|bench only"
+    count: 5
+    tags: [dining_room, kitchen, table, cover]
+    placement: center
+    clearance_front_m: 0.9
+  dining_chair:
+    product_types: [CHAIR, HOME_FURNITURE_AND_DECOR]
+    include: "dining chair|kitchen chair|dining room chair|side chair"
+    exclude: "kid|cover|outdoor|patio"
+    count: 5
+    tags: [dining_room, kitchen, seating]
+    placement: beside
+    clearance_front_m: 0.0
+  bar_stool:
+    product_types: [STOOL_SEATING]
+    include: "bar|counter|island"
+    count: 4
+    tags: [kitchen, seating]
+    placement: beside
+    clearance_front_m: 0.0
+  kitchen_island:
+    product_types: [CABINET, HOME_FURNITURE_AND_DECOR, TABLE]
+    include: "kitchen island|kitchen cart|island|bar cart"
+    count: 3
+    tags: [kitchen, storage, cover]
+    placement: center
+    clearance_front_m: 0.9
+  bench:
+    product_types: [BENCH]
+    count: 3
+    tags: [dining_room, hallway, seating]
+    placement: wall
+    clearance_front_m: 0.4
+
+  # ---- nursery / kids / play ----
+  rocking_chair:
+    product_types: [CHAIR, HOME_FURNITURE_AND_DECOR]
+    include: "rocking chair|glider|rocker"
+    exclude: "gaming|office"
+    count: 4
+    tags: [nursery, living_room, seating]
+    placement: corner
+    clearance_front_m: 0.6
+  toy_storage:
+    product_types: [HOME_FURNITURE_AND_DECOR, STORAGE_BOX, SHELF, CABINET]
+    include: "toy storage|toy|children's|storage cube|storage cubes|cube organizer"
+    exclude: "jewelry|decorative|stoneware|tv console"
+    count: 4
+    tags: [nursery, playroom, storage]
+    placement: wall
+    clearance_front_m: 0.5
+  kids_table:
+    product_types: [HOME_FURNITURE_AND_DECOR, TABLE, DESK]
+    include: "kid|kiddie|children"
+    exclude: "bookcase|toy storage|chairs?,? .*pack|chair set"
+    count: 3
+    tags: [playroom, nursery, table]
+    placement: center
+    clearance_front_m: 0.5
+  kids_chair:
+    product_types: [HOME_FURNITURE_AND_DECOR, CHAIR]
+    include: "kids chair|kid chair|kiddie chair"
+    count: 3
+    tags: [playroom, nursery, seating]
+    placement: free
+    clearance_front_m: 0.0
+  play_mat:
+    product_types: [EXERCISE_MAT]
+    count: 3
+    tags: [playroom, nursery, floor]
+    placement: center
+    clearance_front_m: 0.0
+  beanbag:
+    product_types: [BEAN_BAG_CHAIR]
+    exclude: "bean bag cover|without beans"
+    count: 5
+    tags: [playroom, living_room, seating, movie_night, cover]
+    placement: free
+    clearance_front_m: 0.0
+  play_equipment:
+    product_types: [SPORTING_GOODS, FITNESS_BENCH]
+    include: "batting tee|bench"
+    count: 2
+    tags: [playroom, yard, play]
+    placement: free
+    clearance_front_m: 0.5
+  canopy_tent:
+    product_types: [FREESTANDING_SHELTER]
+    count: 1
+    tags: [yard, play, cover]
+    placement: free
+    clearance_front_m: 0.0

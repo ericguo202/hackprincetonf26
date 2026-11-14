@@ -77,6 +77,10 @@ projects:
                 value: built-world-sandbox
               - key: PACK_BASE_URL
                 sync: false
+              - key: PACK_VERSION
+                value: "1"
+              - key: BLOCK_ID
+                value: hou_heights_01
               - key: USE_FIXTURES
                 value: "0"
               - key: MOCK_AGENT

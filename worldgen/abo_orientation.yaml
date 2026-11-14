@@ -1,0 +1,29 @@
+# Per-category yaw fix (degrees, counterclockwise from above about +Y) applied by worldgen.normalize
+# so every asset's front faces +Z (AGENTS.md 7.6, 9). Missing category = 0.
+#
+# Seed heuristic (extent_x vs extent_z for wall pieces) said no turn was needed: width is along X for
+# almost every sofa, tv_stand, bookshelf, dresser, bed and desk. ABO models already face +Z.
+# Checked by eye on 2026-11-14 with `uv run python -m worldgen.normalize --block hou_heights_01 --preview`
+# (contact sheets in out/previews/<category>.png: side view with +Z to the right, top view with +Z down):
+#   sofa, sectional, armchair, bed, tv_stand, bookshelf, dresser, desk, dining_chair: backrest/headboard
+#   at -Z, drawer pulls and open fronts at +Z. All 0.
+# Not yet looked at (assumed 0, same ABO convention): loveseat, coffee_table, side_table, rug, floor_lamp,
+#   table_lamp, ottoman, plant, nightstand, wardrobe, office_chair, dining_table, bar_stool,
+#   kitchen_island, bench, rocking_chair, toy_storage, kids_table, kids_chair, play_mat, beanbag,
+#   play_equipment, canopy_tent. Symmetric pieces (rugs, tables, lamps, plants) do not matter.
+# Note: the two L-shaped sectionals (B07B4MH6QH, B07BWMSQ38) are deeper than wide; that is their shape,
+# not a rotation error.
+sofa: 0
+sectional: 0
+loveseat: 0
+armchair: 0
+bed: 0
+tv_stand: 0
+bookshelf: 0
+dresser: 0
+desk: 0
+wardrobe: 0
+nightstand: 0
+dining_chair: 0
+office_chair: 0
+rocking_chair: 0
