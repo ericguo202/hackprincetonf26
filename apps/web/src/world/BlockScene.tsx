@@ -6,7 +6,6 @@
 // with a lit front door. Render and collision placeholders are separate
 // components built from the same numbers, so the render path never collides.
 
-import { Html } from "@react-three/drei";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 
 import type { Listing } from "../contracts.gen";
@@ -15,6 +14,7 @@ import { ZONE_COLLIDER } from "./collisionGroups";
 import { rotationY } from "./geometry";
 import { DOOR_RADIUS_M, doorOutward, packUrl, type Door, type LoadedPack } from "./pack";
 import { houseBoxLocal } from "./placeholder";
+import { WorldLabel } from "./WorldLabel";
 
 const GROUND_M = 160;
 const PALETTE = {
@@ -163,12 +163,15 @@ function DoorMarker({
         <ringGeometry args={[DOOR_RADIUS_M - 0.08, DOOR_RADIUS_M, 40]} />
         <meshBasicMaterial color={PALETTE.door} transparent opacity={0.8} />
       </mesh>
-      <Html position={[local[0] + ox * 0.6, 2.7, local[2] + oz * 0.6]} center distanceFactor={10}>
-        <div style={labelStyle}>
-          <div style={{ fontWeight: 600 }}>{listing?.address ?? door.listing_id}</div>
-          <div style={{ opacity: 0.75 }}>Walk in</div>
-        </div>
-      </Html>
+      {/* Door labels are wayfinding on the block, so they stay up much further out. */}
+      <WorldLabel
+        position={[local[0] + ox * 0.6, 2.7, local[2] + oz * 0.6]}
+        style={labelStyle}
+        range={{ fadeFrom: 40, fadeTo: 50 }}
+      >
+        <div style={{ fontWeight: 600 }}>{listing?.address ?? door.listing_id}</div>
+        <div style={{ opacity: 0.75 }}>Walk in</div>
+      </WorldLabel>
     </group>
   );
 }

@@ -5,7 +5,6 @@
 // lit so you can find the way out.
 
 import { Suspense, useMemo } from "react";
-import { Html } from "@react-three/drei";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { Shape } from "three";
 
@@ -15,6 +14,7 @@ import { ZONE_COLLIDER } from "./collisionGroups";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, type Door, type LoadedPack } from "./pack";
 import { segmentBox, wallSegments } from "./placeholder";
+import { WorldLabel } from "./WorldLabel";
 
 const WALL_T = 0.12;
 const SLAB_MARGIN_M = 8;
@@ -60,7 +60,7 @@ export function HouseScene({ pack, listingId }: Props) {
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}
       <LoadBoundary url={`furniture:${listingId}`} label="furniture" fallback={null}>
         <Suspense fallback={null}>
-          <FurnitureLayer catalog={pack.catalog} rooms={rooms} packBaseUrl={base ? publishedRoot(base) : ""} />
+          <FurnitureLayer catalog={pack.catalog} rooms={rooms} packBaseUrl={base ? publishedRoot(base) : null} />
         </Suspense>
       </LoadBoundary>
     </>
@@ -121,9 +121,9 @@ function PlaceholderHouseRender({ rooms, door }: { rooms: Room[]; door: Door | n
               </mesh>
             );
           })}
-          <Html position={roomLabelPos(r)} center distanceFactor={10}>
-            <div style={roomLabelStyle}>{r.label.replace(/_/g, " ")}</div>
-          </Html>
+          <WorldLabel position={roomLabelPos(r)} style={roomLabelStyle}>
+            {r.label.replace(/_/g, " ")}
+          </WorldLabel>
         </group>
       ))}
     </group>
@@ -219,9 +219,9 @@ function ExitMarker({ door, rooms }: { door: Door; rooms: Room[] }) {
         <ringGeometry args={[DOOR_RADIUS_M - 0.08, DOOR_RADIUS_M, 40]} />
         <meshBasicMaterial color="#ffb347" transparent opacity={0.8} />
       </mesh>
-      <Html position={[x - ox * 0.6, y + 2.3, z - oz * 0.6]} center distanceFactor={10}>
-        <div style={roomLabelStyle}>Exit to street</div>
-      </Html>
+      <WorldLabel position={[x - ox * 0.6, y + 2.3, z - oz * 0.6]} style={roomLabelStyle}>
+        Exit to street
+      </WorldLabel>
     </group>
   );
 }

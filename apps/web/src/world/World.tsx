@@ -9,12 +9,13 @@
 // is in that zone's own frame. Only one zone's geometry is mounted at a time.
 // net/game.ts sees me.zone change and sends enter_zone.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { Sky } from "@react-three/drei";
 
 import { useStore } from "../store";
+import { Crosshair } from "../player/Crosshair";
 import { Player } from "../player/Player";
 import { BlockScene } from "./BlockScene";
 import { PHYSICS_PRIORITY } from "./frameOrder";
@@ -29,6 +30,10 @@ import {
   type ZoneState,
 } from "./pack";
 import { usePack } from "./usePack";
+import { DevPlan, DevProbe } from "./DevPlan";
+import { DEV_PLAN_B, DEV_PLAN_ON, withDevCatalog } from "./devFurniture";
+import { FIXTURE_RAW } from "./fixtures";
+import type { Asset, PlacementPlan } from "../contracts.gen";
 
 /** Drop the body from a little above the floor so it never starts inside it. */
 const SPAWN_LIFT_M = 1;
@@ -59,12 +64,27 @@ export function World() {
           {pack.status === "ready" ? <Zones pack={pack.pack} /> : null}
         </Physics>
       </Canvas>
+      <Crosshair />
       <PackBadge status={pack} />
     </>
   );
 }
 
-function Zones({ pack }: { pack: LoadedPack }) {
+/** Every asset the dev plans use, so the dev catalog can stand in for each. */
+const DEV_PLAN_ASSET_IDS = [
+  ...(JSON.parse(FIXTURE_RAW.plan) as PlacementPlan).objects,
+  ...DEV_PLAN_B.objects,
+].map((o) => o.asset_id);
+
+function Zones({ pack: loaded }: { pack: LoadedPack }) {
+  // VITE_DEV_PLAN: dev stand-ins under the pack's own catalog (see DevPlan.tsx).
+  const pack = useMemo(
+    () =>
+      DEV_PLAN_ON
+        ? withDevCatalog(loaded, JSON.parse(FIXTURE_RAW.asset) as Asset, DEV_PLAN_ASSET_IDS)
+        : loaded,
+    [loaded],
+  );
   const setMe = useStore((s) => s.setMe);
   const [start] = useState(() => initialPlacement(pack));
   // The zone we render. Owned here and copied into the store, not read back from
@@ -114,6 +134,8 @@ function Zones({ pack }: { pack: LoadedPack }) {
   return (
     <>
       {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
+      {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
+      {import.meta.env.DEV ? <DevProbe /> : null}
       <Player key={epoch} spawn={spawn} zone={zone} />
     </>
   );

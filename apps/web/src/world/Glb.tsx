@@ -5,10 +5,11 @@
 //   render    -> the scene is drawn, no colliders
 //   collision -> the scene is never drawn; its triangles become one fixed trimesh
 //
-// A missing file (404, or Vite's dev server answering with index.html) throws
-// inside the loader; the boundary catches it, prints one warning for that URL and
-// renders the placeholder. The placeholder also covers the loading moment, so
-// the player always has a floor.
+// A missing file (404, or Vite's dev server answering with index.html) is
+// caught by a HEAD probe before the loader ever sees it (meshProbe.ts): one
+// warning per URL, the placeholder, no thrown error. The placeholder also
+// covers the probe and loading moments, so the player always has a floor.
+// LoadBoundary remains for a file that exists but fails to parse.
 
 import { Component, Suspense, useEffect, useMemo, type ReactNode } from "react";
 import { RigidBody, TrimeshCollider } from "@react-three/rapier";
@@ -16,6 +17,7 @@ import { RigidBody, TrimeshCollider } from "@react-three/rapier";
 import { extractTrimesh } from "./collision";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { clearPackGLTF, usePackGLTF } from "./gltf";
+import { useMeshState } from "./meshProbe";
 import { warnOnce } from "./pack";
 
 type BoundaryProps = {
@@ -60,7 +62,10 @@ type Props = {
 };
 
 export function GlbOrPlaceholder({ kind, url, label, placeholder }: Props) {
-  if (!url) return <>{placeholder}</>;
+  // Probe first (meshProbe.ts): a missing file never reaches the loader, so it
+  // never throws. The boundary below is only for files that exist but are bad.
+  const mesh = useMeshState(url, label);
+  if (!url || mesh !== "ok") return <>{placeholder}</>;
   return (
     <LoadBoundary url={url} label={label} fallback={placeholder}>
       <Suspense fallback={placeholder}>

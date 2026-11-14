@@ -11,4 +11,7 @@
 export const PHYSICS_PRIORITY = -50;
 
 /** Camera arm: reads the interpolated body transform written by the step above. */
-export const CAMERA_PRIORITY = 0;
+export const CAMERA_PRIORITY = -10;
+
+/** Blaster: aims along the camera, so it runs after the camera arm has placed it this frame. */
+export const SHOT_PRIORITY = 0;

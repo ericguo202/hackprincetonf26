@@ -11,10 +11,17 @@
 
 import { interactionGroups } from "@react-three/rapier";
 
-export const GROUP = { zone: 0, furniture: 1, player: 2, camera: 3 } as const;
+export const GROUP = { zone: 0, furniture: 1, player: 2, camera: 3, shot: 4 } as const;
 
 export const ZONE_COLLIDER = interactionGroups(GROUP.zone);
 export const FURNITURE_COLLIDER = interactionGroups(GROUP.furniture);
 
 /** Camera arm raycast: hits zone collision only, never furniture or players. */
 export const CAMERA_QUERY = interactionGroups(GROUP.camera, [GROUP.zone]);
+
+/**
+ * Blaster raycasts: zone collision and furniture (darts stop on a couch,
+ * AGENTS.md section 11). Players are tested separately as capsules
+ * (blasterMath.rayCapsule), so remote players need no Rapier colliders.
+ */
+export const SHOT_QUERY = interactionGroups(GROUP.shot, [GROUP.zone, GROUP.furniture]);

@@ -9,6 +9,7 @@ import manifestRaw from "../../../../contracts/fixtures/manifest.json?raw";
 import listingRaw from "../../../../contracts/fixtures/listing.json?raw";
 import roomRaw from "../../../../contracts/fixtures/room.json?raw";
 import assetRaw from "../../../../contracts/fixtures/asset.json?raw";
+import planRaw from "../../../../contracts/fixtures/placement_plan.json?raw";
 
 export const FIXTURE_RAW = {
   manifest: manifestRaw,
@@ -18,4 +19,6 @@ export const FIXTURE_RAW = {
   room: roomRaw,
   /** One Asset; a real catalog.json is an array of them. */
   asset: assetRaw,
+  /** One PlacementPlan for the fixture room (hou_000123.r1). */
+  plan: planRaw,
 } as const;

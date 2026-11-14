@@ -21,10 +21,13 @@ import { Ecctrl, EcctrlAnimationStateController, type EcctrlHandle } from "ecctr
 import { Euler, type Group, Quaternion } from "three";
 
 import { useStore } from "../store";
-import { toAnimState, type LocomotionState, type PlayerAction } from "./animState";
+import { ACTION_HOLD_S, toAnimState, type LocomotionState, type PlayerAction } from "./animState";
+import { Blaster } from "./Blaster";
+import type { FirePayload, Hitbox } from "./blasterMath";
 import type { AnimState } from "../../../../contracts/game-state";
 import { CameraArm } from "./CameraArm";
 import { MOVEMENT } from "./movement";
+import { registerPlayer } from "./playerControl";
 
 /** Lane D sends `move` at 20 Hz, so there is no point writing faster. */
 const WRITE_HZ = 20;
@@ -62,6 +65,13 @@ type Props = {
   /** "block" or a listing_id. Indoors the camera starts in first person. */
   zone?: string;
   /**
+   * Lane D seam: remote players in this zone as capsules (zone frame). The
+   * blaster tests shots against them. Default: none (single player).
+   */
+  getHitboxes?: () => Hitbox[];
+  /** Lane D seam: send as the `fire` message. Default: no-op. */
+  onFire?: (p: FirePayload) => void;
+  /**
    * Over-the-shoulder camera on a collision-aware arm (CameraArm.tsx): click
    * for mouse look, scroll for distance, V for first person. Off: the camera
    * is left alone and the body is always visible.
@@ -70,7 +80,14 @@ type Props = {
   children?: React.ReactNode;
 };
 
-export function Player({ spawn = [0, 1, 0], zone = "block", followCamera = true, children }: Props) {
+export function Player({
+  spawn = [0, 1, 0],
+  zone = "block",
+  followCamera = true,
+  getHitboxes,
+  onFire,
+  children,
+}: Props) {
   const ecctrl = useRef<EcctrlHandle | null>(null);
   const bodyMesh = useRef<Group | null>(null);
   const keys = useRef({ ...KEYS });
@@ -117,6 +134,27 @@ export function Player({ spawn = [0, 1, 0], zone = "block", followCamera = true,
     };
   }, []);
 
+  // Let the world move the real body (push-out, respawn); see playerControl.ts.
+  useEffect(
+    () =>
+      registerPlayer({
+        getPos: () => {
+          const p = ecctrl.current?.currPos;
+          return p ? [p.x, p.y, p.z] : (lastSent.current.pos as [number, number, number]);
+        },
+        teleport: ([x, y, z]) => {
+          const body = ecctrl.current?.body;
+          if (!body) return;
+          body.setTranslation({ x, y, z }, true);
+          body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          // Report the new position at once, not on the next 20 Hz write.
+          lastSent.current = { ...lastSent.current, pos: [x, y, z] };
+          setMe({ pos: [x, y, z] });
+        },
+      }),
+    [setMe],
+  );
+
   useFrame((state, dt) => {
     const handle = ecctrl.current;
     if (!handle) return;
@@ -162,6 +200,21 @@ export function Player({ spawn = [0, 1, 0], zone = "block", followCamera = true,
           zone={zone}
           onBodyHidden={(hidden) => {
             if (bodyMesh.current) bodyMesh.current.visible = !hidden;
+          }}
+        />
+      ) : null}
+      {/* The blaster needs the pointer-locked camera, so it comes with followCamera. */}
+      {followCamera ? (
+        <Blaster
+          ecctrl={ecctrl}
+          body={bodyMesh}
+          getHitboxes={getHitboxes}
+          onFire={onFire}
+          onShot={(now) => {
+            // Don't cut short a hit or elimination with a shoot pose.
+            if (action.current === "hit" || action.current === "eliminated") return;
+            action.current = "shoot";
+            actionUntil.current = now + ACTION_HOLD_S.shoot;
           }}
         />
       ) : null}
