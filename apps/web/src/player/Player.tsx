@@ -11,14 +11,17 @@
 // camera looks, and WASD is relative to the camera (ecctrl reads the scene
 // camera's direction every frame).
 //
-// The character model is a placeholder capsule until the Quaternius pack is
-// chosen and player/clips.ts is filled in. Nothing below depends on that
-// choice, so D is unblocked before the pack lands.
+// Model: <Character> (Quaternius Toon Shooter soldier), driven by
+// ecctrl locomotion -> toAnimState() -> clips.ts CLIPS. Its feet are put on
+// whatever the body stands on (ecctrl's standPoint) every frame, falling back
+// to FOOT_BELOW_CENTRE_M in the air. If the model is missing, the blue
+// capsule renders instead (same HEAD probe as every other mesh). First
+// person hides bodyMesh, which holds the model and the capsule alike.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Ecctrl, EcctrlAnimationStateController, type EcctrlHandle } from "ecctrl";
-import { Euler, type Group, Quaternion } from "three";
+import { Euler, type Group, Quaternion, Vector3 } from "three";
 
 import { useStore } from "../store";
 import { ACTION_HOLD_S, toAnimState, type LocomotionState, type PlayerAction } from "./animState";
@@ -27,6 +30,9 @@ import type { FirePayload, Hitbox } from "./blasterMath";
 import type { AnimState } from "../../../../contracts/game-state";
 import { CameraArm } from "./CameraArm";
 import { MOVEMENT } from "./movement";
+import { Character } from "./Character";
+import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
+import { useMeshState } from "../world/meshProbe";
 import { registerPlayer } from "./playerControl";
 
 /** Lane D sends `move` at 20 Hz, so there is no point writing faster. */
@@ -90,6 +96,13 @@ export function Player({
 }: Props) {
   const ecctrl = useRef<EcctrlHandle | null>(null);
   const bodyMesh = useRef<Group | null>(null);
+  /** Inside bodyMesh: moved each frame so the model's feet meet the ground. */
+  const feet = useRef<Group | null>(null);
+  const bodyWorld = useRef(new Vector3());
+  const model = useMeshState(children ? null : CHARACTER.url, CHARACTER.url);
+  // What the model shows. Changes a few times a second at most, so a state.
+  const [look, setLook] = useState<{ anim: AnimState; moving: boolean }>({ anim: "idle", moving: false });
+  const lookRef = useRef(look);
   const keys = useRef({ ...KEYS });
   const locomotion = useRef<LocomotionState>("IDLE");
   /** Set by the foam-fight code when the player shoots, is hit, or is out. */
@@ -166,6 +179,26 @@ export function Player({
       action.current = null;
     }
 
+    // Model: same state the wire carries, every frame (the store write below is 20 Hz).
+    const nextLook = {
+      anim: toAnimState(locomotion.current, action.current),
+      moving: locomotion.current === "WALK" || locomotion.current === "RUN",
+    };
+    if (nextLook.anim !== lookRef.current.anim || nextLook.moving !== lookRef.current.moving) {
+      lookRef.current = nextLook;
+      setLook(nextLook);
+    }
+
+    // Feet on the ground: the interpolated body's height above ecctrl's ground
+    // contact. In the air, the nominal standing offset. Smoothed so landing and
+    // the float spring settling do not pop.
+    if (feet.current && bodyMesh.current) {
+      const by = bodyMesh.current.getWorldPosition(bodyWorld.current).y;
+      const target = handle.isOnGround ? handle.standPoint.y - by : -FOOT_BELOW_CENTRE_M;
+      const k = 1 - Math.exp(-20 * Math.min(dt, 0.1));
+      feet.current.position.y += (target - feet.current.position.y) * k;
+    }
+
     sinceWrite.current += dt;
     if (sinceWrite.current < WRITE_INTERVAL_S) return;
     sinceWrite.current = 0;
@@ -229,7 +262,25 @@ export function Player({
         floatHeight={MOVEMENT.floatHeight}
         lockForward={followCamera}
       >
-        <group ref={bodyMesh}>{children ?? <PlaceholderCharacter />}</group>
+        <group ref={bodyMesh}>
+          {children ??
+            (model === "ok" ? (
+              <group ref={feet} position-y={-FOOT_BELOW_CENTRE_M}>
+                <Character
+                  animState={look.anim}
+                  moving={look.moving}
+                  // A file that passes the probe but fails to parse: the capsule, back at the body centre.
+                  fallback={
+                    <group position-y={FOOT_BELOW_CENTRE_M}>
+                      <PlaceholderCharacter />
+                    </group>
+                  }
+                />
+              </group>
+            ) : (
+              <PlaceholderCharacter />
+            ))}
+        </group>
       </Ecctrl>
       <EcctrlAnimationStateController
         ecctrl={ecctrl}
