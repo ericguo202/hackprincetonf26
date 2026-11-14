@@ -14,6 +14,8 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
+    // Lane C tests also run under plain `node --experimental-strip-types`, which needs explicit .ts imports.
+    "allowImportingTsExtensions": true,
     "types": ["vite/client"],
     // contracts/game-state.ts lives outside this package; resolve its import from here.
     "paths": { "@colyseus/schema": ["./node_modules/@colyseus/schema"] }
