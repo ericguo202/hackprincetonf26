@@ -4,7 +4,7 @@ Instructions for every coding agent in this repo. Read the whole file before wri
 
 ## 1. North star
 
-**Know a house the way GTA 5 players know Los Santos.** People who have played GTA 5 know its map like the back of their hand, and through it, the real city it is based on. They learned it by living in it: walking driving, messing around. We want home buyers to know a house and its block the same way before they buy. A Matterport tour shows the rooms. It does not show what it is like to walk up and down your street, to see the place furnished the way you want, or to run around it with your family.
+**Know a house the way GTA 5 players know Los Santos.** People who have played GTA 5 know its map like the back of their hand, and through it, the real city it is based on. They learned it by living in it: walking, driving, messing around. We want home buyers to know a house and its block the same way before they buy. A Matterport tour shows the rooms. It does not show what it is like to walk up and down your street, to see the place furnished the way you want, or to run around it with your family.
 
 So the product is a game that is also a house tour:
 
@@ -55,7 +55,7 @@ Tracks: Entertainment (main), CoStar "Inside and Out", LangChain (Deep Agents), 
 4. **Build against fixtures first.** Every service must run with `USE_FIXTURES=1` and no other lane working.
 5. **The model decides and explains; deterministic code computes every number.** Areas, prices per square meter, distances, poses, overlaps, scores and contradiction checks come from tools, never from the model's head.
 6. **The agent must reason, plan and act**, not chat or summarize: plan (todo list) → tool calls on real data → deterministic computation → an action in the world → self-check → a short answer citing the data fields used.
-7. **`main` always runs and always deploys.** Small commits, merge at least every 2 hours, run your lane's checks (section 13) before every commit.
+7. **`main` always runs and always deploys.** Small commits, merge at least every 90 minutes, run your lane's checks (section 13) before every commit.
 8. **One git worktree per coding agent**, branch `lane-<a|b|c|d>/<topic>`. Rebase on `main` before merging.
 9. **Secrets** live in `.env` locally and in Render environment variables in production. Never commit them, never send them to the browser, never put them in prompts or traces. Matterport API keys can buy things: all Matterport calls go through `worldgen/sources/matterport.py`, which rejects GraphQL mutations.
 10. **No branded content** in the world or assets. Every asset has a recorded license.
@@ -95,7 +95,7 @@ Three runtime services, one direction of authority:
 | Agent service      | Python 3.11+, FastAPI, `deepagents`, LangSmith, `shapely`, `networkx`, `uv`                                                                                                                                                | Model from `MODEL` env var (`provider:model`)                                          |
 | Worldgen           | Python 3.11+, `trimesh`, `pygltflib` or Blender CLI, `gltf-transform` (Node CLI) for Draco/meshopt compression, `pandas`                                                                                                   | Runs on laptops, not on Render                                                         |
 | Characters         | One Quaternius pack whose file already contains the animations (Toon Shooter Game Kit or Universal Base Characters + Universal Animation Library)                                                                          | Never retarget animations at the hackathon                                             |
-| Furniture          | CC0 glTF packs first (Kenney Furniture Kit, Quaternius, Poly Haven); OBJ/STL only to fill gaps                                                                                                                             | STL carries no color or UVs: give it a flat material at normalize time                 |
+| Furniture          | Amazon Berkeley Objects (real products, glTF, CC BY 4.0, credit required) first; Poly Haven (CC0) for gaps; KayKit or Kenney (CC0) as a low-poly fallback set; OBJ/STL only as a last resort                               | Only a curated ~100 to 150 items are converted; STL carries no color or UVs            |
 | Hosting            | Render: static site `web` (free), web services `game` and `agent` on the Starter plan ($7/month each, 512 MB RAM, 0.5 CPU, always on). Packs in an S3 bucket (public read, CORS) or the static site if under ~100 MB total | `render.yaml` at repo root, `plan: starter` on both web services                       |
 
 Units everywhere: meters and degrees. Display strings only use square feet and dollars.
@@ -146,12 +146,18 @@ listings/index.json                    every listing in the CoStar folder (not j
 
 Pipeline steps, each a separate command so they parallelize:
 
-1. **CoStar → `listings/index.json`.** Read `data/residential-listings.jsonl` (residential listings only; apartment and commercial datasets are not in the index), map to the Listing schema (section 9), drop rows without coordinates. Map `property.propertyType`: Detached → `single_family`, Townhouse → `townhouse`, Condo/Coop → `condo`, Duplex → `duplex`, MultiFamily/Triplex/Quadruplex → `multi_family`, Other/MobileManufactured → `other`; drop None, LotsLands and Commercial. `site.lot_area_m2` is `property.lotSizeAcresMin` in m². Keep the raw record ID for traceability.
-2. **Join layers.** CoStar → Matterport is given: `costar-hackathon-kit/residential-listings.csv` maps `ListingId` to `MatterportModelId` (no address or distance matching). A listing with several models uses the one on its 3D-tour media item (`media[].type == 43`), else the first CSV row. Match to Vexcel by coordinates. Write `source` IDs on each listing. Unmatched is fine; `has_interior` stays false.
+1. **CoStar → `listings/index.json`.** Read every JSON and CSV in the raw folder, map to the Listing schema (section 9), drop rows without coordinates, keep `property_type` (single family, multi family, apartment, commercial). Keep the raw record ID for traceability.
+2. **Join layers.** Match CoStar records to Matterport models by address, then by distance under 30 m. Match to Vexcel by coordinates. Write `source` IDs on each listing. Unmatched is fine; `has_interior` stays false.
 3. **Block.** Pick a local origin at the block center. Convert lat/lon to meters east/north/up from it. Vexcel 3D tiles → glTF if available for the block; otherwise extrude footprints (OpenStreetMap or Vexcel) to DSM heights over DTM terrain. Write spawn points on sidewalks and a door point per listed house.
-4. **House.** The pitch is "furnish it the way you want", so the hero house must look empty. Prefer listings scanned vacant or a defurnished mesh; if the only scan is furnished, say so at hour 3 so the team picks another house or accepts it. MatterPak OBJ → glTF; convert Z-up to Y-up once here; decimate for rendering; build collision from floor-plan wall vectors (never the raw scan). Room polygons and labels from Property Intelligence; if not on our keys, hand-trace the hero house. Compute every `area_m2` from the polygon.
+4. **House.** The pitch is "furnish it the way you want", so the hero house must look empty. Prefer listings scanned vacant or a defurnished mesh; the overnight house search should already prefer empty scans; if the hero scan is furnished, raise it at the 10:30 AM kickoff so the team picks a backup house or accepts it. MatterPak OBJ → glTF; convert Z-up to Y-up once here; decimate for rendering; build collision from floor-plan wall vectors (never the raw scan). Room polygons and labels from Property Intelligence; if not on our keys, hand-trace the hero house. Compute every `area_m2` from the polygon.
 5. **Graph.** `graph.json`: nodes = rooms (`label`, `area_m2`, `floor`, `has_window`), edges = doors and stairs (`kind`, `width_m`). This is the "knowledge graph" the agent queries. No graph database.
-6. **Furniture.** Download, normalize to `.glb`: Y-up, meters, origin at bottom center, front facing +Z, under 5 MB. Write `catalog.json` with size, tags, placement type and license.
+6. **Furniture.** Primary source: Amazon Berkeley Objects (ABO). Fill gaps (crib, play mat, plants) from Poly Haven, then KayKit or Kenney. Never download the full 154 GB model archive. The pipeline has three stages, each a script in `worldgen/sources/abo.py`:
+   1. **Index (all of ABO, laptop only).** From `listings/metadata/` (the `abo-listings.tar` archive, 83 MB, gzipped JSON lines) keep only rows with a `3dmodel_id`. Join to the 3D model metadata CSV in `3dmodels/metadata/` on `3dmodel_id` (`path`, `faces`, `vertices`, `extent_x/y/z`). Pull out `item_id`, English `item_name`, `brand`, `product_type`, `color`, `material`, `style`, `item_dimensions`, `item_keywords`, `main_image_id`. Write `worldgen/out/abo_index.parquet`. This file never ships to Render.
+   2. **Select (about 100 to 150 items).** Print the counts of `product_type` first, then map the real values to our categories in `worldgen/abo_categories.yaml`. Per category keep 3 to 8 items with varied style and color, preferring low `faces` and an English name. Living-room categories get the most picks.
+   3. **Fetch and normalize (selected items only).** Download each `.glb` by its `path` with `aws s3 cp --no-sign-request`. Then: rescale to meters and check against `item_dimensions` (inches to meters; flag anything off by more than 15%); make sure +Y is up and the front faces +Z (check one item per category by eye, then store a per-category rotation fix); move the origin to the bottom center; shrink textures to 1024 px and compress with `gltf-transform` (meshopt). Target under 3 MB per file. Optionally fetch one small catalog image per item for the chat panel.
+
+   Write `catalog.json` (Asset contract, section 9) with size, tags, style, color, placement, clearance, cover, source and license. Credit "Amazon Berkeley Objects, Amazon.com" in the README and on the credits screen.
+
 7. **Audit.** Deterministic checks per listing, written to `audit.json` (section 9). Examples: CoStar `stories = 1` but the scan has more than one floor or a Staircase room; `beds` vs count of bedroom-labelled rooms; CoStar area vs summed scanned interior area off by more than 15%; `has_pool` true but no pool in Vexcel attributes.
 8. **Publish.** `worldgen publish <block_id>` uploads to the bucket and prints the pack URL. Set it as `PACK_BASE_URL` on all three services.
 
@@ -226,7 +232,7 @@ class RoomState {
 - A deploy closes every WebSocket. No deploys during judging. The client reconnects automatically and rejoins its zone.
 - The filesystem is ephemeral. Room state is lost on restart; the demo seeds the hero house's furniture from `packs/.../plans/` on room creation.
 
-## 9. Contracts (v2.1)
+## 9. Contracts (v2)
 
 JSON Schemas in `contracts/` are the source of truth. Generate TypeScript types and Pydantic models from them.
 
@@ -259,7 +265,7 @@ JSON Schemas in `contracts/` are the source of truth. Generate TypeScript types 
   "schools": [
     { "name": "...", "level": "elementary", "distance_m": 650, "rating": 8 }
   ],
-  "site": { "lot_area_m2": 607.0 },
+  "site": { "yard_area_m2": 140, "street_class": "residential" },
   "has_interior": true,
   "world": {
     "position": [12.0, 0.0, -30.5],
@@ -273,8 +279,6 @@ JSON Schemas in `contracts/` are the source of truth. Generate TypeScript types 
   }
 }
 ```
-
-`property_type`: `single_family, townhouse, condo, duplex, multi_family, other` (mapping in section 7, step 1). `site.lot_area_m2` comes from CoStar `property.lotSizeAcresMin`. `source.matterport_model_id` comes from `residential-listings.csv`.
 
 Fields the CoStar folder does not have stay `null`. Never fabricate them.
 
@@ -311,19 +315,35 @@ Fields the CoStar folder does not have stay `null`. Never fabricate them.
 
 ```json
 {
-  "id": "crib_01",
-  "name": "Crib",
-  "category": "crib",
-  "tags": ["nursery", "infant", "sleep"],
-  "file": "furniture/crib_01.glb",
-  "size_m": { "w": 0.75, "d": 1.35, "h": 0.95 },
+  "id": "sofa_abo_B075X4QMX3",
+  "name": "Upholstered three-seat sofa",
+  "category": "sofa",
+  "style": "modern",
+  "color": "beige",
+  "material": "linen",
+  "tags": ["living_room", "seating", "movie_night", "cover"],
+  "file": "furniture/sofa_abo_B075X4QMX3.glb",
+  "thumb": "furniture/thumbs/sofa_abo_B075X4QMX3.jpg",
+  "size_m": { "w": 2.21, "d": 0.94, "h": 0.86 },
   "placement": "wall",
-  "clearance_m": { "front": 0.6 },
+  "clearance_m": { "front": 0.75 },
   "cover": "half",
-  "license": "CC0",
-  "source": "Kenney"
+  "source": {
+    "dataset": "ABO",
+    "item_id": "B075X4QMX3",
+    "product_name": "<item_name en_US, as listed>",
+    "brand": "<brand>",
+    "license": "CC BY 4.0",
+    "credit": "Amazon Berkeley Objects, Amazon.com"
+  }
 }
 ```
+
+- `id` = `<category>_<source>_<source id>`, stable across rebuilds.
+- `name` is a short generic name for in-world labels. The full product name and brand stay in `source` for the credits screen and the chat panel, not as in-world signage.
+- `size_m` is measured from the normalized mesh, never copied from listing text.
+- `style`, `color`, `material` come from the ABO listing when present, else `null`. Never invent them.
+- Non-ABO assets use the same shape with `source.dataset` = `PolyHaven`, `KayKit` or `Kenney` and their license.
 
 MVP library (at least): couch, sectional, armchair, coffee table, TV + stand, rug, bookshelf, floor lamp, double bed, single bed, nightstand, dresser, desk, chair, dining table, dining chair, crib, changing table, rocking chair, toy storage, play mat, beanbag, plant. Living-room pieces come first: they are in the demo.
 
@@ -387,7 +407,7 @@ Facts that shape the design:
 
 Home search flow: criteria (hard: status, budget, beds, property type; soft: weighted needs) → `search_listings` over the full index → top 3 with interiors → three `listing-auditor` tasks in parallel → rank with evidence → `focus_listing` → answer naming any contradictions found ("Listed as one story, but the scan shows a staircase to a second floor").
 
-Infant profile (in the `home-search` skill): single floor or a bedroom on the entry floor; a bedroom under 12 m² adjacent (graph distance 1 to 2) to the primary bedroom; no pool, or a fenced pool; fenced yard preferred; nearby elementary schools as a soft plus.
+Infant profile (in the `home-search` skill): single floor or a bedroom on the entry floor; a bedroom under 12 m² adjacent (graph distance 1 to 2) to the primary bedroom; no pool, or a fenced pool; fenced yard preferred; quiet street class; nearby elementary schools as a soft plus.
 
 Furnish is the demo's centre and is built before home search. Demo prompts that must work every time: "Furnish the living room for a family that watches movies together", "Set up the living room for a nerf war", "Make it a playroom instead". Re-furnishing the same room replaces its plan; it does not stack objects.
 
@@ -395,16 +415,16 @@ Furnish flow: `room-scout` → `asset-curator` → `layout-planner` loop (propos
 
 ### Tools
 
-| Tool                                                       | Returns                                                               | Owner              |
-| ---------------------------------------------------------- | --------------------------------------------------------------------- | ------------------ |
-| `search_listings(criteria)`                                | Ranked matches with per-criterion evidence                            | A (`agent/data`)   |
-| `get_listing`, `get_rooms`, `get_house_graph`, `get_audit` | Pack and index reads                                                  | A                  |
-| `search_assets(query, category, max_w, max_d)`             | Catalog entries                                                       | A                  |
-| `get_room_geometry(room_id)`                               | Polygon, openings, height, free wall segments                         | B (`layout/`)      |
-| `propose_poses(room_id, asset_id, rule, relative_to)`      | Up to 5 poses; `rule`: `against_wall, corner, center, facing, beside` | B                  |
-| `validate_layout(plan)`                                    | Plan with conflicts                                                   | B                  |
-| `commit_placement(plan)`                                   | POSTs to the game API; refuses plans with conflicts                   | B, calling D's API |
-| `focus_listing(listing_id)`, `get_player_context()`        | Game API calls                                                        | B, calling D's API |
+| Tool                                                                  | Returns                                                                                                                                                                                               | Owner              |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `search_listings(criteria)`                                           | Ranked matches with per-criterion evidence                                                                                                                                                            | A (`agent/data`)   |
+| `get_listing`, `get_rooms`, `get_house_graph`, `get_audit`            | Pack and index reads                                                                                                                                                                                  | A                  |
+| `search_assets(query, category, style, color, max_w, max_d, limit=8)` | Up to `limit` compact catalog entries (`id, name, category, style, color, size_m, cover, placement`), ranked by tag and keyword match after hard filters on category and size. Never the full catalog | A                  |
+| `get_room_geometry(room_id)`                                          | Polygon, openings, height, free wall segments                                                                                                                                                         | B (`layout/`)      |
+| `propose_poses(room_id, asset_id, rule, relative_to)`                 | Up to 5 poses; `rule`: `against_wall, corner, center, facing, beside`                                                                                                                                 | B                  |
+| `validate_layout(plan)`                                               | Plan with conflicts                                                                                                                                                                                   | B                  |
+| `commit_placement(plan)`                                              | POSTs to the game API; refuses plans with conflicts                                                                                                                                                   | B, calling D's API |
+| `focus_listing(listing_id)`, `get_player_context()`                   | Game API calls                                                                                                                                                                                        | B, calling D's API |
 
 Tools read `session_id`, `player_id` and `block_id` from runtime context. Never ask the model to pass them.
 
@@ -443,7 +463,7 @@ Rules:
 | `MOCK_AGENT=1`     | agent   | Replay `agent.session.jsonl` and send its placement to the game API                                                                        |
 | `FAKE_PLACEMENT=1` | agent   | `commit_placement` sends the hand-authored plan from `packs/.../plans/<room_label>.json`; the agent still plans, picks assets and explains |
 | `SOLO=1`           | web     | Run without the game server: local state only, no other players                                                                            |
-| `HITL=1`           | agent   | Approval pause before placing (after Gate 2)                                                                                               |
+| `HITL=1`           | agent   | Approval pause before placing (cut for the shorter schedule; leave off)                                                                    |
 
 A faked step stays invisible in the UI and is listed honestly in the README.
 
