@@ -39,8 +39,10 @@ def fixture_world(monkeypatch):
     monkeypatch.setattr(packs, "catalog", lambda: list(ASSETS.values()))
     monkeypatch.setattr(packs, "get_asset", lambda asset_id: ASSETS.get(asset_id))
     yield
-    packs._read_pack.cache_clear()  # catalog/get_asset are still patched here; monkeypatch restores them
-    packs.listings.cache_clear()
+    # Tests may still have catalog/get_asset/listings patched here (monkeypatch restores them afterwards),
+    # so only clear the caches that are really cached functions.
+    for f in (packs._read_pack, packs.listings):
+        getattr(f, "cache_clear", lambda: None)()
 
 
 @pytest.fixture
@@ -85,7 +87,7 @@ async def acall(t, **kw):
 def test_reads_on_fixtures():
     assert call(tools.get_listing, listing_id="hou_000123")["id"] == "hou_000123"
     assert "error" in call(tools.get_listing, listing_id="nope")
-    rooms = call(tools.get_rooms, listing_id="hou_000123", runtime=RT)
+    rooms = call(tools.get_rooms, listing_id="hou_000123")
     assert rooms[0] == {
         "id": ROOM,
         "label": "living_room",

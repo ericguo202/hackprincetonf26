@@ -9,6 +9,8 @@ thread) as a Placement plan (contracts/placement_plan.schema.json):
   /rooms/<room_id>.json          get_room_geometry: the computed geometry summary
   /plans/<room_id>.json          the draft plan; only the tools below write it (PLAN_PERMISSIONS)
   /plans/<room_id>.poses.json    last propose_poses result per asset, so place_asset can take a pose_id
+  /plans/<room_id>.picks.json    save_picks: the asset-curator's choices, read by the layout planner
+  /search/results.json           search_listings: ranked matches with evidence, read by the auditors
 
 The model may read every file. Built-in write_file/edit_file are denied on /plans/** so coordinates are
 only ever written by place_asset. Expected failures come back as {"error": ...} so the model can recover.
@@ -18,15 +20,16 @@ import json
 import re
 import uuid
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import httpx
 from deepagents import FilesystemPermission
 from deepagents.backends import StateBackend
 from langchain.tools import ToolRuntime, tool
+from pydantic import BaseModel, Field
 
 import settings
-from agent import game_api
+from agent import game_api, search
 from agent.context import AgentContext
 from data import packs
 from layout import DEFAULT_RULE, RULES, room_geometry
@@ -86,6 +89,13 @@ def poses_path(room_id: str) -> str:
     return f"/plans/{room_id}.poses.json"
 
 
+def picks_path(room_id: str) -> str:
+    return f"/plans/{room_id}.picks.json"
+
+
+SEARCH_PATH = "/search/results.json"
+
+
 # --- helpers -----------------------------------------------------------------------------------------
 
 
@@ -115,17 +125,15 @@ def listing_of(room_id: str) -> str:
     return room_id.rsplit(".r", 1)[0]
 
 
-def rooms_of(listing_id: str, block_id: str) -> list[dict]:
+def rooms_of(listing_id: str) -> list[dict]:
     try:
         return packs.get_rooms(listing_id)
-    except KeyError:
-        # Listing not in listings/index.json yet (worldgen costar.py is a stub): read the house from the
-        # session's block directly. See HANDOFF.md lane-b -> lane-a.
-        return packs._read_pack(f"{packs.pack_root(block_id)}/houses/{listing_id}/rooms.json")
+    except KeyError as e:
+        raise ToolError(f"{listing_id} has no scanned interior on a built block") from e
 
 
-def load_room(room_id: str, block_id: str) -> dict:
-    for r in rooms_of(listing_of(room_id), block_id):
+def load_room(room_id: str) -> dict:
+    for r in rooms_of(listing_of(room_id)):
         if r["id"] == room_id:
             return r
     raise ToolError(f"no room {room_id}")
@@ -213,7 +221,7 @@ def get_listing(listing_id: str) -> str:
 
 
 @tool(parse_docstring=True)
-def get_rooms(listing_id: str, runtime: ToolRuntime[AgentContext]) -> str:
+def get_rooms(listing_id: str) -> str:
     """List the scanned rooms of a house: id, label, floor, area, doors, windows. Details: get_room_geometry.
 
     Args:
@@ -230,7 +238,7 @@ def get_rooms(listing_id: str, runtime: ToolRuntime[AgentContext]) -> str:
                 "doors": sum(o["type"] == "door" for o in r["openings"]),
                 "windows": sum(o["type"] == "window" for o in r["openings"]),
             }
-            for r in rooms_of(listing_id, runtime.context.block_id)
+            for r in rooms_of(listing_id)
         ]
 
     return _run(run)
@@ -316,6 +324,120 @@ def search_assets(
     return _run(run)
 
 
+class Need(BaseModel):
+    need: Literal[
+        "single_story", "no_pool", "fenced_yard", "garage", "small_bedroom_near_primary", "elementary_school"
+    ]
+    weight: Literal["high", "medium", "low"] = "medium"
+
+
+@tool(parse_docstring=True)
+def search_listings(
+    needs: list[Need],
+    runtime: ToolRuntime[AgentContext],
+    status: Literal["for_sale", "for_rent"] | None = None,
+    property_type: str | None = None,
+    max_price_usd: float | None = None,
+    max_rent_usd_month: float | None = None,
+    min_beds: int | None = None,
+    min_baths: float | None = None,
+    limit: int = 3,
+) -> str:
+    """Search homes the player can walk into on this block: hard criteria filter, soft needs rank.
+
+    Only listings with a scanned interior on the player's block are searched. A field the data does not have
+    is reported as passed=null (unknown), never as failed. Also saved to /search/results.json for auditors.
+
+    Args:
+        needs: Soft needs with weights, e.g. [{"need": "single_story", "weight": "high"}].
+        status: for_sale or for_rent.
+        property_type: e.g. single_family.
+        max_price_usd: Budget for a purchase.
+        max_rent_usd_month: Budget for a rental.
+        min_beds: Minimum bedrooms.
+        min_baths: Minimum bathrooms.
+        limit: Maximum matches (1 to 5).
+    """
+    hard = {
+        "status": status,
+        "property_type": property_type,
+        "max_price_usd": max_price_usd,
+        "max_rent_usd_month": max_rent_usd_month,
+        "min_beds": min_beds,
+        "min_baths": min_baths,
+    }
+
+    def run() -> dict:
+        block = runtime.context.block_id
+        homes = [x for x in packs.listings() if x.get("block_id") == block and x.get("has_interior")]
+        if not homes:
+            raise ToolError(f"no listings with a scanned interior on block {block}")
+        out = search.search(
+            homes,
+            {k: v for k, v in hard.items() if v is not None},
+            [n.model_dump() if isinstance(n, BaseModel) else dict(n) for n in needs],
+            _house_data,
+            limit=max(1, min(int(limit), 5)),
+        )
+        FILES.write_json(SEARCH_PATH, out)
+        return out
+
+    return _run(run)
+
+
+def _house_data(listing_id: str) -> tuple[dict | None, list[dict] | None]:
+    try:
+        return packs.get_house_graph(listing_id), packs.get_rooms(listing_id)
+    except (KeyError, packs.PackFileMissing):
+        return None, None
+
+
+class Pick(BaseModel):
+    asset_id: str
+    count: int = Field(default=1, ge=1, le=4)
+    role: str = Field(description="The piece's job, e.g. 'main seating, faces the TV'")
+    priority: int = Field(ge=1, le=3, description="1 = must have, 3 = nice to have")
+
+
+@tool(parse_docstring=True)
+def save_picks(room_id: str, items: list[Pick]) -> str:
+    """Save the chosen furniture for a room to /plans/<room_id>.picks.json, where the layout planner reads it.
+
+    Checks every asset_id is in the catalog and that each piece can fit the room. Replaces earlier picks.
+
+    Args:
+        room_id: Room the picks are for.
+        items: The pieces, most important first.
+    """
+
+    def run() -> dict:
+        if not items:
+            raise ToolError("items must not be empty")
+        geo = room_geometry(load_room(room_id))
+        longest_wall = max((s.length for s in geo.walls), default=0.0)
+        minx, minz, maxx, maxz = geo.poly.bounds
+        longest_side = max(maxx - minx, maxz - minz)
+        saved = []
+        for raw in items:
+            p = raw if isinstance(raw, Pick) else Pick.model_validate(raw)
+            a = asset(p.asset_id)
+            w, d = a["size_m"]["w"], a["size_m"]["d"]
+            on_wall = a.get("placement") in ("wall", "corner")
+            limit, what = (longest_wall, "longest free wall") if on_wall else (longest_side, "room")
+            if (w if on_wall else max(w, d)) > limit:
+                raise ToolError(
+                    f"{p.asset_id} is {w:.2f} m wide; the {what} is {limit:.2f} m. Pick a smaller one."
+                )
+            saved.append(
+                {**p.model_dump(), "name": a["name"], "category": a["category"], "size_m": a["size_m"]}
+            )
+        out = {"room_id": room_id, "items": saved}
+        FILES.write_json(picks_path(room_id), out)
+        return {"path": picks_path(room_id), "items": len(saved)}
+
+    return _run(run)
+
+
 # --- layout (layout/ behind the section 10 signatures, plan kept in /plans/) --------------------------
 
 
@@ -330,7 +452,7 @@ def get_room_geometry(room_id: str, runtime: ToolRuntime[AgentContext]) -> str:
     """
 
     def run() -> dict:
-        summary = room_geometry(load_room(room_id, runtime.context.block_id)).summary()
+        summary = room_geometry(load_room(room_id)).summary()
         FILES.write_json(room_path(room_id), summary)
         return summary
 
@@ -348,7 +470,7 @@ def start_plan(room_id: str, runtime: ToolRuntime[AgentContext]) -> str:
     """
 
     def run() -> dict:
-        load_room(room_id, runtime.context.block_id)  # fail early on a bad id
+        load_room(room_id)  # fail early on a bad id
         plan = {
             "plan_id": f"p_{uuid.uuid4().hex[:8]}",
             "listing_id": listing_of(room_id),
@@ -393,7 +515,7 @@ def propose_poses(
         r = rule or DEFAULT_RULE.get(a.get("placement") or "", "center")
         if r not in RULES:
             raise ToolError(f"rule must be one of {', '.join(RULES)}")
-        geo = room_geometry(load_room(room_id, runtime.context.block_id))
+        geo = room_geometry(load_room(room_id))
         out = _propose(geo, a, r, relative_to, placed_pairs(plan, skip=moving))
         stored = FILES.read_json(poses_path(room_id)) or {}
         stored[asset_id] = {"rule": r, "relative_to": relative_to, "moving": moving, "poses": out["poses"]}
@@ -441,7 +563,7 @@ def place_asset(
             "reason": short_reason(reason or pose["reason"]),
         }
         # The plan may have changed since the proposal: check this piece against it again.
-        geo = room_geometry(load_room(room_id, runtime.context.block_id))
+        geo = room_geometry(load_room(room_id))
         others = placed_pairs(plan, skip=obj["instance_id"])
         conflicts = object_conflicts(geo, obj, asset(asset_id), others, check_reverse=True)
         if conflicts:
@@ -487,7 +609,7 @@ def validate_layout(room_id: str, runtime: ToolRuntime[AgentContext]) -> str:
     """
 
     def run() -> dict:
-        plan = _validate(load_plan(room_id), load_room(room_id, runtime.context.block_id), asset)
+        plan = _validate(load_plan(room_id), load_room(room_id), asset)
         save_plan(plan)
         return {"status": plan["status"], "objects": len(plan["objects"]), "conflicts": plan["conflicts"]}
 
@@ -506,7 +628,7 @@ async def commit_placement(room_id: str, runtime: ToolRuntime[AgentContext]) -> 
     ctx = runtime.context
 
     async def run() -> dict:
-        room = load_room(room_id, ctx.block_id)
+        room = load_room(room_id)
         plan = _validate(load_plan(room_id), room, asset)
         if plan["conflicts"]:
             save_plan(plan)
@@ -570,10 +692,10 @@ async def get_player_context(runtime: ToolRuntime[AgentContext]) -> str:
 
 # --- tool sets per agent (AGENTS.md section 10 table) ------------------------------------------------
 
-CONCIERGE_TOOLS = [get_listing, focus_listing, get_player_context]
+CONCIERGE_TOOLS = [search_listings, get_listing, focus_listing, get_player_context]
 AUDITOR_TOOLS = [get_listing, get_house_graph, get_rooms, get_audit]
 ROOM_SCOUT_TOOLS = [get_rooms, get_house_graph, get_room_geometry]
-CURATOR_TOOLS = [search_assets]
+CURATOR_TOOLS = [search_assets, save_picks]
 LAYOUT_TOOLS = [
     get_room_geometry,
     start_plan,

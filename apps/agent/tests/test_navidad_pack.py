@@ -52,7 +52,7 @@ def call(t, **kw):
 
 @pytest.mark.parametrize("listing_id", HOUSES)
 def test_every_room_has_geometry(listing_id):
-    rooms = call(tools.get_rooms, listing_id=listing_id, runtime=RT)
+    rooms = call(tools.get_rooms, listing_id=listing_id)
     assert rooms
     for r in rooms:
         g = call(tools.get_room_geometry, room_id=r["id"], runtime=RT)
