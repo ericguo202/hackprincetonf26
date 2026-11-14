@@ -2,7 +2,7 @@
 
 Lane C is the game client's world and player: `apps/web/src/world/` and
 `apps/web/src/player/` (AGENTS.md section 6). Written 2026-11-14 at main
-`1d8b011`; updated at the end of the second session the same day (section 9). Read AGENTS.md first. Rules that matter most here: stay inside
+`1d8b011`; updated at the end of the second session the same day (section 9), and again for remote players (section 11). Read AGENTS.md first. Rules that matter most here: stay inside
 those two folders (plus `apps/web/public/characters/`). Never edit
 `apps/web/src/store.ts` (Lane D) or anything in `contracts/` (all four lanes
 agree first). Cross-lane needs go in `HANDOFF.md`.
@@ -24,10 +24,11 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Blaster | `player/Blaster.tsx`, `blasterMath.ts`, `Crosshair.tsx`, `blasterHud.ts` | Hitscan: aim along the camera ray past the head, shoot from the head toward that aim point, 4 shots/s. Tracer, muzzle flash, impact puff. Crosshair and hit marker show only while the pointer is locked. Seams for Lane D: `getHitboxes` and `onFire` props on `<Player>`. |
 | Furniture | `world/FurnitureLayer.tsx`, `furniturePlan.ts`, `indoorSpawns.ts` | Renders `store.houses[zone]`. A missing mesh becomes a labelled box from `size_m`. Colliders are built from `size_m`. 0.45 s drop-in. On a plan change: remount (no ghost colliders), push-out of the real body, and indoor spawns recomputed. |
 | Labels | `world/WorldLabel.tsx`, `labelFade.ts` | Fixed screen size. Hidden below 1.5 m, gone by 10 m (door labels stay up to 40 m). |
+| Remote players | `world/RemotePlayers.tsx`, `remoteInterp.ts`, `remoteTargets.ts` | One `<Character>` per other player in my zone, from `store.players`, interpolated 100 ms behind. Their hitboxes (sized to the model) feed the blaster. See section 11. |
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 159 tests in 11 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 176 tests in 12 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -72,10 +73,11 @@ An `apps/web/.env.local` is ignored.
 | `VITE_PACK_BASE_URL` | Pack folder, e.g. `/packs/hou_navidad_01/v1`. Unset means the contract fixtures and placeholder geometry. The published root (listings, shared `furniture/v<N>/`) is derived from it by `publishedRoot()`: three levels up for `.../packs/<block>/v<N>`. |
 | `VITE_START_ROOM` | `<listing_id>.rN`: start inside that house at the room's area centroid, skipping the block. The only way into a house until a listings index exists. A wrong ID logs one warning and starts on the block. |
 | `VITE_DEV_PLAN` | Furnish the current house from `contracts/fixtures/placement_plan.json`, moved to centre on the target room (pieces that don't fit are dropped with a warning). Dev stand-ins cover any asset the catalog lacks, matched by category. **P** swaps between this plan and plan B (`devFurniture.ts`), which drops a sectional on the room centre to exercise push-out. |
+| `VITE_DEV_REMOTES` | Two fake remote players in my zone on scripted paths (a runner on a circle; a walker that pauses and shoots), written into `store.players` at 20 Hz with arrival jitter. Your shots hit them: 3 hits play their death animation, and they respawn after 3 s. The console logs each `fire` payload. |
 | `VITE_SOLO` | Lane D's: `net/game.ts` skips the game server. |
 
 Current local `/.env.local`:
-`VITE_PACK_BASE_URL=/packs/hou_navidad_01/v1`, `VITE_START_ROOM=hou_237901269.r4`, `VITE_DEV_PLAN=1`.
+`VITE_PACK_BASE_URL=/packs/hou_navidad_01/v1`, `VITE_START_ROOM=hou_237901269.r4`, `VITE_DEV_PLAN=1`, `VITE_DEV_REMOTES=1`.
 
 **Heads-up:** Lane A has since made 7014 Navidad (`hou_236595179`, living room `hou_236595179.r3`) the hero house.
 - **Rebuild the local pack:** `cd worldgen && uv run python -m worldgen.publish hou_navidad_01 --local`.
@@ -109,7 +111,7 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 - **Both bathrooms are unreachable:** their doors are 0.56 and 0.58 m wide, narrower than the 0.6 m capsule. The widths look real (24-inch doors), so the fix is a smaller radius (0.25 m opens both). That's a Lane C decision and was deliberately not made yet. See section 9.
 - **Jump apex vs ceiling:** the 1.6 m eye sits exactly at the capsule top. A normal jump (4 m/s) peaks at about 2.40 m, which puts the first-person eye within the 0.1 m near plane of a 2.43 m ceiling, so the roof can clip at the top of a jump. Fixes: a lower `jumpVel` (3 m/s gives about a 0.46 m apex), or an eye a little below the capsule top. Not done.
 - **No respawn yet:** `indoorSpawns` computes indoor spawns, but nothing uses them yet. That's the foam-fight round loop, Lane D server and C client.
-- **Weapon choice:** the character's weapon is the pack's Pistol, tinted foam orange. Changing it is one constant: `CHARACTER.keepWeapon`.
+- **Weapon choice:** the character holds the kit's `RocketLauncher`, tinted foam orange. Despite the name it's a chunky cartoon tube, the only prop in the kit that reads as a toy; the pistols and rifles are realistic. Changing it is one constant: `CHARACTER.keepWeapon`.
 
 ## 6. Character pack facts
 
@@ -134,11 +136,8 @@ None of these were addressed on main as of the end of session 2 (checked in `app
 
 1. **Zone changes are rejected by the server.** `move` drops any step over `MAX_STEP_M` (3 m), and `enter_zone` doesn't reset that. A zone change always jumps more than 3 m into the new zone's frame, so after one door every later move is dropped and the player looks frozen to others. The first spawn hits the same rule, being more than 3 m from the server's default (0, 0, 0). Fix: accept the next position after `enter_zone` and after joining.
 2. **Remote players:** interpolate from the rendered mesh transform, never from `body.translation()` or ecctrl's `currPos` (the 8 cm swing).
-3. **Blaster seams on `<Player>`, not wired yet:**
-   - `onFire(payload)`: send it as `fire`. The origin is the head, always within 1.5 m of `me.pos`.
-   - `getHitboxes()`: return remote players in this zone as capsules (`blasterMath.Hitbox`). Size them to the model, as in section 5.
-   - Server side, `fire` is still a TODO.
-4. **Rendering remote players:** `<Character animState={p.anim} moving={speed > 0.5} />` at `p.pos − [0, FOOT_BELOW_CENTRE_M, 0]`, rotated by `p.yaw`. It reads nothing but its props.
+3. **Send `fire`.** `World.tsx` passes `onFire` to `<Player>`. Point it at your sender instead of `undefined` (dev mode passes `devFire`). The payload is `{origin, dir, target_id?}`: origin is the head, always within 1.5 m of `me.pos`, and `target_id` is set only on a player hit. Server side, `fire` is still a TODO. `devFire` in `world/fakeRemotes.ts` shows the expected rules: 3 hits eliminate, respawn after 3 s.
+4. **Done on the Lane C side:** remote rendering (`RemotePlayers`, interpolated 100 ms behind) and `getHitboxes` (wired to `remoteHitboxes`). Lane D only needs to keep `store.players` updated: `pos` is the body centre, plus `yaw` in radians, `anim`, `zone` and `alive`.
 
 ## 8. Environment gotchas
 
@@ -211,7 +210,7 @@ The eye-height test keeps passing if `headOffsetY` is retuned to keep the eye at
   - the foam blaster;
   - furniture from plans, as boxes until real meshes are published;
   - the animated Toon Shooter character.
-- **Remote players:** the seams for Lane D are in place (`<Character>`, `onFire`, `getHitboxes`, `FOOT_BELOW_CENTRE_M`). Multiplayer is blocked on Lane D's server items in section 7.
+- **Remote players:** rendered, interpolated and shootable (section 11), proven with fake players (`VITE_DEV_REMOTES`). The networked fight needs Lane D's server items in section 7: accepting moves after a zone change, the `fire` handler, and passing their sender as `onFire`.
 - **Verification:** most physics is proven headless. The character in the live page, the label fade and the jitter fix still need a browser pass.
 
 **Single next task:** decide and apply the capsule radius, then re-verify the doorways on Lane A's rebuilt pack.
@@ -219,3 +218,29 @@ The eye-height test keeps passing if `headOffsetY` is retuned to keep the eye at
 2. Re-run the headless doorway drive on both houses. Rebuild it from the method in this section: a dynamic capsule from each door's larger room to 0.45 m past the door line, and step the world once before any ray query.
 3. If bathrooms are still under 0.6 m, set `MOVEMENT.capsuleRadius` to 0.25. Then update the hitbox radius and the two blaster tests that hard-code 0.3. The FOV part of the hide threshold follows automatically.
 4. Then browser-check the soldier, the doorways and first person, and do the 1.75 m scale-up above in the same pass, since it touches the same constants.
+
+## 11. Session 3: remote players and the weapon look
+
+**Remote players** (`world/RemotePlayers.tsx`, `remoteInterp.ts`, `remoteTargets.ts`):
+- **What renders:** one `<Character animState moving>` per player in `store.players` whose `zone` matches mine, excluding me (`me.id`).
+- **Interpolation:**
+  - Every patch is stamped on arrival (Colyseus patches have no timestamps).
+  - Each player is drawn 100 ms behind the newest patch, lerping position and yaw (the short way round).
+  - `anim` and `alive` come from the older patch and are never blended.
+  - A zone change restarts that player's buffer, so it never lerps across frames.
+  - It holds the last patch rather than extrapolating.
+  - `moving` (for `Run_Shoot`) means a speed over 0.5 m/s.
+- **Hitboxes:** built from the same interpolated samples that are drawn (the HANDOFF rule), and sized to the model: feet to feet + 1.3 m, radius 0.3. They are not sized to the floated capsule (0.3–1.6 m), so a dart at the knees hits and one just over the head misses.
+- **Shooting:** `remoteHitboxes()` is passed as `<Player getHitboxes>`, so the blaster hits the nearest remote player, shows a red hit marker and puts `target_id` in the payload. The frame order is remote −20, before the blaster at 0.
+- **If the model is missing:** remotes fall back to an orange capsule (the local player's is blue).
+
+**Verification:** unit tests only (17 new). They cover interpolation at a given delay, zone filtering, model-sized hitboxes, the nearest of two targets with the right payload, a wall winning over a player, and the fake players' rules. **Not yet seen in a browser:** reload with `VITE_DEV_REMOTES=1` (now set in `/.env.local`) and shoot the two fakes.
+
+**Weapon:** `CHARACTER.keepWeapon` is now `RocketLauncher`. Of the kit's 14 hand props, it's the one that reads as a toy: chunky, red and white, three nozzles, held by the Hazmat character in the pack preview. The others are realistic pistols, rifles, knives and grenades. It still gets the foam-orange tint. In hand it's about 0.77 × 0.54 m and rises to 1.34 m while aiming. It's one constant.
+
+**Deliberately not done** (needs team agreement):
+- crouch, which needs a seventh animation state: a contracts change under rule 2;
+- melee and a second weapon slot, which are new scope;
+- switching to human characters: section 5 forbids retargeting, and that option is two packs combined.
+
+**Next task** (unchanged from section 10): decide the capsule radius and re-check the doorways on Lane A's rebuilt pack. For the scheduled networked fight, the remaining work is Lane D's (section 7, items 1 and 3).
