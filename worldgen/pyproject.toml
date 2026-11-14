@@ -39,7 +39,7 @@ packages = ["worldgen", "worldgen.sources", "worldgen.scout"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-extend-exclude = ["out"]
+extend-exclude = ["out", "scripts"]  # scripts/preview: scratch tools, see docs/house-pipeline-handoff.md
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
