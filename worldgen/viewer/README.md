@@ -22,7 +22,9 @@ A throwaway local page the Lane A human uses to judge whether a house pack built
 to play in, before Lane C's game loads it. It reads packs from disk exactly as published
 (`packs/<block_id>/v<N>/manifest.json` and the files it lists), and shows:
 
-- the interior (`interior.glb`, meshopt, unlit), with ceilings toggleable
+- the interior (`interior.glb`, meshopt, unlit), with ceilings toggleable; for packs built with the outdoors
+  (worldgen/exterior.py) also the yard, facades, outdoor scan pieces and trees, with the roof and the backdrop
+  (street and sky dome) toggleable (all three turn on in walk mode and off in orbit mode)
 - the collision (`collision.glb`) as wireframe: walls magenta, floor cyan
 - room polygons from `rooms.json`, coloured by label, with id, area, confidence and a warning when `area_m2`
   disagrees with the polygon
@@ -56,7 +58,8 @@ root. A pack whose manifest still has the pre-v2.3 `furniture/catalog.json` gets
 
 ## Controls
 
-- Orbit: drag to rotate, right-drag to pan, wheel to zoom. Double-click a floor to drop the capsule there.
+- Orbit: drag to rotate, right-drag to pan, wheel to zoom. Double-click a floor (or the yard) to drop the capsule there.
+  The spawn list also has "yard: outside ... door" entries, 1.5 m outside each outside door that has scanned ground.
 - Tab toggles walk mode. In walk mode click the view to capture the mouse; WASD, Shift to run, Space to jump,
   wheel for camera distance. V (or the "first person" checkbox) switches first / third person; scrolling all the
   way in also switches to first person. V in orbit mode starts a first-person walk directly.
