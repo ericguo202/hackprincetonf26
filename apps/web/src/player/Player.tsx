@@ -29,7 +29,10 @@ import { Blaster } from "./Blaster";
 import type { FirePayload, Hitbox } from "./blasterMath";
 import type { AnimState } from "../../../../contracts/game-state";
 import { CameraArm } from "./CameraArm";
-import { MOVEMENT } from "./movement";
+import { CENTRE_ABOVE_FLOOR_M, CROUCH, MOVEMENT } from "./movement";
+
+/** Hold to crouch (contracts v2.4.0). C rather than Ctrl, which the browser owns (Ctrl+W). */
+export const CROUCH_KEY = "KeyC";
 import { Character } from "./Character";
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
 import { useMeshState } from "../world/meshProbe";
@@ -104,6 +107,13 @@ export function Player({
   const [look, setLook] = useState<{ anim: AnimState; moving: boolean }>({ anim: "idle", moving: false });
   const lookRef = useRef(look);
   const keys = useRef({ ...KEYS });
+  // Crouch changes the capsule, so it is React state (an Ecctrl prop); the ref
+  // is for the frame loop.
+  const [crouched, setCrouched] = useState(false);
+  const crouchedRef = useRef(false);
+  useEffect(() => {
+    crouchedRef.current = crouched;
+  }, [crouched]);
   const locomotion = useRef<LocomotionState>("IDLE");
   /** Set by the foam-fight code when the player shoots, is hit, or is out. */
   const action = useRef<PlayerAction>(null);
@@ -130,13 +140,22 @@ export function Player({
       keys.current[k] = true;
     };
     const onUp = (e: KeyboardEvent) => {
+      if (e.code === CROUCH_KEY) setCrouched(false);
       const k = KEY_MAP[e.code];
       if (k) keys.current[k] = false;
+    };
+    const onCrouchDown = (e: KeyboardEvent) => {
+      if (e.code !== CROUCH_KEY || e.repeat) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+      setCrouched(true);
     };
     // Releasing a key while the tab is hidden otherwise leaves it stuck down.
     const onBlur = () => {
       keys.current = { ...KEYS };
+      setCrouched(false);
     };
+    window.addEventListener("keydown", onCrouchDown);
     window.addEventListener("keydown", onDown);
     window.addEventListener("keyup", onUp);
     window.addEventListener("blur", onBlur);
@@ -144,6 +163,7 @@ export function Player({
       window.removeEventListener("keydown", onDown);
       window.removeEventListener("keyup", onUp);
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("keydown", onCrouchDown);
     };
   }, []);
 
@@ -172,7 +192,8 @@ export function Player({
     const handle = ecctrl.current;
     if (!handle) return;
 
-    handle.setMovement({ ...keys.current });
+    // Crouched: walk only, no run, no jump (CROUCH.maxVel caps the speed too).
+    handle.setMovement(crouchedRef.current ? { ...keys.current, run: false, jump: false } : { ...keys.current });
 
     // Expire a one-shot action (shoot, hit). `eliminated` holds until respawn.
     if (action.current && state.clock.elapsedTime >= actionUntil.current) {
@@ -181,7 +202,7 @@ export function Player({
 
     // Model: same state the wire carries, every frame (the store write below is 20 Hz).
     const nextLook = {
-      anim: toAnimState(locomotion.current, action.current),
+      anim: toAnimState(locomotion.current, action.current, crouchedRef.current),
       moving: locomotion.current === "WALK" || locomotion.current === "RUN",
     };
     if (nextLook.anim !== lookRef.current.anim || nextLook.moving !== lookRef.current.moving) {
@@ -194,7 +215,8 @@ export function Player({
     // the float spring settling do not pop.
     if (feet.current && bodyMesh.current) {
       const by = bodyMesh.current.getWorldPosition(bodyWorld.current).y;
-      const target = handle.isOnGround ? handle.standPoint.y - by : -FOOT_BELOW_CENTRE_M;
+      const nominal = crouchedRef.current ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M;
+      const target = handle.isOnGround ? handle.standPoint.y - by : -nominal;
       const k = 1 - Math.exp(-20 * Math.min(dt, 0.1));
       feet.current.position.y += (target - feet.current.position.y) * k;
     }
@@ -208,7 +230,7 @@ export function Player({
       handle.currQuat as unknown as Quaternion,
       "YXZ",
     ).y;
-    const anim = toAnimState(locomotion.current, action.current);
+    const anim = toAnimState(locomotion.current, action.current, crouchedRef.current);
 
     const prev = lastSent.current;
     const moved =
@@ -254,10 +276,11 @@ export function Player({
       <Ecctrl
         ref={ecctrl}
         position={spawn}
-        capsuleHalfHeight={MOVEMENT.capsuleHalfHeight}
+        // Crouch shrinks the capsule (ecctrl rebuilds the collider and re-floats it).
+        capsuleHalfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight}
         capsuleRadius={MOVEMENT.capsuleRadius}
-        maxWalkVel={MOVEMENT.maxWalkVel}
-        maxRunVel={MOVEMENT.maxRunVel}
+        maxWalkVel={crouched ? CROUCH.maxVel : MOVEMENT.maxWalkVel}
+        maxRunVel={crouched ? CROUCH.maxVel : MOVEMENT.maxRunVel}
         jumpVel={MOVEMENT.jumpVel}
         floatHeight={MOVEMENT.floatHeight}
         lockForward={followCamera}
@@ -271,14 +294,14 @@ export function Player({
                   moving={look.moving}
                   // A file that passes the probe but fails to parse: the capsule, back at the body centre.
                   fallback={
-                    <group position-y={FOOT_BELOW_CENTRE_M}>
-                      <PlaceholderCharacter />
+                    <group position-y={crouched ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M}>
+                      <PlaceholderCharacter halfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight} />
                     </group>
                   }
                 />
               </group>
             ) : (
-              <PlaceholderCharacter />
+              <PlaceholderCharacter halfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight} />
             ))}
         </group>
       </Ecctrl>
@@ -293,10 +316,10 @@ export function Player({
 }
 
 /** Stand-in until the Quaternius pack is picked and clips.ts is filled. */
-function PlaceholderCharacter() {
+function PlaceholderCharacter({ halfHeight = MOVEMENT.capsuleHalfHeight }: { halfHeight?: number }) {
   return (
     <mesh castShadow>
-      <capsuleGeometry args={[MOVEMENT.capsuleRadius, MOVEMENT.capsuleHalfHeight * 2]} />
+      <capsuleGeometry args={[MOVEMENT.capsuleRadius, halfHeight * 2]} />
       <meshStandardMaterial color="#4f7cff" />
     </mesh>
   );

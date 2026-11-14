@@ -16,7 +16,7 @@ import type { AnimState } from "../../../../contracts/game-state";
 import type { NetPlayer } from "../store";
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "../player/characterAsset";
 import type { Hitbox } from "../player/blasterMath";
-import { MOVEMENT } from "../player/movement";
+import { CENTRE_ABOVE_FLOOR_M, CROUCH, MOVEMENT } from "../player/movement";
 
 export type Vec3 = [number, number, number];
 
@@ -105,8 +105,18 @@ export function remotesInZone(
 }
 
 /** Where the model's feet are for a body centre. The model's origin is its feet. */
-export function feetFromBody(body: Vec3): Vec3 {
-  return [body[0], body[1] - FOOT_BELOW_CENTRE_M, body[2]];
+export function feetFromBody(body: Vec3, anim?: AnimState): Vec3 {
+  return [body[0], body[1] - footBelowCentre(anim), body[2]];
+}
+
+/** Body centre above the feet for a wire state: crouched players float a smaller capsule. */
+export function footBelowCentre(anim?: AnimState): number {
+  return anim === "crouch" ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M;
+}
+
+/** Model height for a wire state: 1.3 m standing, the Duck hold (0.97 m) crouched. */
+export function modelHeight(anim?: AnimState): number {
+  return anim === "crouch" ? CROUCH.topM : CHARACTER.heightM;
 }
 
 /**
@@ -115,13 +125,14 @@ export function feetFromBody(body: Vec3): Vec3 {
  * feet + floatHeight + capsule height). Otherwise a dart at the knees would
  * miss and one just over the head would hit.
  */
-export function hitboxFromBody(id: string, body: Vec3): Hitbox {
-  const feet = feetFromBody(body);
+export function hitboxFromBody(id: string, body: Vec3, anim?: AnimState): Hitbox {
+  const feet = feetFromBody(body, anim);
   const radius = MOVEMENT.capsuleRadius;
+  const h = modelHeight(anim);
   return {
     id,
-    centre: [feet[0], feet[1] + CHARACTER.heightM / 2, feet[2]],
+    centre: [feet[0], feet[1] + h / 2, feet[2]],
     radius,
-    halfHeight: Math.max(0, CHARACTER.heightM / 2 - radius),
+    halfHeight: Math.max(0, h / 2 - radius),
   };
 }

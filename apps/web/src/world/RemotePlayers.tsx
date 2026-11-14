@@ -19,7 +19,7 @@ import { MOVEMENT } from "../player/movement";
 import { REMOTE_PRIORITY } from "./frameOrder";
 import {
   MOVING_SPEED,
-  feetFromBody,
+  footBelowCentre,
   hitboxFromBody,
   pushSnapshot,
   remotesInZone,
@@ -71,7 +71,7 @@ export function RemotePlayers({ zone }: { zone: string }) {
     const boxes = [];
     for (const id of ids) {
       const s = sampleDelayed(buffers.current.get(id) ?? [], t);
-      if (s && s.alive && s.zone === zone) boxes.push(hitboxFromBody(id, s.pos));
+      if (s && s.alive && s.zone === zone) boxes.push(hitboxFromBody(id, s.pos, s.anim));
     }
     setRemoteHitboxes(boxes);
   }, REMOTE_PRIORITY);
@@ -89,14 +89,18 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
   const group = useRef<Group>(null);
   const [look, setLook] = useState<{ anim: AnimState; moving: boolean }>({ anim: "idle", moving: false });
   const lookRef = useRef(look);
+  const footBelow = useRef(footBelowCentre("idle"));
 
-  useFrame(() => {
+  useFrame((_, dt) => {
     const s = sampleDelayed(buffers.current.get(id) ?? [], nowS());
     if (!s || !group.current) return;
     // A patch can say "other zone" before the id leaves my list; never draw it here.
     group.current.visible = s.zone === zone;
-    const [x, y, z] = feetFromBody(s.pos);
-    group.current.position.set(x, y, z);
+    // The anim flips to crouch at once while the body glides down (~0.2 s), so
+    // ease the feet offset instead of popping the model 0.3 m into the floor.
+    const target = footBelowCentre(s.anim);
+    footBelow.current += (target - footBelow.current) * Math.min(1, dt * 12);
+    group.current.position.set(s.pos[0], s.pos[1] - footBelow.current, s.pos[2]);
     group.current.rotation.y = s.yaw;
     const next = { anim: s.anim, moving: s.speed > MOVING_SPEED };
     if (next.anim !== lookRef.current.anim || next.moving !== lookRef.current.moving) {

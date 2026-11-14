@@ -88,7 +88,7 @@ describe("shot origin", () => {
 
   it("goes on the wire as origin + unit dir, target_id only on a player hit", () => {
     const shot = { origin: head, dir: [0, 0, -1] as V3 };
-    expect(firePayload(shot, { kind: "surface", t: 3 })).toEqual({ origin: head, dir: [0, 0, -1] });
+    expect(firePayload(shot, { kind: "surface", t: 3 })).toEqual({ origin: head, dir: [0, 0, -1], weapon: "blaster" });
     expect(firePayload(shot, { kind: "miss", t: 40 })).not.toHaveProperty("target_id");
     expect(firePayload(shot, { kind: "player", t: 3, targetId: "p2" }).target_id).toBe("p2");
   });

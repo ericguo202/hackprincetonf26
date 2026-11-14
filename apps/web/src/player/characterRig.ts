@@ -25,7 +25,7 @@ import {
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { CHARACTER } from "./characterAsset";
-import { CLIPS, MOVING_SHOOT, ONE_SHOT, type PackClip } from "./clips";
+import { CLIPS, CLIP_TRIM, MOVING_SHOOT, ONE_SHOT, type PackClip } from "./clips";
 
 export type Rig = {
   root: Object3D;
@@ -121,7 +121,26 @@ function measure(source: Object3D, clips: AnimationClip[]): Measured {
   return m;
 }
 
-export function buildRig(source: Object3D, clips: AnimationClip[]): Rig {
+/** CLIP_TRIM applied (Duck -> its crouch hold). Cached per source clip list. */
+const trimmedCache = new WeakMap<AnimationClip[], AnimationClip[]>();
+export function playableClips(clips: AnimationClip[]): AnimationClip[] {
+  let out = trimmedCache.get(clips);
+  if (!out) {
+    out = clips.map((c) => {
+      const t = CLIP_TRIM[c.name as PackClip];
+      if (!t) return c;
+      // trim() cuts the tracks to the clip's duration, so set that first.
+      const cut = c.clone();
+      cut.duration = Math.min(t.endS, c.duration);
+      return cut.trim();
+    });
+    trimmedCache.set(clips, out);
+  }
+  return out;
+}
+
+export function buildRig(source: Object3D, rawClips: AnimationClip[]): Rig {
+  const clips = playableClips(rawClips);
   const { scale, baseY, lift } = measure(source, clips);
   const root = cloneSkinned(source);
   prepare(root);
