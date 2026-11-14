@@ -319,13 +319,36 @@ def build(args: argparse.Namespace) -> dict:
                     model_ids.append(vk)
                     model_listing[vk] = r["id"]
 
+        # Models in the home's own listing media. The CSV sometimes cross-links a neighbouring unit's
+        # model (2111 Nantucket Dr Unit D lists Unit C's model), so own-media models win ties.
+        media_mids = {
+            m["videoKey"]
+            for r in recs
+            for m in r.get("media") or []
+            if m.get("videoKey") and m.get("externalReferenceType") in MATTERPORT_REF
+        }
+        unit = (addr.get("unitNumber") or "").strip().lower()
+
+        def unit_match(name: str, unit: str = unit) -> bool:
+            return bool(unit) and bool(re.search(rf"\bunit\s*{re.escape(unit)}\b", name, re.I))
+
         splat_models = [splats[m] for m in model_ids if m in splats]
+        splat_models.sort(
+            key=lambda s, media_mids=media_mids: (
+                s["model_id"] not in media_mids,
+                not unit_match(s["name"]),
+                s["tour"] != "OUTSIDE",
+                -(s["splat_mb"] or 0),
+            )
+        )
         splat = splat_models[0] if splat_models else None
-        if len(splat_models) > 1:  # prefer an OUTSIDE tour
-            splat = sorted(splat_models, key=lambda s: (s["tour"] != "OUTSIDE", -(s["splat_mb"] or 0)))[0]
 
         tx = best.get("transactionType")
         price = best.get("currentPrice")
+        price_note = None
+        if tx == 1 and price is not None and price < 10_000:
+            price_note = f"currentPrice {price} looks like a placeholder; treated as unknown"
+            price = None
         pool_type = reso.get("poolType") or 0
         cpool = cfv.get("poolType") or 0
         pool_private = bool(pool_type & 1 or cpool & 1 or feat["pool_private_text"])
@@ -381,6 +404,7 @@ def build(args: argparse.Namespace) -> dict:
                 "price_usd": price if tx == 1 else None,
                 "rent_usd_month": price if tx == 2 else None,
                 "original_price_usd": best.get("originalPrice"),
+                "price_note": price_note,
                 "beds": prop.get("bedsMin"),
                 "baths": prop.get("bathsMin"),
                 "baths_full": prop.get("bathsFull"),
@@ -420,7 +444,10 @@ def build(args: argparse.Namespace) -> dict:
                 "features_record": feat["features_record"],
                 "public_on_homes": (best.get("permissionLevels") or {}).get("homes"),
                 "mls_id": (best.get("mls") or {}).get("id"),
+                # MLS 800000 = CoStar photo-shoot placeholder listing (kit: models/residential-listings.md)
+                "placeholder_listing": (best.get("mls") or {}).get("id") == 800000,
                 "matterport_model_ids": model_ids,
+                "media_model_ids": sorted(media_mids),
                 "model_listing": model_listing,
                 "splat": splat is not None,
                 "splat_model_id": splat["model_id"] if splat else None,
