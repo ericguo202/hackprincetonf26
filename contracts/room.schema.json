@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "room.schema.json",
+  "title": "Room",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "listing_id", "label", "label_confidence", "floor", "floor_y",
+    "height_m", "area_m2", "polygon", "openings"
+  ],
+  "$defs": {
+    "point2": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2
+    }
+  },
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+\\.r[0-9]+$" },
+    "listing_id": { "type": "string" },
+    "label": {
+      "enum": [
+        "living_room", "bedroom", "primary_bedroom", "kitchen", "dining_room",
+        "bathroom", "hallway", "office", "closet", "garage", "utility", "other"
+      ]
+    },
+    "label_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "floor": { "type": "integer" },
+    "floor_y": { "type": "number" },
+    "height_m": { "type": "number", "exclusiveMinimum": 0 },
+    "area_m2": { "type": "number", "minimum": 0 },
+    "polygon": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/point2" },
+      "minItems": 3
+    },
+    "openings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "a", "b", "to_room"],
+        "properties": {
+          "type": { "enum": ["door", "window"] },
+          "a": { "$ref": "#/$defs/point2" },
+          "b": { "$ref": "#/$defs/point2" },
+          "to_room": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

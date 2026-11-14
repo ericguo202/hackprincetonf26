@@ -1,0 +1,32 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# node
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# editors / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# raw sponsor downloads (convert before committing)
+data/raw/
+
+# sponsor data kit (too large for GitHub; share separately)
+costar-hackathon-kit/

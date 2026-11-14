@@ -1,0 +1,21 @@
+{
+  "id": "house_a",
+  "address": "123 Example St, Houston, TX",
+  "lat": 29.76,
+  "lon": -95.36,
+  "status": "for_sale",
+  "price_usd": 425000,
+  "rent_usd_month": null,
+  "beds": 3,
+  "baths": 2,
+  "area_m2": 172,
+  "stories": 1,
+  "year_built": 1998,
+  "property_type": "single_family",
+  "features": ["fenced_yard", "garage"],
+  "site": { "yard_area_m2": 140, "parking_spaces": 2, "street_class": "residential" },
+  "has_interior": true,
+  "interior_mesh": "data/houses/house_a/interior.glb",
+  "world": { "position": [12.0, 0.0, -30.5], "heading_deg": 90, "door": [1.2, 0.0, 0.0] },
+  "source": { "costar_id": "fixture", "matterport_model_id": "fixture", "vexcel": "fixture" }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "crib_01",
+  "name": "Crib",
+  "category": "crib",
+  "tags": ["nursery", "infant", "sleep"],
+  "file": "assets/furniture/crib_01.glb",
+  "size_m": { "w": 0.75, "d": 1.35, "h": 0.95 },
+  "placement": "wall",
+  "clearance_m": { "front": 0.6 },
+  "license": "CC0",
+  "source": "Poly Haven"
+}

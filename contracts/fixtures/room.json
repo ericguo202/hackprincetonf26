@@ -1,0 +1,15 @@
+{
+  "id": "house_a.r3",
+  "listing_id": "house_a",
+  "label": "bedroom",
+  "label_confidence": 0.9,
+  "floor": 0,
+  "floor_y": 0.0,
+  "height_m": 2.6,
+  "area_m2": 14.35,
+  "polygon": [[0, 0], [4.1, 0], [4.1, 3.5], [0, 3.5]],
+  "openings": [
+    { "type": "door", "a": [1.0, 0], "b": [1.9, 0], "to_room": "house_a.r1" },
+    { "type": "window", "a": [4.1, 1.0], "b": [4.1, 2.4], "to_room": null }
+  ]
+}

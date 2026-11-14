@@ -1,0 +1,3 @@
+# uv workspace root so `uv run python contracts/validate.py` works from the repo root.
+[tool.uv.workspace]
+members = ["apps/server"]

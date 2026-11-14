@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "listing.schema.json",
+  "title": "Listing",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "address", "lat", "lon", "status", "price_usd", "rent_usd_month",
+    "beds", "baths", "area_m2", "stories", "year_built", "property_type",
+    "features", "site", "has_interior", "interior_mesh", "world", "source"
+  ],
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    }
+  },
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "address": { "type": "string" },
+    "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+    "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+    "status": { "enum": ["for_sale", "for_rent"] },
+    "price_usd": { "type": ["number", "null"], "minimum": 0 },
+    "rent_usd_month": { "type": ["number", "null"], "minimum": 0 },
+    "beds": { "type": "integer", "minimum": 0 },
+    "baths": { "type": "number", "minimum": 0 },
+    "area_m2": { "type": "number", "minimum": 0 },
+    "stories": { "type": "integer", "minimum": 1 },
+    "year_built": { "type": ["integer", "null"] },
+    "property_type": { "type": "string" },
+    "features": { "type": "array", "items": { "type": "string" } },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["yard_area_m2", "parking_spaces", "street_class"],
+      "properties": {
+        "yard_area_m2": { "type": ["number", "null"], "minimum": 0 },
+        "parking_spaces": { "type": ["integer", "null"], "minimum": 0 },
+        "street_class": { "type": ["string", "null"] }
+      }
+    },
+    "has_interior": { "type": "boolean" },
+    "interior_mesh": { "type": ["string", "null"] },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "heading_deg", "door"],
+      "properties": {
+        "position": { "$ref": "#/$defs/vec3" },
+        "heading_deg": { "type": "number" },
+        "door": { "$ref": "#/$defs/vec3" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "costar_id": { "type": ["string", "null"] },
+        "matterport_model_id": { "type": ["string", "null"] },
+        "vexcel": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

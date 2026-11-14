@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "placement_plan.schema.json",
+  "title": "PlacementPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["plan_id", "listing_id", "room_id", "status", "objects", "conflicts"],
+  "properties": {
+    "plan_id": { "type": "string" },
+    "listing_id": { "type": "string" },
+    "room_id": { "type": "string" },
+    "status": { "enum": ["draft", "validated", "placed"] },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["instance_id", "asset_id", "x", "y", "z", "rot_deg", "reason"],
+        "properties": {
+          "instance_id": { "type": "string", "pattern": "^o[0-9]+$" },
+          "asset_id": { "type": "string" },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "z": { "type": "number" },
+          "rot_deg": { "type": "number" },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\s*\\S+(\\s+\\S+){0,11}\\s*$",
+            "description": "12 words or fewer"
+          }
+        }
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["instance_id", "type", "detail"],
+        "properties": {
+          "instance_id": { "type": "string" },
+          "type": { "enum": ["outside_room", "overlap", "blocks_opening", "clearance"] },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}

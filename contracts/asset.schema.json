@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "asset.schema.json",
+  "title": "Asset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "name", "category", "tags", "file", "size_m", "placement",
+    "clearance_m", "license", "source"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+_[0-9]{2}$" },
+    "name": { "type": "string" },
+    "category": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "file": { "type": "string", "pattern": "^assets/furniture/.+\\.glb$" },
+    "size_m": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["w", "d", "h"],
+      "properties": {
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "d": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "placement": { "enum": ["wall", "corner", "free", "on_surface"] },
+    "clearance_m": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "front": { "type": "number", "minimum": 0 },
+        "back": { "type": "number", "minimum": 0 },
+        "left": { "type": "number", "minimum": 0 },
+        "right": { "type": "number", "minimum": 0 }
+      }
+    },
+    "license": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "plan_id": "p_01",
+  "listing_id": "house_a",
+  "room_id": "house_a.r3",
+  "status": "validated",
+  "objects": [
+    {
+      "instance_id": "o1",
+      "asset_id": "crib_01",
+      "x": 2.4,
+      "y": 0.0,
+      "z": 3.1,
+      "rot_deg": 90,
+      "reason": "Against the interior wall, away from the window"
+    }
+  ],
+  "conflicts": []
+}
