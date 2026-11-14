@@ -18,8 +18,7 @@
 
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
-/** VITE_DEV_PLAN=1: furnish the current house from the fixture plan (DevPlan.tsx). */
-export const DEV_PLAN_ON = Boolean(import.meta.env?.VITE_DEV_PLAN);
+// The switch itself (DEV_PLAN_ON) lives in devFlags.ts, gated to dev builds.
 
 type Box = { w: number; d: number; h: number };
 

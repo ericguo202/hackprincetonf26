@@ -35,7 +35,8 @@ import { DevRemotes } from "./DevRemotes";
 import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
 import { RemotePlayers } from "./RemotePlayers";
 import { remoteHitboxes } from "./remoteTargets";
-import { DEV_PLAN_B, DEV_PLAN_ON, withDevCatalog } from "./devFurniture";
+import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
+import { DEV_PLAN_ON, START_ROOM } from "./devFlags";
 import { FIXTURE_RAW } from "./fixtures";
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
@@ -47,11 +48,10 @@ const lift = (p: Vec3): Vec3 => [p[0], p[1] + SPAWN_LIFT_M, p[2]];
  * Dev switch: VITE_START_ROOM=<room_id> starts inside that room's house at the
  * room's centroid instead of on the block. Unset in production.
  */
-const START_ROOM = import.meta.env.VITE_START_ROOM as string | undefined;
 
 /** Where the page starts: the dev room if set and valid, else the block's sidewalk. */
 function initialPlacement(pack: LoadedPack): { zone: string; pos: Vec3; roomId: string | null } {
-  return devStart(pack, START_ROOM) ?? { zone: "block", pos: blockSpawn(pack.manifest), roomId: null };
+  return (START_ROOM ? devStart(pack, START_ROOM) : null) ?? { zone: "block", pos: blockSpawn(pack.manifest), roomId: null };
 }
 
 export function World() {
@@ -74,18 +74,20 @@ export function World() {
   );
 }
 
-/** Every asset the dev plans use, so the dev catalog can stand in for each. */
-const DEV_PLAN_ASSET_IDS = [
-  ...(JSON.parse(FIXTURE_RAW.plan) as PlacementPlan).objects,
-  ...DEV_PLAN_B.objects,
-].map((o) => o.asset_id);
+/**
+ * Every asset the dev plans use, so the dev catalog can stand in for each. A
+ * function, not a module constant, so a production build (DEV_PLAN_ON false)
+ * never runs it and drops it with the rest of the dev plan.
+ */
+const devPlanAssetIds = () =>
+  [...(JSON.parse(FIXTURE_RAW.plan) as PlacementPlan).objects, ...DEV_PLAN_B.objects].map((o) => o.asset_id);
 
 function Zones({ pack: loaded }: { pack: LoadedPack }) {
   // VITE_DEV_PLAN: dev stand-ins under the pack's own catalog (see DevPlan.tsx).
   const pack = useMemo(
     () =>
       DEV_PLAN_ON
-        ? withDevCatalog(loaded, JSON.parse(FIXTURE_RAW.asset) as Asset, DEV_PLAN_ASSET_IDS)
+        ? withDevCatalog(loaded, JSON.parse(FIXTURE_RAW.asset) as Asset, devPlanAssetIds())
         : loaded,
     [loaded],
   );

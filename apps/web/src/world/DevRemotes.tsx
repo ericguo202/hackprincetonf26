@@ -14,7 +14,7 @@ import { DEV_REMOTE_IDS, fakeAlive, fakeAnim, fakePose } from "./fakeRemotes";
 import { minDistToPolygon } from "./geometry";
 import { blockSpawn, polygonCentroid, type LoadedPack } from "./pack";
 
-const START_ROOM = import.meta.env.VITE_START_ROOM as string | undefined;
+import { START_ROOM } from "./devFlags";
 const SEND_MS = 50; // 20 Hz, like the server's patches
 const JITTER_MS = 25;
 
