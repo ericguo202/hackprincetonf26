@@ -1,18 +1,32 @@
-# Render blueprint (AGENTS.md sections 5 and 8). Secrets are set in the Render dashboard (sync: false).
+# Render blueprint (AGENTS.md sections 5 and 8).
+# New services currently default to Node 24 and Python 3.14; pin below to match this repo.
 # game: exactly ONE instance, never autoscale (rooms live in memory). No deploys during judging.
+#
+# After the first Blueprint apply, set these in the dashboard (sync: false):
+#   agent: MODEL, ANTHROPIC_API_KEY or OPENROUTER_API_KEY, LANGSMITH_API_KEY
+#   game + agent: PACK_BASE_URL (S3 or CDN of worldgen publish)
+#   web: VITE_PACK_BASE_URL (same URL), VITE_MATTERPORT_SDK_KEY
+# Then redeploy web so Vite bakes the pack URL into the bundle.
+# VITE_GAME_URL / VITE_AGENT_URL are filled from each service's public https URL
+# (Colyseus 0.18 accepts https:// and upgrades to wss).
 services:
   - type: web
     name: game
     runtime: node
     plan: starter
     numInstances: 1
+    maxShutdownDelaySeconds: 45
     rootDir: apps/game
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /health
+    previews:
+      generation: manual
     buildFilter:
       paths: ["apps/game/**", "contracts/**"]
     envVars:
+      - key: NODE_VERSION
+        value: "22.22.0"
       - key: NODE_ENV
         value: production
       - key: GAME_INTERNAL_SECRET
@@ -25,12 +39,19 @@ services:
     runtime: python
     plan: starter
     rootDir: apps/agent
-    buildCommand: pip install uv && uv sync --frozen --no-dev
+    # uv.lock in this rootDir makes Render provide uv; do not pip-install a second copy.
+    buildCommand: uv sync --frozen --no-dev
     startCommand: uv run --no-dev uvicorn api.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    previews:
+      generation: manual
     buildFilter:
       paths: ["apps/agent/**", "contracts/**"]
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: UV_VERSION
+        value: "0.13.7"
       - key: GAME_HOSTPORT
         fromService: { type: web, name: game, property: hostport }
       - key: GAME_INTERNAL_SECRET
@@ -64,15 +85,24 @@ services:
     rootDir: apps/web
     buildCommand: npm i -g pnpm@12.18.0 && pnpm install --frozen-lockfile && pnpm build
     staticPublishPath: dist
+    previews:
+      generation: manual
     buildFilter:
       paths: ["apps/web/**", "contracts/**"]
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
-      # Public URLs of the other two services, e.g. wss://game-xxxx.onrender.com and https://agent-xxxx.onrender.com
+      - key: NODE_VERSION
+        value: "22.22.0"
       - key: VITE_GAME_URL
-        sync: false
+        fromService: { type: web, name: game, envVarKey: RENDER_EXTERNAL_URL }
       - key: VITE_AGENT_URL
-        sync: false
+        fromService: { type: web, name: agent, envVarKey: RENDER_EXTERNAL_URL }
       - key: VITE_PACK_BASE_URL
         sync: false
       - key: VITE_MATTERPORT_SDK_KEY
         sync: false
+      - key: VITE_SOLO
+        value: "0"

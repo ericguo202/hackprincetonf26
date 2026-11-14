@@ -5,7 +5,7 @@
   "description": "Colyseus multiplayer server: NeighborhoodRoom, shared state, hit validation, internal API",
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.0.0 <23.0.0"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
