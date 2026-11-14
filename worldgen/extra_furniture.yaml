@@ -1,0 +1,46 @@
+# Non-ABO furniture (AGENTS.md 7.6: ABO first, Poly Haven for gaps, then KayKit or Kenney).
+# Fetch:     uv run python -m worldgen.sources.furniture fetch                 -> out/raw/extra/<file>
+# Normalize: uv run python -m worldgen.normalize --version 2 --base 1 --extra extra_furniture.yaml
+#
+# Per item: id <category>_<source>_<source id> (stable), category, name (short, generic), dataset
+# (PolyHaven | KayKit | Kenney), item_id, product_name (as the source names it), page, url, sha256, file
+# (path under the raw dir), license, credit, yaw_deg (turn so the front faces +Z), fit_m (scale the whole
+# mesh uniformly so this axis, w/d/h after the turn, has this length in meters; for low-poly kits whose
+# units are not meters), tags, placement, clearance_m. style/color/material only when the source states
+# them (none of these do), so they stay null. size_m and cover are measured from the normalized mesh.
+#
+# Searched on 2026-11-14 and NOT available from these sources (or from ABO, see abo_categories.yaml):
+#   crib, changing_table. Poly Haven (522 models), KayKit Furniture Bits 1.0 and the Kenney Furniture Kit
+#   have none. A flat-screen TV exists only as Kenney's televisionModern (Poly Haven has two CRTs).
+
+# Kenney Furniture Kit "televisionModern" (published by Kenney on Poly Pizza as "Television").
+# Flat panel on a pedestal foot, no logo. Kit units are arbitrary (0.68 m wide raw), so each variant is
+# the same mesh scaled to a real overall width for a 43, 55 and 65 inch 16:9 set.
+# The screen quad faces -Z in the source, so yaw 180.
+kenney_tv: &kenney_tv
+  category: tv
+  name: Flat-screen TV
+  dataset: Kenney
+  item_id: 9trLeWoBek
+  product_name: Television (Furniture Kit, televisionModern)
+  page: https://poly.pizza/m/9trLeWoBek
+  url: https://static.poly.pizza/1ddcd36c-ac9e-4dc2-a056-846cea033c02.glb
+  sha256: 9faacaba2b76f8b5582cd00a567ca5d1703933478c55fa53219fc8043525383c
+  file: kenney/televisionModern.glb
+  license: CC0 1.0
+  credit: Kenney, kenney.nl
+  yaw_deg: 180
+  tags: [living_room, movie_night, screen, electronics]
+  placement: on_surface
+  clearance_m: {front: 0.0}
+
+items:
+  - <<: *kenney_tv
+    id: tv_kenney_television43
+    fit_m: {w: 0.97}
+  - <<: *kenney_tv
+    id: tv_kenney_television55
+    fit_m: {w: 1.24}
+  - <<: *kenney_tv
+    id: tv_kenney_television65
+    fit_m: {w: 1.45}
