@@ -48,6 +48,8 @@ const FIXTURES = {
 const manifest = JSON.parse(FIXTURES.manifest) as PackManifest;
 const listing = JSON.parse(FIXTURES.listing) as Listing;
 const room = JSON.parse(FIXTURES.room) as Room;
+// Read from the fixture so a contract bump that renames the asset does not break these tests.
+const asset = JSON.parse(FIXTURES.asset) as { id: string; size_m: { w: number } };
 const ID = "hou_000123";
 
 const close = (a: number[], b: number[]) =>
@@ -115,9 +117,9 @@ describe("listings, rooms and catalog files", () => {
 
   it("indexes the catalog by asset id, from an array or {assets: [...]}", () => {
     const one = parseCatalog(FIXTURES.asset);
-    expect(one.ok && Object.keys(one.value)).toEqual(["couch_01"]);
+    expect(one.ok && Object.keys(one.value)).toEqual([asset.id]);
     const wrapped = parseCatalog({ assets: [JSON.parse(FIXTURES.asset)] });
-    expect(wrapped.ok && wrapped.value.couch_01.size_m.w).toBe(2.1);
+    expect(wrapped.ok && wrapped.value[asset.id].size_m.w).toBe(asset.size_m.w);
   });
 
   it("reject what the client cannot use", () => {
@@ -266,7 +268,7 @@ describe("loadPack", () => {
     expect(p.base).toBeNull();
     expect(p.doors.map((d) => d.listing_id)).toEqual([ID]);
     expect(p.roomsByHouse[ID].map((r) => r.id)).toEqual([`${ID}.r1`]);
-    expect(Object.keys(p.catalog)).toEqual(["couch_01"]);
+    expect(Object.keys(p.catalog)).toEqual([asset.id]);
     expect(blockSpawn(p.manifest)).toEqual([0, 0, 4]);
     await loadPack({ base: "", fixtures: FIXTURES });
     expect(warn).toHaveBeenCalledTimes(1);
@@ -293,7 +295,7 @@ describe("loadPack", () => {
     const files: Record<string, unknown> = {
       "https://x/packs/hou_heights_01/v1/manifest.json": manifest,
       "https://x/listings/index.json": [listing],
-      "https://x/packs/hou_heights_01/v1/furniture/catalog.json": [JSON.parse(FIXTURES.asset)],
+      "https://x/furniture/v1/catalog.json": [JSON.parse(FIXTURES.asset)], // shared library at the root (v2.3.0)
       "https://x/packs/hou_heights_01/v1/houses/hou_000123/rooms.json": [room],
     };
     const fetch: FetchJson = async (u) => {
@@ -305,7 +307,7 @@ describe("loadPack", () => {
     expect(p.base).toBe("https://x/packs/hou_heights_01/v1");
     expect(p.doors).toHaveLength(1);
     expect(p.roomsByHouse[ID]).toHaveLength(1);
-    expect(p.catalog.couch_01).toBeDefined();
+    expect(p.catalog[asset.id]).toBeDefined();
   });
 
   it("keeps a real pack when only a side file is missing", async () => {
@@ -424,7 +426,7 @@ describe("loadPack with the hero pack's real file set", () => {
     expect(asked.some((u) => u.includes("audit"))).toBe(false);
     expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
       expect.stringMatching(/listings\/index\.json/),
-      expect.stringMatching(/furniture\/catalog\.json/),
+      expect.stringMatching(/^\[pack\] \/furniture\/v\d+\/catalog\.json/), // shared library at the published root (contracts v2.3.0)
       expect.stringMatching(/hou_237901269 is in the manifest but not in the listings index/),
     ]);
   });

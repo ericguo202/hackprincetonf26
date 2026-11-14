@@ -13,7 +13,7 @@ import type { Point2, Room } from "../contracts.gen";
 import { FurnitureLayer } from "./FurnitureLayer";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
-import { DOOR_RADIUS_M, doorOutward, packUrl, roomsBounds, type Door, type LoadedPack } from "./pack";
+import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, type Door, type LoadedPack } from "./pack";
 import { segmentBox, wallSegments } from "./placeholder";
 
 const WALL_T = 0.12;
@@ -60,7 +60,7 @@ export function HouseScene({ pack, listingId }: Props) {
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}
       <LoadBoundary url={`furniture:${listingId}`} label="furniture" fallback={null}>
         <Suspense fallback={null}>
-          <FurnitureLayer catalog={pack.catalog} rooms={rooms} packBaseUrl={base ?? ""} />
+          <FurnitureLayer catalog={pack.catalog} rooms={rooms} packBaseUrl={base ? publishedRoot(base) : ""} />
         </Suspense>
       </LoadBoundary>
     </>

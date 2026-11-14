@@ -23,7 +23,7 @@ type Props = {
   catalog: Record<string, Asset>;
   /** Rooms of the house the player is in, from houses/<id>/rooms.json. */
   rooms: Room[];
-  /** Base URL the pack's relative `file` paths resolve against. */
+  /** Published root (PACK_BASE_URL); asset `file` paths (furniture/v<N>/..., contracts v2.3.0) resolve against it. */
   packBaseUrl: string;
   showLabels?: boolean;
 };

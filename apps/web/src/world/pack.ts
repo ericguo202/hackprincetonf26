@@ -222,15 +222,25 @@ export function packUrl(base: string, rel: string): string {
   return `${base}/${rel.replace(/^\/+/, "")}`;
 }
 
-/** packs/<block>/v<N> -> <root>/listings/index.json (AGENTS.md section 7 layout). */
-export function listingsIndexUrl(base: string): string {
+/**
+ * packs/<block>/v<N> -> the published root that mirrors worldgen/out (AGENTS.md section 7 layout).
+ * Not the standard layout (a flat static folder): the pack folder itself is the root.
+ */
+export function publishedRoot(base: string): string {
   const parts = base.split("/");
   const tail = parts.slice(-3);
-  if (tail.length === 3 && tail[0] === "packs" && /^v\d+$/.test(tail[2])) {
-    return [...parts.slice(0, -3), "listings", "index.json"].join("/");
-  }
-  // Not the standard layout (a flat static folder): look next to the manifest.
-  return `${base}/listings/index.json`;
+  if (tail.length === 3 && tail[0] === "packs" && /^v\d+$/.test(tail[2])) return parts.slice(0, -3).join("/");
+  return base;
+}
+
+/** packs/<block>/v<N> -> <root>/listings/index.json. */
+export function listingsIndexUrl(base: string): string {
+  return `${publishedRoot(base)}/listings/index.json`;
+}
+
+/** Root-relative path (furniture/v<N>/..., contracts v2.3.0) resolved against the published root. */
+export function rootUrl(base: string, rel: string): string {
+  return packUrl(publishedRoot(base), rel);
 }
 
 // ---------------------------------------------------------------------------
@@ -575,7 +585,7 @@ export async function loadPack(opts: {
 
   const [listings, catalog, roomLists] = await Promise.all([
     soft(listingsIndexUrl(base), parseListings, [] as Listing[]),
-    soft(packUrl(base, manifest.furniture_catalog), parseCatalog, {} as Record<string, Asset>),
+    soft(rootUrl(base, manifest.furniture_catalog), parseCatalog, {} as Record<string, Asset>),
     Promise.all(manifest.houses.map((h) => soft(packUrl(base, h.rooms), parseRooms, [] as Room[]))),
   ]);
   const roomsByHouse: Record<string, Room[]> = {};
