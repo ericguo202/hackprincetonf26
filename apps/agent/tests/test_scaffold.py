@@ -13,7 +13,7 @@ def test_health():
 
 
 def test_create_session():
-    r = TestClient(app).post("/sessions", json={"player_id": "p1", "block_id": "hou_heights_01"})
+    r = TestClient(app).post("/sessions", json={"player_id": "p1", "block_id": "hou_navidad_01"})
     assert r.status_code == 200
     assert r.json()["session_id"]
 

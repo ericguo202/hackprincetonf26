@@ -7,7 +7,7 @@ import pytest
 
 import settings
 from layout import propose_poses, room_geometry, validate_layout
-from layout.geometry import footprint
+from layout.geometry import footprint, rot_facing
 
 # Sizes copied from furniture/v1/catalog.json (worldgen/out is not in git).
 ASSETS = {
@@ -286,6 +286,25 @@ def test_corner_and_center_in_l_room():
         out = propose_poses(geo, ASSETS[asset_id], rule)
         assert out["poses"], (rule, out["note"])
         assert_all_valid(L_ROOM, plan, asset_id, out["poses"])
+
+
+def test_center_follows_main_walls_of_off_axis_room():
+    # 6 x 4 room turned 1.5 degrees, one wall 0.5 degrees off the rest (scan noise), and a short
+    # 45 degree chamfer in one corner. Centered pieces line up with the long walls, not with 0 or 45.
+    t = math.radians(1.5)
+
+    def turn(x, z):
+        return [x * math.cos(t) - z * math.sin(t), x * math.sin(t) + z * math.cos(t)]
+
+    pts = [turn(0, 0), turn(6, 0), turn(6, 3.4), turn(5.4, 4), turn(0, 4.05)]
+    geo = room_geometry({**L_ROOM, "id": "hou_test.r3", "polygon": pts, "openings": []})
+    (ax, az), (bx, bz) = pts[0], pts[1]
+    main = rot_facing((bx - ax, bz - az)) % 90  # direction of the long wall in the rot_deg convention
+    out = propose_poses(geo, ASSETS["rug"], "center")
+    assert out["poses"]
+    for p in out["poses"]:
+        off = (p["rot_deg"] - main + 45) % 90 - 45
+        assert abs(off) < 0.6, p
 
 
 def test_nothing_fits_says_why(room):

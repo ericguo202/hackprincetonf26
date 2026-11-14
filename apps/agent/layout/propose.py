@@ -45,6 +45,8 @@ BESIDE_GAP_M = 0.05
 IN_FRONT_GAP_M = 0.45  # seat edge to coffee table
 STEP_M = 0.2
 GRID_M = 0.25
+AXIS_CLUSTER_DEG = 3.0  # wall angles this close are one direction (scan noise)
+AXIS_BONUS = 0.3  # center score bonus x share of wall length along the pose's direction
 # Preferred centre-to-centre distance (min, max) for `facing`, by (asset category, target category).
 FACING_RANGE = {
     ("sofa", "tv_stand"): (2.2, 3.6),
@@ -113,9 +115,34 @@ def _corner(geo: RoomGeometry, asset: dict) -> Iterator[dict]:
             yield _cand(x, z, rot, score, f"In the corner at ({vx:.1f}, {vz:.1f})")
 
 
-def _wall_angles(geo: RoomGeometry) -> list[float]:
-    base = sorted({round(s.facing_rot_deg % 90, 1) for s in geo.walls} or {0.0})
-    return sorted({(b + k * 90) % 360 for b in base for k in range(4)})
+def _room_axes(geo: RoomGeometry) -> list[tuple[float, float]]:
+    """The room's wall directions as (angle in [0, 90), share of wall length), main direction first.
+
+    Scanned walls are a degree or so off each other, so angles within AXIS_CLUSTER_DEG are one
+    direction (their length-weighted mean). A 90 degree turn is the same direction.
+    """
+    ring = list(geo.poly.exterior.coords)
+    clusters: list[list[float]] = []  # [angle, total length]
+    total = 0.0
+    edges = sorted(zip(ring, ring[1:], strict=False), key=lambda e: -math.dist(*e))
+    for a, b in edges:
+        length = math.dist(a, b)
+        if length < 1e-6:
+            continue
+        total += length
+        ang = rot_facing((b[0] - a[0], b[1] - a[1])) % 90
+        for c in clusters:
+            delta = (ang - c[0] + 45) % 90 - 45  # signed difference on the 90 degree circle
+            if abs(delta) <= AXIS_CLUSTER_DEG:
+                c[0] = (c[0] + delta * length / (c[1] + length)) % 90
+                c[1] += length
+                break
+        else:
+            clusters.append([ang, length])
+    if not clusters:
+        return [(0.0, 1.0)]
+    clusters.sort(key=lambda c: -c[1])
+    return [(round(c[0], 1), c[1] / total) for c in clusters]
 
 
 def _grid(geo: RoomGeometry) -> Iterator[tuple[float, float]]:
@@ -133,10 +160,14 @@ def _grid(geo: RoomGeometry) -> Iterator[tuple[float, float]]:
 def _center(geo: RoomGeometry, asset: dict) -> Iterator[dict]:
     c = geo.poly.centroid
     span = math.sqrt(geo.poly.area) or 1.0
+    axes = _room_axes(geo)
     for x, z in _grid(geo):
         dist = math.hypot(x - c.x, z - c.y)
-        for rot in _wall_angles(geo):
-            yield _cand(x, z, rot, 1.0 - dist / span, f"Open floor, {dist:.1f} m from room center")
+        for base, share in axes:
+            # Lined up with the main walls beats a slightly more central spot on a minor axis.
+            score = 1.0 - dist / span + AXIS_BONUS * share
+            for k in range(4):
+                yield _cand(x, z, base + k * 90, score, f"Open floor, {dist:.1f} m from room center")
 
 
 def _in_front_of(asset: dict, target: dict, target_asset: dict) -> Iterator[dict]:
