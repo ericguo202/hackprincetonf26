@@ -140,6 +140,8 @@ class Node:
     mesh: list[tuple[MeshBuf, str]] = field(default_factory=list)  # (buffer, material name) primitives
     children: list[Node] = field(default_factory=list)
     extras: dict | None = None
+    mesh_key: str | None = None  # nodes with the same key share one glTF mesh (instances)
+    matrix: list[float] | None = None  # column-major 4x4 local transform
 
 
 def _img_bytes(img: Image.Image | Path | str) -> tuple[bytes, str]:
@@ -269,11 +271,18 @@ def write_glb(
         return mat_index[name]
 
     tris_total = 0
+    shared: dict[str, int] = {}
 
     def node(nd: Node) -> int:
         nonlocal tris_total
         out: dict = {"name": nd.name}
+        if nd.matrix is not None:
+            out["matrix"] = [float(v) for v in nd.matrix]
         prims = []
+        if nd.mesh_key is not None and nd.mesh_key in shared:
+            out["mesh"] = shared[nd.mesh_key]
+            gl["nodes"].append(out)
+            return len(gl["nodes"]) - 1
         for buf, mname in nd.mesh:
             if buf.empty():
                 continue
@@ -294,8 +303,10 @@ def write_glb(
             )
             tris_total += len(a["indices"])
         if prims:
-            gl["meshes"].append({"name": nd.name, "primitives": prims})
+            gl["meshes"].append({"name": nd.mesh_key or nd.name, "primitives": prims})
             out["mesh"] = len(gl["meshes"]) - 1
+            if nd.mesh_key is not None:
+                shared[nd.mesh_key] = out["mesh"]
         if nd.extras:
             out["extras"] = nd.extras
         gl["nodes"].append(out)
@@ -335,12 +346,17 @@ def gltf_transform() -> list[str]:
     return ["npx", "-y", "@gltf-transform/cli@4.5.1"]
 
 
-def compress(src: Path, dst: Path, webp_quality: int = 82) -> None:
-    """WebP textures + meshopt geometry. Node names and hierarchy are kept (no join/flatten)."""
+def compress(src: Path, dst: Path, webp_quality: int = 82, meshopt_args: list[str] | None = None) -> None:
+    """WebP textures + meshopt geometry. Node names and hierarchy are kept (no join/flatten).
+    `meshopt_args` adds gltf-transform meshopt options (e.g. finer --quantize-texcoord for tiled UVs)."""
     tmp = dst.with_suffix(".tmp.glb")
     gt = gltf_transform()
     subprocess.run(
         [*gt, "webp", str(src), str(tmp), "--quality", str(webp_quality)], check=True, capture_output=True
     )
-    subprocess.run([*gt, "meshopt", str(tmp), str(dst), "--level", "medium"], check=True, capture_output=True)
+    subprocess.run(
+        [*gt, "meshopt", str(tmp), str(dst), "--level", "medium", *(meshopt_args or [])],
+        check=True,
+        capture_output=True,
+    )
     tmp.unlink(missing_ok=True)

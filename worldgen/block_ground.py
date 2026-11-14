@@ -95,8 +95,11 @@ def road_polygon(ways, circles, half: float, ortho=None):
     return road.intersection(box(-half, -half, half, half)).buffer(0)
 
 
-def gridded(buf: MeshBuf, region, ground, half: float, step: float, dy: float, uvf, detail_m: float) -> None:
-    """Triangulate `region` cut into step x step cells, heights from the ground model."""
+def gridded(
+    buf: MeshBuf, region, ground, half: float, step: float, dy: float, uvf, detail_m: float, colorf=None
+) -> None:
+    """Triangulate `region` cut into step x step cells, heights from the ground model.
+    `colorf(x, z)` (optional) gives per-vertex RGB(A) colours."""
     n = int(round(2 * half / step))
     cs = -half + np.arange(n) * step
     X0, Z0 = np.meshgrid(cs, cs)
@@ -139,6 +142,7 @@ def gridded(buf: MeshBuf, region, ground, half: float, step: float, dy: float, u
         normals=np.array([0, 1, 0]),
         facing=np.array([0, 1, 0]),
         uv2=V / detail_m,
+        color=None if colorf is None else colorf(V[:, 0], V[:, 1]),
     )
 
 
