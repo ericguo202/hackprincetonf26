@@ -6,8 +6,17 @@
 // house-local frame when zone is a listing_id. Meters and degrees, except yaw (radians).
 import { schema, t, type SchemaType } from "@colyseus/schema";
 
-export const ANIM_STATES = ["idle", "run", "jump", "shoot", "hit", "eliminated"] as const;
+export const ANIM_STATES = ["idle", "run", "jump", "shoot", "hit", "eliminated", "crouch"] as const;
 export type AnimState = (typeof ANIM_STATES)[number];
+
+/**
+ * `fire.weapon` (messages.md, contracts v2.4.0). Absent means "blaster", so
+ * pre-2.4 payloads stay valid. "noodle" is the pool noodle: the discriminator
+ * is reserved now so it costs no second version bump; its server rules are
+ * Lane D's to define.
+ */
+export const WEAPONS = ["blaster", "noodle"] as const;
+export type Weapon = (typeof WEAPONS)[number];
 export type GameMode = "explore" | "foam";
 
 export const Player = schema(
