@@ -1,0 +1,29 @@
+{
+  "block_id": "hou_navidad_01",
+  "note": "Demo block chosen by the 2026-11-14 scout (docs/demo-candidates.md on lane-a/scout). Until out/listings/index.json exists, this file maps listing ids to Matterport models. interior_source: 'panorama' (default) = clean shell + scan pieces textured from the original panoramas; 'matterpak' = raw textured scan; 'defurnished' = flat-colour defurnished mesh (needs interior_mesh).",
+  "center": {
+    "lat": 29.70113,
+    "lon": -95.670841
+  },
+  "radius_m": 200,
+  "houses": [
+    {
+      "listing_id": "hou_236595179",
+      "costar_listing_id": 236595179,
+      "address": "7014 Navidad Rd, Houston, TX 77083",
+      "matterport_model_id": "y1cVPR1HsnL",
+      "interior_mesh": "out_res_50k.obj",
+      "role": "hero",
+      "interior_source": "panorama"
+    },
+    {
+      "listing_id": "hou_237901269",
+      "costar_listing_id": 237901269,
+      "address": "6915 Navidad Rd, Houston, TX 77083",
+      "matterport_model_id": "xpspAtb5H59",
+      "interior_mesh": "defurnished_50k.obj",
+      "role": "second",
+      "interior_source": "panorama"
+    }
+  ]
+}

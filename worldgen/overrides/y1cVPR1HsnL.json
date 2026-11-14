@@ -1,0 +1,25 @@
+{
+  "model_id": "y1cVPR1HsnL",
+  "note": "Hand fixes for 7014 Navidad Rd. Coordinates are Matterport plan coordinates (x, y), not house-local.",
+  "splits": [
+    {
+      "room_label": "Kitchen",
+      "why": "Matterport classifies the whole 46 m2 open area as 'Kitchen'. The top-down render shows the vaulted living room (fireplace, wood floor) north of the counter half-wall at y = 2.0.",
+      "line": [[-10.0, 2.0], [15.0, 2.0]],
+      "parts": [
+        { "label": "living_room", "point": [2.5, 4.6], "confidence": 0.9 },
+        { "label": "kitchen", "point": [2.4, 0.0], "confidence": 0.9 }
+      ]
+    },
+    {
+      "room_label": "Kitchen",
+      "at": [2.4, 0.0],
+      "why": "South of the half-wall: the tiled kitchen (cabinets, sink) is east of x = 1.0, the wood-floored dining area by the windows is west of it.",
+      "line": [[1.0, -10.0], [1.0, 10.0]],
+      "parts": [
+        { "label": "kitchen", "point": [2.4, 0.0], "confidence": 0.85 },
+        { "label": "dining_room", "point": [0.0, 0.0], "confidence": 0.85 }
+      ]
+    }
+  ]
+}

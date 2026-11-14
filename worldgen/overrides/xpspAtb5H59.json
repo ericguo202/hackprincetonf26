@@ -1,0 +1,15 @@
+{
+  "model_id": "xpspAtb5H59",
+  "note": "Hand fixes for 6915 Navidad Rd (AGENTS.md section 7 step 4 allows hand work on the hero house). Coordinates are Matterport plan coordinates (x, y), not house-local.",
+  "splits": [
+    {
+      "room_label": "Kitchen",
+      "why": "Matterport classifies the whole open area as one 46.8 m2 'Kitchen'. Counters run along the north wall (mesh type 071) behind a full-height wall at y = 3.85 (dangling boundary edge). South of that wall is the living room with a corner fireplace (mesh type 072).",
+      "line": [[-10.0, 3.85], [10.0, 3.85]],
+      "parts": [
+        { "label": "kitchen", "point": [1.0, 5.5], "confidence": 0.9 },
+        { "label": "living_room", "point": [1.0, 1.0], "confidence": 0.9 }
+      ]
+    }
+  ]
+}
