@@ -5,7 +5,7 @@
 // lit so you can find the way out.
 
 import { Suspense, useMemo } from "react";
-import { CuboidCollider, RigidBody } from "@react-three/rapier";
+import { CuboidCollider, RigidBody, TrimeshCollider } from "@react-three/rapier";
 import { Shape } from "three";
 
 import type { Point2, Room } from "../contracts.gen";
@@ -13,7 +13,7 @@ import { FurnitureLayer } from "./FurnitureLayer";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, type Door, type LoadedPack } from "./pack";
-import { segmentBox, wallSegments } from "./placeholder";
+import { ceilingTrimesh, segmentBox, wallSegments } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
 
 const WALL_T = 0.12;
@@ -57,6 +57,7 @@ export function HouseScene({ pack, listingId }: Props) {
         placeholder={<PlaceholderHouseCollision rooms={rooms} door={door} />}
       />
       <HouseGround rooms={rooms} door={door} />
+      <HouseCeilings rooms={rooms} />
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}
       <LoadBoundary url={`furniture:${listingId}`} label="furniture" fallback={null}>
         <Suspense fallback={null}>
@@ -136,6 +137,22 @@ function PlaceholderHouseRender({ rooms, door }: { rooms: Room[]; door: Door | n
  * an exterior door gap (to_room: null) drops the player into the void.
  * Top sits just under floor level so it never fights the scanned floor.
  */
+/**
+ * One flat ceiling collider per room at floor_y + height_m, always present:
+ * collision.glb has no ceiling. Zone group, so the body and the camera arm's
+ * ray both stop at it. Collider only; the interior mesh draws the ceiling.
+ */
+function HouseCeilings({ rooms }: { rooms: Room[] }) {
+  const meshes = useMemo(() => rooms.map((r) => ({ id: r.id, ...ceilingTrimesh(r) })), [rooms]);
+  return (
+    <RigidBody type="fixed" colliders={false}>
+      {meshes.map((m) => (
+        <TrimeshCollider key={m.id} args={[m.vertices, m.indices]} collisionGroups={ZONE_COLLIDER} />
+      ))}
+    </RigidBody>
+  );
+}
+
 function HouseGround({ rooms, door }: { rooms: Room[]; door: Door | null }) {
   const g = slab(rooms, door);
   return (
