@@ -51,6 +51,10 @@
       "type": "array",
       "items": { "$ref": "#/$defs/spawn" }
     },
-    "furniture_catalog": { "type": "string" }
+    "furniture_catalog": {
+      "type": "string",
+      "pattern": "^furniture/v[0-9]+/catalog\\.json$",
+      "description": "Shared furniture library this pack uses, relative to the published root (not the pack folder). Block-independent, versioned on its own."
+    }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "block_id": "hou_heights_01",
+  "block_id": "hou_navidad_01",
   "version": 1,
   "origin": { "lat": 29.79, "lon": -95.4 },
   "block": { "render": "block/render.glb", "collision": "block/collision.glb" },
@@ -14,5 +14,5 @@
     }
   ],
   "spawns": [[0.0, 0.0, 4.0], [3.0, 0.0, 4.0]],
-  "furniture_catalog": "furniture/catalog.json"
+  "furniture_catalog": "furniture/v1/catalog.json"
 }

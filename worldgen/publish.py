@@ -1,6 +1,7 @@
-"""Step 8: upload packs/<block_id>/v<N> and listings/index.json to the bucket; print PACK_BASE_URL.
+"""Step 8: upload packs/<block_id>/v<N>, listings/index.json and the furniture library its manifest
+names (furniture/v<N>/) to the bucket; print PACK_BASE_URL. Skip any furniture/v<N> already published.
 
-uv run python -m worldgen.publish hou_heights_01"""
+uv run python -m worldgen.publish hou_navidad_01"""
 
 from __future__ import annotations
 

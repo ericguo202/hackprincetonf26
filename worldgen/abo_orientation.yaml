@@ -3,7 +3,7 @@
 #
 # Seed heuristic (extent_x vs extent_z for wall pieces) said no turn was needed: width is along X for
 # almost every sofa, tv_stand, bookshelf, dresser, bed and desk. ABO models already face +Z.
-# Checked by eye on 2026-11-14 with `uv run python -m worldgen.normalize --block hou_heights_01 --preview`
+# Checked by eye on 2026-11-14 with `uv run python -m worldgen.normalize --preview`
 # (contact sheets in out/previews/<category>.png: side view with +Z to the right, top view with +Z down):
 #   sofa, sectional, armchair, bed, tv_stand, bookshelf, dresser, desk, dining_chair: backrest/headboard
 #   at -Z, drawer pulls and open fronts at +Z. All 0.

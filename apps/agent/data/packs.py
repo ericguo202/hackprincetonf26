@@ -5,6 +5,11 @@ Where data comes from, in order:
   2. PACK_DIR (worldgen/out) if the file exists there (laptop, after running worldgen)
   3. PACK_BASE_URL over HTTPS (Render: the published bucket, same layout as worldgen/out)
 
+Layout (same under PACK_DIR and PACK_BASE_URL):
+  listings/index.json
+  packs/<block_id>/v<PACK_VERSION>/houses/<listing_id>/{rooms,graph,audit}.json
+  furniture/v<FURNITURE_VERSION>/catalog.json   shared by every block (contracts v2.3.0)
+
 Each file is fetched once and kept in memory (JSON only; the meshes are for the browser).
 Tool wrappers in agent/tools.py call these behind the AGENTS.md section 10 signatures.
 """
@@ -31,7 +36,7 @@ def _read(path: Path) -> object:
 
 @cache
 def _read_pack(rel: str) -> object:
-    """Read a pack-relative JSON file ('packs/<block>/v1/furniture/catalog.json'): local first, then HTTP."""
+    """Read a JSON file by its path under the published root (furniture/v1/catalog.json): local, then HTTP."""
     local = settings.PACK_DIR / rel
     if local.is_file():
         return _read(local)
@@ -51,16 +56,28 @@ def clear_cache() -> None:
         f.cache_clear()
 
 
+def _newest_local(folder: Path) -> int:
+    """Highest v<N> folder under PACK_DIR/folder; 1 when there is none (e.g. on Render)."""
+    versions = [
+        int(m.group(1))
+        for p in (settings.PACK_DIR / folder).glob("v*")
+        if (m := re.fullmatch(r"v(\d+)", p.name))
+    ]
+    return max(versions, default=1)
+
+
 def pack_version(block_id: str) -> int:
     """PACK_VERSION if set; else the newest local v<N>; else 1."""
     if settings.PACK_VERSION is not None:
         return settings.PACK_VERSION
-    versions = [
-        int(m.group(1))
-        for p in (settings.PACK_DIR / "packs" / block_id).glob("v*")
-        if (m := re.fullmatch(r"v(\d+)", p.name))
-    ]
-    return max(versions, default=1)
+    return _newest_local(Path("packs") / block_id)
+
+
+def furniture_version() -> int:
+    """FURNITURE_VERSION if set; else the newest local furniture/v<N>; else 1."""
+    if settings.FURNITURE_VERSION is not None:
+        return settings.FURNITURE_VERSION
+    return _newest_local(Path("furniture"))
 
 
 def pack_root(block_id: str) -> str:
@@ -104,18 +121,17 @@ def get_audit(listing_id: str) -> dict:
 
 
 @cache
-def catalog(block_id: str | None = None) -> list[dict]:
-    """Furniture catalog entries (Asset contract) for the block's pack. Never the .glb files."""
+def catalog() -> list[dict]:
+    """Furniture library entries (Asset contract), the same for every block. Never the .glb files."""
     if settings.USE_FIXTURES:
         return [_read(settings.FIXTURES_DIR / "asset.json")]
-    block_id = block_id or settings.BLOCK_ID
-    return _read_pack(f"{pack_root(block_id)}/furniture/catalog.json")
+    return _read_pack(f"furniture/v{furniture_version()}/catalog.json")
 
 
 @cache
-def _catalog_index(block_id: str | None = None) -> dict[str, dict]:
-    return {a["id"]: a for a in catalog(block_id)}
+def _catalog_index() -> dict[str, dict]:
+    return {a["id"]: a for a in catalog()}
 
 
-def get_asset(asset_id: str, block_id: str | None = None) -> dict | None:
-    return _catalog_index(block_id).get(asset_id)
+def get_asset(asset_id: str) -> dict | None:
+    return _catalog_index().get(asset_id)

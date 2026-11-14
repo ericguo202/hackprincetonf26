@@ -1,7 +1,7 @@
 /* Generated from contracts/. Do not edit; run `pnpm gen:types`. */
 
 /**
- * One entry of furniture/catalog.json (AGENTS.md section 9). Asset .glb: Y up, meters, origin at bottom center, front facing +Z, under 5 MB.
+ * One entry of furniture/v<N>/catalog.json, the shared furniture library used by every block (AGENTS.md section 9). Asset .glb: Y up, meters, origin at bottom center, front facing +Z, under 5 MB.
  */
 export interface Asset {
   /**
@@ -27,11 +27,11 @@ export interface Asset {
   material?: string | null;
   tags: string[];
   /**
-   * Relative to the pack version folder
+   * Relative to the published root (PACK_BASE_URL or worldgen/out), e.g. furniture/v1/sofa_abo_B075X4QMX3.glb
    */
   file: string;
   /**
-   * Optional small catalog image for the chat panel, relative to the pack version folder
+   * Optional small catalog image for the chat panel, relative to the published root
    */
   thumb?: string;
   /**
@@ -235,6 +235,9 @@ export interface PackManifest {
    * Sidewalk spawn points in the block frame
    */
   spawns: Spawn[];
+  /**
+   * Shared furniture library this pack uses, relative to the published root (not the pack folder). Block-independent, versioned on its own.
+   */
   furniture_catalog: string;
 }
 

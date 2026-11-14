@@ -6,7 +6,7 @@ import pytest
 import settings
 from data import packs
 
-CATALOG = [{"id": "sofa_abo_B075X4QMX3", "category": "sofa", "file": "furniture/sofa_abo_B075X4QMX3.glb"}]
+CATALOG = [{"id": "sofa_abo_B075X4QMX3", "category": "sofa", "file": "furniture/v2/sofa_abo_B075X4QMX3.glb"}]
 
 
 @pytest.fixture(autouse=True)
@@ -15,7 +15,8 @@ def _isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "PACK_DIR", tmp_path)
     monkeypatch.setattr(settings, "PACK_BASE_URL", "")
     monkeypatch.setattr(settings, "PACK_VERSION", None)
-    monkeypatch.setattr(settings, "BLOCK_ID", "hou_heights_01")
+    monkeypatch.setattr(settings, "FURNITURE_VERSION", None)
+    monkeypatch.setattr(settings, "BLOCK_ID", "hou_navidad_01")
     packs.clear_cache()
     yield
     packs.clear_cache()
@@ -31,7 +32,7 @@ def _fake_get(calls, status=200, body=CATALOG):
 
 def test_local_pack_wins_and_picks_newest_version(tmp_path, monkeypatch):
     for v, items in ((1, []), (2, CATALOG)):
-        f = tmp_path / f"packs/hou_heights_01/v{v}/furniture/catalog.json"
+        f = tmp_path / f"furniture/v{v}/catalog.json"
         f.parent.mkdir(parents=True)
         f.write_text(json.dumps(items), encoding="utf-8")
     calls = []
@@ -44,11 +45,12 @@ def test_local_pack_wins_and_picks_newest_version(tmp_path, monkeypatch):
 def test_falls_back_to_pack_base_url_once(monkeypatch):
     calls = []
     monkeypatch.setattr(settings, "PACK_BASE_URL", "https://packs.example")
-    monkeypatch.setattr(settings, "PACK_VERSION", 3)
+    monkeypatch.setattr(settings, "PACK_VERSION", 7)  # pack and furniture versions are independent
+    monkeypatch.setattr(settings, "FURNITURE_VERSION", 3)
     monkeypatch.setattr(httpx, "get", _fake_get(calls))
     assert packs.get_asset("sofa_abo_B075X4QMX3")["category"] == "sofa"
     assert packs.catalog() == CATALOG
-    assert calls == ["https://packs.example/packs/hou_heights_01/v3/furniture/catalog.json"]
+    assert calls == ["https://packs.example/furniture/v3/catalog.json"]
 
 
 def test_missing_everywhere_is_a_clear_error(monkeypatch):

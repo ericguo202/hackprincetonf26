@@ -73,14 +73,20 @@ projects:
                 value: "true"
               - key: LANGSMITH_API_KEY
                 sync: false
-              - key: LANGSMITH_PROJECT
-                value: built-world-sandbox
+              - key: LANGSMITH_ENDPOINT
+                value: https://api.smith.langchain.com
+              - key: LANGSMITH_AGENT_ID
+                value: hackpton-realestate
+              - key: LANGSMITH_AGENT_ENVIRONMENT
+                value: production
               - key: PACK_BASE_URL
                 sync: false
               - key: PACK_VERSION
                 value: "1"
+              - key: FURNITURE_VERSION
+                value: "1"
               - key: BLOCK_ID
-                value: hou_heights_01
+                value: hou_navidad_01
               - key: USE_FIXTURES
                 value: "0"
               - key: MOCK_AGENT

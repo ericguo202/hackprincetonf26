@@ -50,4 +50,10 @@ class PackManifest(BaseModel):
     block: Block
     houses: list[House]
     spawns: Annotated[list[Spawn], Field(description="Sidewalk spawn points in the block frame")]
-    furniture_catalog: str
+    furniture_catalog: Annotated[
+        str,
+        Field(
+            description="Shared furniture library this pack uses, relative to the published root (not the pack folder). Block-independent, versioned on its own.",
+            pattern="^furniture/v[0-9]+/catalog\\.json$",
+        ),
+    ]

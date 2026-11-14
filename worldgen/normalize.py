@@ -1,10 +1,12 @@
-"""Step 6c: normalize the selected ABO .glb files and write furniture/catalog.json (AGENTS.md 7.6, 9).
+"""Step 6c: normalize the selected ABO .glb files and write the furniture library (AGENTS.md 7.6, 9).
 
-    uv run python -m worldgen.normalize --block hou_heights_01 [--version 1] [--force] [--jobs 6]
-    uv run python -m worldgen.normalize --block hou_heights_01 --preview   # orientation contact sheets
+    uv run python -m worldgen.normalize [--version 1] [--force] [--jobs 6]
+    uv run python -m worldgen.normalize --preview   # orientation contact sheets
 
 Input:  out/abo_selection.json (from `worldgen.sources.abo select`) and out/raw/abo/<3dmodel_id>.glb.
-Output: out/packs/<block>/v<N>/furniture/<id>.glb and furniture/catalog.json.
+Output: out/furniture/v<N>/<id>.glb and out/furniture/v<N>/catalog.json. The library is shared by every
+block (contracts v2.3.0): a pack's manifest points at it with furniture_catalog, and asset `file` paths
+are relative to the published root (furniture/v<N>/<id>.glb). Publish a new v<N> instead of changing one.
 
 Per asset:
   1. Units. ABO meshes are already meters. The mesh is only rescaled when it is clearly in another unit
@@ -282,7 +284,7 @@ def cover_for(h: float) -> str:
     return "full" if h > 1.2 else "half" if h >= 0.5 else "none"
 
 
-def catalog_entry(entry: dict, rec: dict) -> dict:
+def catalog_entry(entry: dict, rec: dict, version: int) -> dict:
     """Asset contract, AGENTS.md section 9. style/color/material straight from ABO, else null."""
     src = entry.get("source") or {}
     return {
@@ -293,7 +295,7 @@ def catalog_entry(entry: dict, rec: dict) -> dict:
         "color": entry.get("color"),
         "material": entry.get("material"),
         "tags": list(entry.get("tags") or []),
-        "file": f"furniture/{entry['id']}.glb",
+        "file": f"furniture/v{version}/{entry['id']}.glb",
         "size_m": rec["size_m"],
         "placement": entry["placement"],
         "clearance_m": entry.get("clearance_m") or {},
@@ -381,8 +383,7 @@ def preview(selection: list[dict], orient: dict, dest: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--block", required=True)
-    p.add_argument("--version", type=int, default=1)
+    p.add_argument("--version", type=int, default=1, help="furniture library version (out/furniture/v<N>)")
     p.add_argument("--selection", type=Path, default=SELECTION)
     p.add_argument("--force", action="store_true", help="redo assets that already have output")
     p.add_argument("--jobs", type=int, default=6)
@@ -398,7 +399,7 @@ def main(argv: list[str] | None = None) -> int:
         preview(selection, orient, OUT / "previews")
         return 0
 
-    fdir = OUT / "packs" / a.block / f"v{a.version}" / "furniture"
+    fdir = OUT / "furniture" / f"v{a.version}"
     recs: dict[str, dict] = {}
     failed: dict[str, str] = {}
     with cf.ProcessPoolExecutor(max_workers=a.jobs) as pool:
@@ -423,7 +424,9 @@ def main(argv: list[str] | None = None) -> int:
         cache = CACHE / f"{e['id']}.json"
         if (fdir / f"{e['id']}.glb").exists() and cache.exists():
             catalog.append(
-                catalog_entry(e, recs.get(e["id"]) or json.loads(cache.read_text(encoding="utf-8")))
+                catalog_entry(
+                    e, recs.get(e["id"]) or json.loads(cache.read_text(encoding="utf-8")), a.version
+                )
             )
     fdir.mkdir(parents=True, exist_ok=True)
     (fdir / "catalog.json").write_text(

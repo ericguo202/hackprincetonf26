@@ -89,13 +89,17 @@ class Asset(BaseModel):
     ] = None
     tags: list[str]
     file: Annotated[
-        str, Field(description="Relative to the pack version folder", pattern="^furniture/.+\\.glb$")
+        str,
+        Field(
+            description="Relative to the published root (PACK_BASE_URL or worldgen/out), e.g. furniture/v1/sofa_abo_B075X4QMX3.glb",
+            pattern="^furniture/v[0-9]+/.+\\.glb$",
+        ),
     ]
     thumb: Annotated[
         str | None,
         Field(
-            description="Optional small catalog image for the chat panel, relative to the pack version folder",
-            pattern="^furniture/.+\\.(jpg|png|webp)$",
+            description="Optional small catalog image for the chat panel, relative to the published root",
+            pattern="^furniture/v[0-9]+/.+\\.(jpg|png|webp)$",
         ),
     ] = None
     size_m: Annotated[

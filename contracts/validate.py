@@ -1,10 +1,13 @@
 """Validate contract fixtures, and optionally a world pack, against contracts/*.schema.json.
 
 Fixtures only (from the repo root):   uv run python contracts/validate.py
-A pack and its listings index:        uv run python contracts/validate.py worldgen/out/packs/hou_heights_01
+A pack and its listings index:        uv run python contracts/validate.py worldgen/out/packs/hou_navidad_01
+The shared furniture library:         uv run python contracts/validate.py worldgen/out/furniture
 
 A pack path may be packs/<block_id> (every v<N> inside is checked) or packs/<block_id>/v<N>.
-The listings index is looked up at <out>/listings/index.json next to packs/.
+A furniture path may be furniture (every v<N> inside is checked) or furniture/v<N>.
+For a pack, the listings index (<out>/listings/index.json) and the furniture library its manifest
+names (<out>/<furniture_catalog>) are checked too.
 """
 
 from __future__ import annotations
@@ -44,6 +47,7 @@ class Checker:
         self.v = {n: load_validator(n) for n in SCHEMAS}
         self.errors: list[str] = []
         self.checked = 0
+        self.seen_furniture: set[Path] = set()
 
     def one(self, schema: str, doc: object, where: str) -> None:
         self.checked += 1
@@ -95,21 +99,44 @@ class Checker:
                         (self.many if is_list else self.one)(schema, read(f), str(f))
                 for plan in sorted((house / "plans").glob("*.json")):
                     self.one("placement_plan", read(plan), str(plan))
-            catalog = vdir / "furniture" / "catalog.json"
-            if catalog.exists():
-                self.many("asset", read(catalog), str(catalog))
-        # out/packs/<block_id>[/v<N>] -> out/listings/index.json
+        # out/packs/<block_id>[/v<N>] -> out/listings/index.json, out/furniture/v<N>/catalog.json
         out = root.parents[2] if root.name.startswith("v") else root.parents[1]
         index = out / "listings" / "index.json"
         if index.exists():
             self.many("listing", read(index), str(index))
+        for vdir in versions:
+            manifest = vdir / "manifest.json"
+            rel = read(manifest).get("furniture_catalog") if manifest.exists() else None
+            if rel and (out / rel).parent not in self.seen_furniture:
+                self.furniture((out / rel).parent)
+
+    def furniture(self, root: Path) -> None:
+        versions = sorted(p for p in root.glob("v*") if p.is_dir()) if not root.name.startswith("v") else [root]
+        if not versions:
+            self.errors.append(f"{root}: no v<N> folders")
+        for vdir in versions:
+            self.seen_furniture.add(vdir)
+            catalog = vdir / "catalog.json"
+            if not catalog.exists():
+                self.errors.append(f"{catalog}: missing")
+                continue
+            assets = read(catalog)
+            self.many("asset", assets, str(catalog))
+            out = vdir.parents[1]  # out/furniture/v<N> -> out
+            for a in assets:
+                if isinstance(a, dict) and isinstance(a.get("file"), str) and not (out / a["file"]).is_file():
+                    self.errors.append(f"{catalog}: {a.get('id')}: file {a['file']} not found under {out}")
 
 
 def main(argv: list[str]) -> int:
     c = Checker()
     c.fixtures()
     for arg in argv:
-        c.pack(Path(arg).resolve())
+        path = Path(arg).resolve()
+        if path.name == "furniture" or path.parent.name == "furniture":
+            c.furniture(path)
+        else:
+            c.pack(path)
     for e in c.errors:
         print(f"FAIL {e}")
     version = (CONTRACTS / "VERSION").read_text().strip()
