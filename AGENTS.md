@@ -109,6 +109,7 @@ worldgen/                     Lane A
   sources/ costar.py matterport.py vexcel.py furniture.py
   build_block.py build_house.py build_catalog.py audit.py
   out/packs/<block_id>/       gitignored; uploaded by `worldgen publish`
+  viewer/                     Lane A  pack QA viewer for Lane A testing ONLY. NOT the game: never import, copy, port or deploy from it
 apps/web/src/
   world/                      Lane C  pack loading, block, interiors, furniture, weather
   player/                     Lane C  character, animation, camera, blaster (local side)
@@ -125,6 +126,8 @@ docs/                         Lane A  README assets, demo script, Devpost text
 ```
 
 The client seam between Lanes C and D is `store.ts`: D writes network and agent state into it; C reads it to render. C never opens a socket. D never touches three.js objects.
+
+`worldgen/viewer/` is a throwaway local page Lane A uses to inspect house packs. It is not the game, not a prototype of it and not a reference for it. Agents building `apps/` must not import, copy, port or take patterns from it (controller, camera, collision, furniture checks, placeholder sizes), and it is never deployed. The game client is `apps/web`. See `worldgen/viewer/README.md`.
 
 ## 7. World generation (Lane A)
 
