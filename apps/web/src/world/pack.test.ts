@@ -11,8 +11,14 @@ import {
   MANIFEST_KEYS,
   blockDoors,
   blockSpawn,
+  FRONT_TO_STREET_M,
+  GROUND_MARGIN_M,
+  STREET_WIDTH_M,
+  blockLayout,
   blockToHouse,
+  deriveStreet,
   devStart,
+  doorOutwardBlock,
   doorOutward,
   floorAt,
   houseToBlock,
@@ -429,5 +435,143 @@ describe("loadPack with the hero pack's real file set", () => {
       expect.stringMatching(/^\[pack\] \/furniture\/v\d+\/catalog\.json/), // shared library at the published root (contracts v2.3.0)
       expect.stringMatching(/hou_237901269 is in the manifest but not in the listings index/),
     ]);
+  });
+});
+
+describe("Navidad block layout (Lane A's HANDOFF 16:46 numbers as the fixture)", () => {
+  // worldgen/blocks/hou_navidad_01.json: read here as the reference only; the
+  // game itself never reads worldgen inputs (AGENTS.md rule 3).
+  const block = JSON.parse(readFileSync(join(CONTRACTS, "../worldgen/blocks/hou_navidad_01.json"), "utf8")) as {
+    center: number[] | { lat: number; lon: number };
+    streets: { name: string; line: [number, number][] }[];
+  };
+  const [lat0, lon0] = Array.isArray(block.center) ? block.center : [block.center.lat, block.center.lon];
+  // Block frame: +X east, +Z south, metres from the centre.
+  const toBlock = ([lat, lon]: [number, number]): [number, number] => [
+    (lon - lon0) * 111320 * Math.cos((lat0 * Math.PI) / 180),
+    (lat0 - lat) * 110574,
+  ];
+  const navidad = block.streets.find((s) => s.name === "Navidad Road")!.line.map(toBlock);
+  /** Navidad Rd's centreline x at a given z (it runs north-south). */
+  const roadXAt = (z: number) => {
+    const pts = [...navidad].sort((a, b) => a[1] - b[1]);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      if (z >= a[1] && z <= b[1]) return a[0] + ((z - a[1]) / (b[1] - a[1])) * (b[0] - a[0]);
+    }
+    throw new Error(`z ${z} outside Navidad Rd`);
+  };
+
+  const H7014 = "hou_236595179";
+  const H6915 = "hou_237901269";
+  const place = (id: string, position: Vec3, heading_deg: number, door: Vec3): Listing =>
+    ({ ...listing, id, block_id: "hou_navidad_01", world: { position, heading_deg, door } }) as Listing;
+  // Hero first, as a published manifest lists it.
+  const listings = [
+    place(H7014, [-20.94, 0, 98.06], 4.3, [5.407, 0, -4.476]),
+    place(H6915, [19.89, 0, -95.08], 0.2, [-3.191, 0, -0.125]),
+  ];
+  const houseEntry = (id: string) => ({
+    listing_id: id,
+    interior: `houses/${id}/interior.glb`,
+    collision: `houses/${id}/collision.glb`,
+    rooms: `houses/${id}/rooms.json`,
+    graph: `houses/${id}/graph.json`,
+    audit: `houses/${id}/audit.json`,
+  });
+  const navManifest = {
+    ...manifest,
+    block_id: "hou_navidad_01",
+    origin: { lat: lat0, lon: lon0 },
+    houses: [houseEntry(H7014), houseEntry(H6915)],
+    spawns: [],
+  } as PackManifest;
+  const doors = blockDoors(navManifest, listings, {});
+  const door = (id: string) => doors.find((d) => d.listing_id === id)!;
+
+  it("houseToBlock reproduces Lane A's placements: origin at position, doors where they say", () => {
+    for (const l of listings) close(houseToBlock(l.world!, [0, 0, 0]), l.world!.position as Vec3);
+    expect(door(H7014).block[0]).toBeCloseTo(-15.88, 2);
+    expect(door(H7014).block[2]).toBeCloseTo(93.19, 2);
+    expect(door(H6915).block[0]).toBeCloseTo(16.7, 2);
+    expect(door(H6915).block[2]).toBeCloseTo(-95.19, 2);
+  });
+
+  it("our lat/lon -> block frame gives Lane A's road positions (+X east, +Z south)", () => {
+    // "about x = +4 near 7014, x = -6.5 near 6915"
+    expect(roadXAt(door(H7014).block[2])).toBeCloseTo(4, 0);
+    expect(Math.abs(roadXAt(door(H6915).block[2]) - -6.5)).toBeLessThan(0.5);
+  });
+
+  it("each door faces Navidad Rd (east wall of 7014, west wall of 6915), with no rooms loaded", () => {
+    expect(doorOutward([5.407, 0, -4.476], [])).toEqual([1, 0]);
+    expect(doorOutward([-3.191, 0, -0.125], [])).toEqual([-1, 0]);
+    for (const id of [H7014, H6915]) {
+      const d = door(id);
+      const [ox] = doorOutwardBlock(d, []);
+      expect(Math.sign(ox)).toBe(Math.sign(roadXAt(d.block[2]) - d.block[0]));
+    }
+  });
+
+  it("derives a north-south street lying on the real centreline, not an east-west guess", () => {
+    const street = deriveStreet(doors, {})!;
+    const [a, b] = [street[0], street[street.length - 1]];
+    expect(Math.abs(b[1] - a[1])).toBeGreaterThan(10 * Math.abs(b[0] - a[0])); // runs N-S
+    // Within the road's half width plus a little at each house (7014: ~0.1 m off; 6915: ~3.4 m off).
+    for (const id of [H7014, H6915]) {
+      const p = street.find((q) => Math.abs(q[1] - door(id).block[2]) < 3)!;
+      expect(Math.abs(p[0] - roadXAt(p[1]))).toBeLessThan(STREET_WIDTH_M / 2 + 0.5);
+    }
+  });
+
+  it("sizes the ground from the placed houses, street and spawn, plus a margin", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetch: FetchJson = async (u) => {
+      if (u.endsWith("manifest.json")) return navManifest;
+      if (u.endsWith("listings/index.json")) return listings;
+      throw new Error("HTTP 404");
+    };
+    const p = await loadPack({ base: "/packs/packs/hou_navidad_01/v1", fixtures: FIXTURES, fetch });
+    const { ground, street } = blockLayout(p);
+    const inside = (x: number, z: number, m: number) =>
+      Math.abs(x - ground.cx) <= ground.w / 2 - m + 1e-9 && Math.abs(z - ground.cz) <= ground.d / 2 - m + 1e-9;
+    for (const d of p.doors) {
+      expect(inside(d.block[0], d.block[2], GROUND_MARGIN_M)).toBe(true);
+      expect(inside(d.world.position[0], d.world.position[2], GROUND_MARGIN_M)).toBe(true);
+    }
+    for (const q of street!) expect(inside(q[0], q[1], GROUND_MARGIN_M)).toBe(true);
+    // The houses are ~95 m out: the old fixed 160 m lawn (|x|,|z| <= 80) missed both.
+    expect(ground.d).toBeGreaterThan(190);
+    // Data-driven: move a house 60 m further south and the ground follows.
+    const moved = blockLayout({
+      ...p,
+      doors: blockDoors(navManifest, [{ ...listings[0], world: { ...listings[0].world!, position: [-20.94, 0, 158.06] } }, listings[1]], {}),
+    });
+    expect(moved.ground.d).toBeCloseTo(ground.d + 60, 6);
+    warn.mockRestore();
+  });
+
+  it("with no manifest spawns, spawns on the street side near the hero's door, not at the origin", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetch: FetchJson = async (u) => {
+      if (u.endsWith("manifest.json")) return navManifest;
+      if (u.endsWith("listings/index.json")) return listings;
+      throw new Error("HTTP 404");
+    };
+    const p = await loadPack({ base: "/packs/packs/hou_navidad_01/v1", fixtures: FIXTURES, fetch });
+    const s = blockSpawn(p.manifest);
+    const d = door(H7014);
+    const fromDoor = Math.hypot(s[0] - d.block[0], s[2] - d.block[2]);
+    expect(fromDoor).toBeCloseTo(FRONT_TO_STREET_M - STREET_WIDTH_M / 2 - 1.5, 6);
+    // Between the door and the road, on the house's side of the street.
+    expect(s[0]).toBeGreaterThan(d.block[0]);
+    expect(s[0]).toBeLessThan(roadXAt(s[2]) - STREET_WIDTH_M / 2);
+    expect(Math.hypot(s[0], s[2])).toBeGreaterThan(80); // not the origin, ~95 m from any door
+  });
+
+  it("keeps the manifest's own spawns when it lists any", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const p = await loadPack({ base: undefined, fixtures: FIXTURES });
+    expect(blockSpawn(p.manifest)).toEqual([0, 0, 4]);
   });
 });

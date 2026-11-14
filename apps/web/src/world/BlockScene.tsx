@@ -2,21 +2,31 @@
 // collided with; when either is missing, a placeholder stands in for it.
 //
 // The placeholder is meant to read as "the block, before the scan lands":
-// lawn, a street and sidewalk past the spawns, a massing box per listed house
-// with a lit front door. Render and collision placeholders are separate
+// a lawn sized to everything placed, the street the houses face (derived from
+// their doors, pack.ts blockLayout), a massing box per listed house with a
+// lit front door. Render and collision placeholders are separate
 // components built from the same numbers, so the render path never collides.
 
+import { useMemo } from "react";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 
 import type { Listing } from "../contracts.gen";
 import { GlbOrPlaceholder } from "./Glb";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { rotationY } from "./geometry";
-import { DOOR_RADIUS_M, doorOutward, packUrl, type Door, type LoadedPack } from "./pack";
+import {
+  DOOR_RADIUS_M,
+  STREET_WIDTH_M,
+  blockLayout,
+  doorOutward,
+  packUrl,
+  type BlockLayout,
+  type Door,
+  type LoadedPack,
+} from "./pack";
 import { houseBoxLocal } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
 
-const GROUND_M = 160;
 const PALETTE = {
   lawn: "#7d9168",
   lot: "#8ea377",
@@ -29,19 +39,21 @@ const PALETTE = {
 
 export function BlockScene({ pack }: { pack: LoadedPack }) {
   const { base, manifest } = pack;
+  // Ground and street from what is actually placed, not a fixed size.
+  const layout = useMemo(() => blockLayout(pack), [pack]);
   return (
     <>
       <GlbOrPlaceholder
         kind="render"
         url={base && packUrl(base, manifest.block.render)}
         label={manifest.block.render}
-        placeholder={<PlaceholderBlockRender pack={pack} />}
+        placeholder={<PlaceholderBlockRender pack={pack} layout={layout} />}
       />
       <GlbOrPlaceholder
         kind="collision"
         url={base && packUrl(base, manifest.block.collision)}
         label={manifest.block.collision}
-        placeholder={<PlaceholderBlockCollision pack={pack} />}
+        placeholder={<PlaceholderBlockCollision pack={pack} layout={layout} />}
       />
       {pack.doors.map((d) => (
         <DoorMarker
@@ -55,33 +67,65 @@ export function BlockScene({ pack }: { pack: LoadedPack }) {
   );
 }
 
-/** Street along X through the spawns' far side, sidewalk on the spawn line. */
-function streetLayout(pack: LoadedPack) {
-  const spawns = pack.manifest.spawns;
-  const z = spawns.length ? spawns.reduce((s, p) => s + p[2], 0) / spawns.length : 0;
-  return { sidewalkZ: z, streetZ: z + 5 };
-}
-
+/**
+ * House massing box in its own frame. With rooms: their bounds. Without:
+ * 8 m wide and 10 m deep behind the door, oriented by the door's outward
+ * normal (7014's door is on its east wall, so +Z is not its front).
+ */
 function houseBox(pack: LoadedPack, d: Door) {
-  return houseBoxLocal(d.local, pack.roomsByHouse[d.listing_id] ?? []);
+  const rooms = pack.roomsByHouse[d.listing_id] ?? [];
+  if (rooms.length) return houseBoxLocal(d.local, rooms);
+  const [ox, oz] = doorOutward(d.local, rooms);
+  const depth = 10;
+  const width = 8;
+  const h = 3.2;
+  return {
+    center: [d.local[0] - (ox * depth) / 2, h / 2, d.local[2] - (oz * depth) / 2] as [number, number, number],
+    size: [ox !== 0 ? depth : width, h, ox !== 0 ? width : depth] as [number, number, number],
+  };
 }
 
-function PlaceholderBlockRender({ pack }: { pack: LoadedPack }) {
-  const { sidewalkZ, streetZ } = streetLayout(pack);
+/** One flat quad per street segment, centred on the segment, rotated to it. */
+function StreetSegments({ street, width, color, y }: { street: [number, number][]; width: number; color: string; y: number }) {
+  return (
+    <>
+      {street.slice(1).map((b, i) => {
+        const a = street[i];
+        const dx = b[0] - a[0];
+        const dz = b[1] - a[1];
+        // Overlap the joints a little so bends leave no gaps.
+        const len = Math.hypot(dx, dz) + width * 0.5;
+        return (
+          <mesh
+            key={i}
+            rotation={[-Math.PI / 2, 0, Math.atan2(-dz, dx)]}
+            position={[(a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2]}
+            receiveShadow
+          >
+            <planeGeometry args={[len, width]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+        );
+      })}
+    </>
+  );
+}
+
+function PlaceholderBlockRender({ pack, layout }: { pack: LoadedPack; layout: BlockLayout }) {
+  const g = layout.ground;
   return (
     <group>
-      <mesh rotation-x={-Math.PI / 2} receiveShadow>
-        <planeGeometry args={[GROUND_M, GROUND_M]} />
+      <mesh rotation-x={-Math.PI / 2} position={[g.cx, 0, g.cz]} receiveShadow>
+        <planeGeometry args={[g.w, g.d]} />
         <meshStandardMaterial color={PALETTE.lawn} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, sidewalkZ]} receiveShadow>
-        <planeGeometry args={[GROUND_M, 3]} />
-        <meshStandardMaterial color={PALETTE.sidewalk} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, streetZ]} receiveShadow>
-        <planeGeometry args={[GROUND_M, 7]} />
-        <meshStandardMaterial color={PALETTE.street} />
-      </mesh>
+      {layout.street ? (
+        <>
+          {/* Sidewalk band under the road, then the road on top. */}
+          <StreetSegments street={layout.street} width={STREET_WIDTH_M + 4} color={PALETTE.sidewalk} y={0.008} />
+          <StreetSegments street={layout.street} width={STREET_WIDTH_M} color={PALETTE.street} y={0.012} />
+        </>
+      ) : null}
       {pack.doors.map((d) => {
         const box = houseBox(pack, d);
         return (
@@ -112,11 +156,12 @@ function PlaceholderBlockRender({ pack }: { pack: LoadedPack }) {
   );
 }
 
-function PlaceholderBlockCollision({ pack }: { pack: LoadedPack }) {
+function PlaceholderBlockCollision({ pack, layout }: { pack: LoadedPack; layout: BlockLayout }) {
+  const g = layout.ground;
   return (
     <>
       <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider collisionGroups={ZONE_COLLIDER} args={[GROUND_M / 2, 0.05, GROUND_M / 2]} position={[0, -0.05, 0]} />
+        <CuboidCollider collisionGroups={ZONE_COLLIDER} args={[g.w / 2, 0.05, g.d / 2]} position={[g.cx, -0.05, g.cz]} />
       </RigidBody>
       {pack.doors.map((d) => {
         const box = houseBox(pack, d);

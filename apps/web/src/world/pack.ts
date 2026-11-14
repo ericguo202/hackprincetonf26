@@ -305,12 +305,19 @@ function centroid(poly: Point2[]): Point2 {
 
 /**
  * House-local unit vector pointing out of the house at the door: the outward
- * normal of the footprint edge nearest the door. With no rooms, +Z (the
- * house's front at heading 0).
+ * normal of the footprint edge nearest the door. With no rooms (rooms.json
+ * not loaded), the axis the door point itself lies along from the house
+ * origin, which Matterport places inside the house: 7014's door (5.407,
+ * -4.476) is on its east wall, 6915's (-3.191, -0.125) on its west wall
+ * (HANDOFF 16:46). A door at the origin falls back to +Z.
  */
 export function doorOutward(doorLocal: Vec3, rooms: Room[]): Point2 {
   const b = roomsBounds(rooms);
-  if (!b) return [0, 1];
+  if (!b) {
+    const [x, z] = [doorLocal[0], doorLocal[2]];
+    if (Math.hypot(x, z) < 0.5) return [0, 1];
+    return Math.abs(x) >= Math.abs(z) ? [Math.sign(x), 0] : [0, Math.sign(z)];
+  }
   const [x, z] = [doorLocal[0], doorLocal[2]];
   const edges: [number, Point2][] = [
     [Math.abs(x - b.minX), [-1, 0]],
@@ -522,7 +529,7 @@ function loadFixtures(fx: FixtureText): LoadedPack {
   for (const h of manifest.houses) {
     roomsByHouse[h.listing_id] = rooms.filter((r) => r.id.startsWith(`${h.listing_id}.`));
   }
-  return {
+  return withDerivedSpawns({
     source: "fixture",
     base: null,
     manifest,
@@ -530,7 +537,7 @@ function loadFixtures(fx: FixtureText): LoadedPack {
     roomsByHouse,
     catalog,
     doors: blockDoors(manifest, listings, roomsByHouse),
-  };
+  });
 }
 
 function unwrap<T>(p: Parsed<T>, what: string): T {
@@ -591,7 +598,7 @@ export async function loadPack(opts: {
   const roomsByHouse: Record<string, Room[]> = {};
   manifest.houses.forEach((h, i) => (roomsByHouse[h.listing_id] = roomLists[i]));
 
-  return {
+  return withDerivedSpawns({
     source: "pack",
     base,
     manifest,
@@ -599,7 +606,7 @@ export async function loadPack(opts: {
     roomsByHouse,
     catalog,
     doors: blockDoors(manifest, listings, roomsByHouse),
-  };
+  });
 }
 
 /** Block-frame spawn: the manifest's first sidewalk spawn, else the origin. */
@@ -654,4 +661,121 @@ export function devStart(pack: LoadedPack, roomId: string | undefined | null): D
   let p = polygonCentroid(room.polygon);
   if (!pointInPolygon(p, room.polygon)) p = spawnPoints(room, [], 1)[0] ?? room.polygon[0];
   return { zone, pos: [p[0], room.floor_y, p[1]], roomId: room.id };
+}
+
+// ---------------------------------------------------------------------------
+// Block layout from the placed houses (no block pack yet)
+// ---------------------------------------------------------------------------
+//
+// The pack has no street data (manifest.schema.json has no field for it), and
+// the game never reads worldgen/ inputs (AGENTS.md rule 3). So the street is
+// derived from what the pack does have: houses front the street, so each
+// door's outward normal points at it. The street runs perpendicular to the
+// doors, FRONT_TO_STREET_M in front of each one. Lane A's two Navidad doors
+// are 19.9 m and 23.2 m from Navidad Rd's centreline (HANDOFF 16:46); pack.test
+// checks the derived street against worldgen/blocks/hou_navidad_01.json.
+
+/** Door to street centreline, metres. Typical suburban front yard. */
+export const FRONT_TO_STREET_M = 20;
+export const STREET_WIDTH_M = 8;
+/** The street runs on this far past the outermost houses. */
+export const STREET_EXTEND_M = 40;
+/** Lawn beyond everything placed. */
+export const GROUND_MARGIN_M = 20;
+/** How far a house reaches behind its door, for the ground extent (no rooms). */
+const HOUSE_DEPTH_M = 14;
+
+/** A door's outward normal in the block frame (rotated by the house heading). */
+export function doorOutwardBlock(door: Door, rooms: Room[]): Point2 {
+  const [ox, oz] = doorOutward(door.local, rooms);
+  return rotXZ(ox, oz, door.world.heading_deg);
+}
+
+/** Where the street passes in front of a door (block frame, XZ). */
+function streetPointFor(door: Door, rooms: Room[]): Point2 {
+  const [ox, oz] = doorOutwardBlock(door, rooms);
+  return [door.block[0] + ox * FRONT_TO_STREET_M, door.block[2] + oz * FRONT_TO_STREET_M];
+}
+
+/**
+ * The street as a polyline (block frame, XZ): one point in front of each
+ * door, ordered along the street, extended STREET_EXTEND_M past both ends.
+ * Its direction is perpendicular to the first door's outward normal. Null
+ * with no doors.
+ */
+export function deriveStreet(doors: Door[], roomsByHouse: Record<string, Room[]>): Point2[] | null {
+  if (!doors.length) return null;
+  const [nx, nz] = doorOutwardBlock(doors[0], roomsByHouse[doors[0].listing_id] ?? []);
+  const dir: Point2 = [-nz, nx]; // along the street
+  const pts = doors
+    .map((d) => streetPointFor(d, roomsByHouse[d.listing_id] ?? []))
+    .sort((a, b) => a[0] * dir[0] + a[1] * dir[1] - (b[0] * dir[0] + b[1] * dir[1]));
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  return [
+    [first[0] - dir[0] * STREET_EXTEND_M, first[1] - dir[1] * STREET_EXTEND_M],
+    ...pts,
+    [last[0] + dir[0] * STREET_EXTEND_M, last[1] + dir[1] * STREET_EXTEND_M],
+  ];
+}
+
+/**
+ * A spawn on the street near the first house's door (manifest order: the
+ * pack author lists the hero house first), on the house's side of the
+ * street, facing a short walk to the door. Null with no doors.
+ */
+export function deriveSpawn(doors: Door[], roomsByHouse: Record<string, Room[]>): Vec3 | null {
+  const d = doors[0];
+  if (!d) return null;
+  const [ox, oz] = doorOutwardBlock(d, roomsByHouse[d.listing_id] ?? []);
+  const k = FRONT_TO_STREET_M - STREET_WIDTH_M / 2 - 1.5; // kerb side of the street
+  return [d.block[0] + ox * k, d.block[1], d.block[2] + oz * k];
+}
+
+export type BlockLayout = {
+  /** Ground rectangle in the block frame (centre and size, XZ). */
+  ground: { cx: number; cz: number; w: number; d: number };
+  street: Point2[] | null;
+};
+
+/**
+ * Ground sized from what is actually placed: every house (position, door and
+ * the house body behind it), the street, and the spawns, plus a margin.
+ */
+export function blockLayout(pack: Pick<LoadedPack, "manifest" | "doors" | "roomsByHouse">): BlockLayout {
+  const street = deriveStreet(pack.doors, pack.roomsByHouse);
+  const pts: Point2[] = [[0, 0]];
+  for (const d of pack.doors) {
+    const [ox, oz] = doorOutwardBlock(d, pack.roomsByHouse[d.listing_id] ?? []);
+    pts.push(
+      [d.world.position[0], d.world.position[2]],
+      [d.block[0], d.block[2]],
+      [d.block[0] - ox * HOUSE_DEPTH_M, d.block[2] - oz * HOUSE_DEPTH_M],
+    );
+  }
+  for (const p of street ?? []) pts.push(p);
+  for (const s of pack.manifest.spawns) pts.push([s[0], s[2]]);
+  const xs = pts.map((p) => p[0]);
+  const zs = pts.map((p) => p[1]);
+  const [minX, maxX, minZ, maxZ] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+  return {
+    ground: {
+      cx: (minX + maxX) / 2,
+      cz: (minZ + maxZ) / 2,
+      w: maxX - minX + 2 * GROUND_MARGIN_M,
+      d: maxZ - minZ + 2 * GROUND_MARGIN_M,
+    },
+    street,
+  };
+}
+
+/**
+ * An empty manifest.spawns (the hero pack today) becomes one derived spawn on
+ * the street near the first house's door, instead of the block origin about
+ * 95 m from any house. A manifest that lists spawns is left alone.
+ */
+function withDerivedSpawns(pack: LoadedPack): LoadedPack {
+  if (pack.manifest.spawns.length) return pack;
+  const spawn = deriveSpawn(pack.doors, pack.roomsByHouse);
+  return spawn ? { ...pack, manifest: { ...pack.manifest, spawns: [spawn] } } : pack;
 }
