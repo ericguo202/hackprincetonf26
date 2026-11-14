@@ -16,7 +16,7 @@
   "year_built": 1998,
   "features": { "pool": false, "parking_spaces": 2, "garage": true, "fenced_yard": true, "utilities": ["gas", "electric"] },
   "schools": [{ "name": "Fixture Elementary", "level": "elementary", "distance_m": 650, "rating": 8 }],
-  "site": { "yard_area_m2": 140, "street_class": "residential" },
+  "site": { "lot_area_m2": 607.0 },
   "has_interior": true,
   "world": { "position": [12.0, 0.0, -30.5], "heading_deg": 90, "door": [1.2, 0.0, 0.0] },
   "source": { "costar_id": "fixture", "matterport_model_id": "fixture", "vexcel": "fixture" }

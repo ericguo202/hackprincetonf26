@@ -113,7 +113,10 @@ export interface Listing {
    */
   block_id: string | null;
   status: "for_sale" | "for_rent";
-  property_type: "single_family" | "multi_family" | "apartment" | "commercial" | "other";
+  /**
+   * From CoStar property.propertyType: 1 Detached -> single_family, 2 Townhouse -> townhouse, 4 Condo and 256 Coop -> condo, 512 Duplex -> duplex, 16 MultiFamily, 1024 Triplex and 2048 Quadruplex -> multi_family, 8 Other and 64 MobileManufactured -> other. 0 None, 32 LotsLands and 128 Commercial are not homes and are left out of the index.
+   */
+  property_type: "single_family" | "townhouse" | "condo" | "duplex" | "multi_family" | "other";
   price_usd: number | null;
   rent_usd_month: number | null;
   tax_usd_year: number | null;
@@ -136,8 +139,10 @@ export interface Listing {
     rating: number | null;
   }[];
   site: {
-    yard_area_m2: number | null;
-    street_class: string | null;
+    /**
+     * CoStar property.lotSizeAcresMin converted to square meters; null when CoStar has no lot size
+     */
+    lot_area_m2: number | null;
   };
   has_interior: boolean;
   /**
@@ -150,9 +155,12 @@ export interface Listing {
   } | null;
   source: {
     /**
-     * Raw CoStar record id, kept for traceability
+     * Raw CoStar residential listing id (MLS listing id), kept for traceability
      */
     costar_id: string;
+    /**
+     * From costar-hackathon-kit/residential-listings.csv (ListingId -> MatterportModelId). With several models, the one on the listing's 3D-tour media item (type 43), else the first CSV row
+     */
     matterport_model_id: string | null;
     vexcel: string | null;
   };

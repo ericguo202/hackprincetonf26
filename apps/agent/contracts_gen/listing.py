@@ -16,9 +16,10 @@ class Status(Enum):
 
 class PropertyType(Enum):
     single_family = "single_family"
+    townhouse = "townhouse"
+    condo = "condo"
+    duplex = "duplex"
     multi_family = "multi_family"
-    apartment = "apartment"
-    commercial = "commercial"
     other = "other"
 
 
@@ -54,16 +55,28 @@ class Site(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    yard_area_m2: Annotated[float | None, Field(ge=0.0)]
-    street_class: str | None
+    lot_area_m2: Annotated[
+        float | None,
+        Field(
+            description="CoStar property.lotSizeAcresMin converted to square meters; null when CoStar has no lot size",
+            ge=0.0,
+        ),
+    ]
 
 
 class Source(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    costar_id: Annotated[str, Field(description="Raw CoStar record id, kept for traceability")]
-    matterport_model_id: str | None
+    costar_id: Annotated[
+        str, Field(description="Raw CoStar residential listing id (MLS listing id), kept for traceability")
+    ]
+    matterport_model_id: Annotated[
+        str | None,
+        Field(
+            description="From costar-hackathon-kit/residential-listings.csv (ListingId -> MatterportModelId). With several models, the one on the listing's 3D-tour media item (type 43), else the first CSV row"
+        ),
+    ]
     vexcel: str | None
 
 
@@ -95,7 +108,12 @@ class Listing(BaseModel):
         ),
     ]
     status: Status
-    property_type: PropertyType
+    property_type: Annotated[
+        PropertyType,
+        Field(
+            description="From CoStar property.propertyType: 1 Detached -> single_family, 2 Townhouse -> townhouse, 4 Condo and 256 Coop -> condo, 512 Duplex -> duplex, 16 MultiFamily, 1024 Triplex and 2048 Quadruplex -> multi_family, 8 Other and 64 MobileManufactured -> other. 0 None, 32 LotsLands and 128 Commercial are not homes and are left out of the index."
+        ),
+    ]
     price_usd: Annotated[float | None, Field(ge=0.0)]
     rent_usd_month: Annotated[float | None, Field(ge=0.0)]
     tax_usd_year: Annotated[float | None, Field(ge=0.0)]

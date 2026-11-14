@@ -146,8 +146,8 @@ listings/index.json                    every listing in the CoStar folder (not j
 
 Pipeline steps, each a separate command so they parallelize:
 
-1. **CoStar → `listings/index.json`.** Read every JSON and CSV in the raw folder, map to the Listing schema (section 9), drop rows without coordinates, keep `property_type` (single family, multi family, apartment, commercial). Keep the raw record ID for traceability.
-2. **Join layers.** Match CoStar records to Matterport models by address, then by distance under 30 m. Match to Vexcel by coordinates. Write `source` IDs on each listing. Unmatched is fine; `has_interior` stays false.
+1. **CoStar → `listings/index.json`.** Read `data/residential-listings.jsonl` (residential listings only; apartment and commercial datasets are not in the index), map to the Listing schema (section 9), drop rows without coordinates. Map `property.propertyType`: Detached → `single_family`, Townhouse → `townhouse`, Condo/Coop → `condo`, Duplex → `duplex`, MultiFamily/Triplex/Quadruplex → `multi_family`, Other/MobileManufactured → `other`; drop None, LotsLands and Commercial. `site.lot_area_m2` is `property.lotSizeAcresMin` in m². Keep the raw record ID for traceability.
+2. **Join layers.** CoStar → Matterport is given: `costar-hackathon-kit/residential-listings.csv` maps `ListingId` to `MatterportModelId` (no address or distance matching). A listing with several models uses the one on its 3D-tour media item (`media[].type == 43`), else the first CSV row. Match to Vexcel by coordinates. Write `source` IDs on each listing. Unmatched is fine; `has_interior` stays false.
 3. **Block.** Pick a local origin at the block center. Convert lat/lon to meters east/north/up from it. Vexcel 3D tiles → glTF if available for the block; otherwise extrude footprints (OpenStreetMap or Vexcel) to DSM heights over DTM terrain. Write spawn points on sidewalks and a door point per listed house.
 4. **House.** The pitch is "furnish it the way you want", so the hero house must look empty. Prefer listings scanned vacant or a defurnished mesh; if the only scan is furnished, say so at hour 3 so the team picks another house or accepts it. MatterPak OBJ → glTF; convert Z-up to Y-up once here; decimate for rendering; build collision from floor-plan wall vectors (never the raw scan). Room polygons and labels from Property Intelligence; if not on our keys, hand-trace the hero house. Compute every `area_m2` from the polygon.
 5. **Graph.** `graph.json`: nodes = rooms (`label`, `area_m2`, `floor`, `has_window`), edges = doors and stairs (`kind`, `width_m`). This is the "knowledge graph" the agent queries. No graph database.
@@ -226,7 +226,7 @@ class RoomState {
 - A deploy closes every WebSocket. No deploys during judging. The client reconnects automatically and rejoins its zone.
 - The filesystem is ephemeral. Room state is lost on restart; the demo seeds the hero house's furniture from `packs/.../plans/` on room creation.
 
-## 9. Contracts (v2)
+## 9. Contracts (v2.1)
 
 JSON Schemas in `contracts/` are the source of truth. Generate TypeScript types and Pydantic models from them.
 
@@ -259,7 +259,7 @@ JSON Schemas in `contracts/` are the source of truth. Generate TypeScript types 
   "schools": [
     { "name": "...", "level": "elementary", "distance_m": 650, "rating": 8 }
   ],
-  "site": { "yard_area_m2": 140, "street_class": "residential" },
+  "site": { "lot_area_m2": 607.0 },
   "has_interior": true,
   "world": {
     "position": [12.0, 0.0, -30.5],
@@ -273,6 +273,8 @@ JSON Schemas in `contracts/` are the source of truth. Generate TypeScript types 
   }
 }
 ```
+
+`property_type`: `single_family, townhouse, condo, duplex, multi_family, other` (mapping in section 7, step 1). `site.lot_area_m2` comes from CoStar `property.lotSizeAcresMin`. `source.matterport_model_id` comes from `residential-listings.csv`.
 
 Fields the CoStar folder does not have stay `null`. Never fabricate them.
 
@@ -385,7 +387,7 @@ Facts that shape the design:
 
 Home search flow: criteria (hard: status, budget, beds, property type; soft: weighted needs) → `search_listings` over the full index → top 3 with interiors → three `listing-auditor` tasks in parallel → rank with evidence → `focus_listing` → answer naming any contradictions found ("Listed as one story, but the scan shows a staircase to a second floor").
 
-Infant profile (in the `home-search` skill): single floor or a bedroom on the entry floor; a bedroom under 12 m² adjacent (graph distance 1 to 2) to the primary bedroom; no pool, or a fenced pool; fenced yard preferred; quiet street class; nearby elementary schools as a soft plus.
+Infant profile (in the `home-search` skill): single floor or a bedroom on the entry floor; a bedroom under 12 m² adjacent (graph distance 1 to 2) to the primary bedroom; no pool, or a fenced pool; fenced yard preferred; nearby elementary schools as a soft plus.
 
 Furnish is the demo's centre and is built before home search. Demo prompts that must work every time: "Furnish the living room for a family that watches movies together", "Set up the living room for a nerf war", "Make it a playroom instead". Re-furnishing the same room replaces its plan; it does not stack objects.
 
