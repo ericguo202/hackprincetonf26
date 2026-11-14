@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 199 tests in 13 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 200 tests in 13 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -318,9 +318,10 @@ Also not handled: standing up under something low. The capsule regrows into it.
 - **Now:** building with all three set gives no trace of any of them in `dist/assets/*.js`.
 - **Re-check after changes:** `VITE_DEV_PLAN=1 VITE_START_ROOM=x.r1 VITE_DEV_REMOTES=1 ./node_modules/.bin/vite build --outDir /tmp/x`, then grep the JS for `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM` and `__laneC`. All should be absent.
 - **Effect:** deployed players start on the block, at the spawn derived near the hero's door (section 12), and walk in through the door once the listings index is published.
+- **Choosing the hero house:** `VITE_HERO_LISTING` (e.g. `hou_236595179`) names it, so the derived spawn goes in front of that house even if the manifest lists another first. Unset or not on the block, it falls back to the first house in manifest order. It's not a dev switch: it ships in production builds, and Lane D sets it on Render (HANDOFF). Tests cover both manifest orderings.
 
 **What Lane D needs** (HANDOFF, this session):
-- set `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` on the web service (it's baked in at build time);
+- set `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` and `VITE_HERO_LISTING=hou_236595179` on the web service (both are baked in at build time);
 - keep the rewrite;
 - set none of the dev switches;
 - `buildFilter` already covers Lane A's committed publish;
