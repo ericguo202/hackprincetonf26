@@ -10,6 +10,9 @@
 /** <Physics updatePriority>: step and write interpolated body transforms first. */
 export const PHYSICS_PRIORITY = -50;
 
+/** Remote players: interpolate, place avatars, publish hitboxes before the blaster reads them. */
+export const REMOTE_PRIORITY = -20;
+
 /** Camera arm: reads the interpolated body transform written by the step above. */
 export const CAMERA_PRIORITY = -10;
 

@@ -14,9 +14,12 @@ export const CHARACTER = {
   licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
   /**
    * The model's right hand carries all 14 of the kit's weapons; only this one
-   * is kept, tinted foam colours (no realistic guns, AGENTS.md section 2).
+   * is kept, tinted foam orange (no realistic guns, AGENTS.md section 2).
+   * RocketLauncher despite its name is the kit's chunky, cartoon, triple-nozzle
+   * tube (the Hazmat character holds it in the pack preview): the one prop
+   * that reads as a toy blaster. The pistols and rifles are realistic.
    */
-  keepWeapon: "Pistol",
+  keepWeapon: "RocketLauncher",
   weapons: [
     "AK", "GrenadeLauncher", "Knife_1", "Knife_2", "Pistol", "Revolver", "Revolver_Small",
     "RocketLauncher", "ShortCannon", "Shotgun", "Shovel", "SMG", "Sniper", "Sniper_2",

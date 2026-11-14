@@ -5,7 +5,7 @@
 | `Character_Soldier.gltf` | Toon Shooter Game Kit (Dec 2022), `Characters/glTF/Character_Soldier.gltf`, unmodified | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://quaternius.com/packs/toonshootergamekit.html |
 
 The file is shipped unmodified. At runtime the client keeps one of the 14 weapons
-attached to the right hand (Pistol) and tints it foam orange, so it reads as a
+attached to the right hand (RocketLauncher, the kit's chunky toy-like tube) and tints it foam orange, so it reads as a
 foam blaster rather than a realistic gun (AGENTS.md section 2). The animations
 are the pack's own; nothing is retargeted (AGENTS.md section 5).
 
