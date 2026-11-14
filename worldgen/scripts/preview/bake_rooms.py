@@ -8,6 +8,7 @@ what each camera sees (boxes and stand-in solids of every room are fitted), so t
 as in a full build. Writes no pack. View the result with room_views.py / freeview.py, e.g.
     uv run python scripts/preview/room_views.py <out.glb> out/packs/<block>/v<N>/houses/<listing>/rooms.json <dir> r4
 Needs the house to have been built once (cached model JSON, MatterPak and skyboxes under out/)."""
+
 import json
 import sys
 from pathlib import Path
@@ -39,7 +40,9 @@ def main() -> None:
         p.floor_z = floor_z.get(p.floor, 0.0)
     only = {i for i, p in enumerate(kept) if p.id.split(".")[-1] in wanted or p.id in wanted}
     if not only:
-        raise SystemExit(f"no such rooms: {wanted}; have {[p.id.split('.')[-1] + ':' + p.label for p in kept]}")
+        raise SystemExit(
+            f"no such rooms: {wanted}; have {[p.id.split('.')[-1] + ':' + p.label for p in kept]}"
+        )
     report, _ = rb.write_rebaked_interior_glb(
         scan,
         bh.shell_rooms(parts),
@@ -47,6 +50,7 @@ def main() -> None:
         Path(dest),
         fit_boxes="--no-boxes" not in sys.argv,
         drop_boxes=[tuple(d["at"]) for d in overrides.get("drop_boxes") or []],
+        remove=[(*d["at"], float(d["radius"])) for d in overrides.get("remove") or []],
         only=only,
     )
     print(json.dumps(report))

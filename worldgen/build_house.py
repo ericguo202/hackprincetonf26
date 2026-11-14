@@ -695,6 +695,7 @@ def build(
             debug=debug_dir,
             fit_boxes=fit_boxes,
             drop_boxes=[tuple(d["at"]) for d in overrides.get("drop_boxes") or []],
+            remove=[(*d["at"], float(d["radius"])) for d in overrides.get("remove") or []],
         )
         interior_counts["panoramas"] = len(panos)
         hm.compress_glb(tmp, house_dir / "interior.glb", texture_size)

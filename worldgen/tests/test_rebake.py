@@ -395,3 +395,77 @@ def test_the_sample_patch_avoids_a_ceiling_light():
     lined = img[:, 200:].copy()
     lined[::16] = 60
     assert rb._detail_tile(lined, np.ones((200, 200), bool), 300, 300) is None
+
+
+# ---------------------------------------------------------------- walls at open edges, pillars, risers
+
+
+def test_wall_faces_of_two_rooms_meet_at_an_open_edge_and_a_free_wall_end_gets_a_cap():
+    # One 8 x 3 m space split at x = 4 by a line with no wall on it, except a 1 m stub from the north wall.
+    outer = [((0, 0), (8, 0)), ((8, 0), (8, 3)), ((8, 3), (0, 3)), ((0, 3), (0, 0))]
+    stub = ((4, 3), (4, 2))
+    walls = [(LineString([a, b]), 0.1) for a, b in [*outer, stub]]
+    west = rb.ShellRoom(Polygon([(0, 0), (4, 0), (4, 3), (0, 3)]), 0.0, 2.5, walls)
+    east = rb.ShellRoom(Polygon([(4, 0), (8, 0), (8, 3), (4, 3)]), 0.0, 2.5, walls)
+    planes = [p for p in rb.shell_planes([west, east]) if p.kind == "wall"]
+    # South wall (facing +y): the two rooms' faces together cover x = 0.05 .. 7.95 without a gap at x = 4.
+    south = [p for p in planes if p.n[1] > 0.9 and p.w > 1]
+    spans = sorted((p.origin[0] + p.shape.bounds[0], p.origin[0] + p.shape.bounds[2]) for p in south)
+    assert len(spans) == 2 and spans[0][1] == pytest.approx(4.0, abs=0.005)
+    assert spans[1][0] == pytest.approx(4.0, abs=0.005)
+    # The stub's two faces end at y = 2 in open space: each room closes half of its end.
+    caps = [p for p in planes if p.n[1] < -0.9 and p.w == pytest.approx(rb.WALL_INSET)]
+    assert len(caps) == 2 and all(p.origin[1] == pytest.approx(2.0, abs=0.01) for p in caps)
+    assert sorted(round(float(p.origin[0] + p.u[0] * p.w), 2) for p in caps) == [4.0, 4.0]
+
+
+def test_a_wall_that_meets_the_outline_at_a_right_angle_does_not_cover_it():
+    walls = [(LineString([(0, 0), (0, 3)]), 0.1)]  # the west wall only
+    runs = rb.wall_runs(rb.ShellRoom(Polygon([(0, 0), (4, 0), (4, 3), (0, 3)]), 0.0, 2.5, walls))
+    assert [bool(covered) for _, _, _, covered in runs] == [False, False, False, True]
+
+
+def test_a_pantry_measured_from_two_walls_keeps_all_its_sides():
+    # From the wall along y = 2 (looking -y), turned by 0.6 degrees; and from the line x = 1 (looking +x).
+    a = np.radians(0.6)
+    u1, n1 = np.array([-np.cos(a), np.sin(a), 0.0]), np.array([-np.sin(a), -np.cos(a), 0.0])
+    o1, o2 = np.array([1.8, 2.0, 0.0]), np.array([1.0, 2.0, 0.0])
+    u2, n2 = np.array([0, -1.0, 0]), np.array([1.0, 0, 0])
+    first = rb.Box(o1, u1, n1, 0.0, 0.8, 0.0, 2.5, 0.78, attached=False, to_ceiling=True)
+    second = rb.Box(o2, u2, n2, 0.0, 0.78, 0.9, 2.5, 0.8, attached=False, to_ceiling=True)
+    boxes = rb.drop_contained([second, first])
+    assert boxes == [first]  # the upper part found again from the other wall is the same pantry
+    sides = [p for p in rb.box_planes(boxes) if abs(p.n[2]) < 0.5]
+    assert len(sides) == 4 and all(p.shape.area > 0.95 * p.w * p.h for p in sides)
+    # Without that step, neither box may lose a face to the other on the side where they nearly coincide.
+    both = rb.box_planes([second, first])
+    west = [p for p in both if p.n[0] < -0.9]
+    assert sum(p.shape.area for p in west) >= 0.78 * 2.5 * 0.95
+
+
+def test_a_piece_seen_from_one_side_is_kept_whole_and_an_unseen_piece_is_dropped(tmp_path):
+    panos = pano_set(tmp_path, [(2.0, 0.5, 1.0)])
+    # A "toilet": a front the camera sees and a top-back it does not, joined along an edge.
+    a, b, c, d = (1.7, 2.0, 0.0), (2.3, 2.0, 0.0), (2.3, 2.0, 0.8), (1.7, 2.0, 0.8)
+    front = [[a, b, c], [a, c, d]]
+    back = [[d, (2.3, 2.3, 0.8), c]]  # facing down: never seen from its front
+    junk = [[(1.7, 2.6, 0.0), (2.3, 2.6, 0.8), (2.3, 2.6, 0.0)]]  # behind, facing away
+    scan = soup_scan(front + back + junk)
+    assert scan.normals[0, 1] < 0 and scan.normals[2, 2] < 0 and scan.normals[3, 1] > 0
+    assert rb._seen(scan, np.arange(4), panos).tolist() == [0, 1, 2]
+
+
+def test_the_half_wall_between_a_counter_and_its_ledge_is_filled():
+    o, u, n = np.array([0.0, 2.0, 0.0]), np.array([1.0, 0, 0]), np.array([0, -1.0, 0])
+    counter = rb.Box(o, u, n, 1.0, 3.0, 0.0, 0.9, 0.6, attached=False, back=0.07)  # y 1.4 .. 2.07
+    ledge = rb.Box(np.array([0.9, 1.8, 0.0]), u, -n, 0.0, 2.2, 1.15, 1.2, 0.5, attached=False)  # y 1.8 .. 2.3
+    scan = soup_scan([[(9, 9, 9), (9.1, 9, 9), (9, 9.1, 9)]])  # nothing to measure: 12 cm by default
+    risers = rb.ledge_risers(scan, [counter, ledge], [ledge])
+    assert len(risers) == 1
+    r = risers[0]
+    assert (r.z0, r.z1) == pytest.approx((0.9, 1.15))
+    ring = np.asarray(r.footprint().exterior.coords)
+    assert ring[:, 0].min() == pytest.approx(1.0) and ring[:, 0].max() == pytest.approx(3.0)
+    assert ring[:, 1].max() == pytest.approx(2.07) and ring[:, 1].min() == pytest.approx(1.95)
+    cabinet = rb.Box(o, u, n, 1.0, 3.0, 0.0, 0.9, 0.6)  # attached to a wall: the wall is already there
+    assert rb.ledge_risers(scan, [cabinet, ledge], [ledge]) == []
