@@ -6,6 +6,11 @@
 // handle.setMovement(). Joystick and VirtualButton from "ecctrl/input" are
 // the touch path; we drive the same input shape from the keyboard.
 //
+// Camera: CameraArm.tsx, a collision-aware over-the-shoulder arm. With
+// followCamera on, ecctrl's lockForward keeps the body facing where the
+// camera looks, and WASD is relative to the camera (ecctrl reads the scene
+// camera's direction every frame).
+//
 // The character model is a placeholder capsule until the Quaternius pack is
 // chosen and player/clips.ts is filled in. Nothing below depends on that
 // choice, so D is unblocked before the pack lands.
@@ -13,13 +18,13 @@
 import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Ecctrl, EcctrlAnimationStateController, type EcctrlHandle } from "ecctrl";
-import { EcctrlCameraControls, type EcctrlCameraControlsHandle } from "ecctrl/camera";
-import { Euler, Quaternion } from "three";
+import { Euler, type Group, Quaternion } from "three";
 
 import { useStore } from "../store";
 import { toAnimState, type LocomotionState, type PlayerAction } from "./animState";
 import type { AnimState } from "../../../../contracts/game-state";
-import { CAMERA, MOVEMENT } from "./movement";
+import { CameraArm } from "./CameraArm";
+import { MOVEMENT } from "./movement";
 
 /** Lane D sends `move` at 20 Hz, so there is no point writing faster. */
 const WRITE_HZ = 20;
@@ -54,14 +59,20 @@ const KEYS = {
 type Props = {
   /** Where to drop the player in the current zone's frame. */
   spawn?: [number, number, number];
-  /** Third-person camera that follows the body. Mouse drag orbits, wheel zooms. */
+  /** "block" or a listing_id. Indoors the camera starts in first person. */
+  zone?: string;
+  /**
+   * Over-the-shoulder camera on a collision-aware arm (CameraArm.tsx): click
+   * for mouse look, scroll for distance, V for first person. Off: the camera
+   * is left alone and the body is always visible.
+   */
   followCamera?: boolean;
   children?: React.ReactNode;
 };
 
-export function Player({ spawn = [0, 1, 0], followCamera = true, children }: Props) {
+export function Player({ spawn = [0, 1, 0], zone = "block", followCamera = true, children }: Props) {
   const ecctrl = useRef<EcctrlHandle | null>(null);
-  const cameraControls = useRef<EcctrlCameraControlsHandle | null>(null);
+  const bodyMesh = useRef<Group | null>(null);
   const keys = useRef({ ...KEYS });
   const locomotion = useRef<LocomotionState>("IDLE");
   /** Set by the foam-fight code when the player shoots, is hit, or is out. */
@@ -106,30 +117,11 @@ export function Player({ spawn = [0, 1, 0], followCamera = true, children }: Pro
     };
   }, []);
 
-  // Place the camera behind the spawn once; after that, moveTo keeps the
-  // offset the player has orbited to.
-  useEffect(() => {
-    const cc = cameraControls.current;
-    if (!cc) return;
-    const [x, y, z] = spawn;
-    const [ox, oy, oz] = CAMERA.offset;
-    void cc.setLookAt(x + ox, y + oy, z + oz, x, y + CAMERA.lookHeight, z, false);
-    // Spawn changes are teleports handled elsewhere; this is initial framing only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followCamera]);
-
   useFrame((state, dt) => {
     const handle = ecctrl.current;
     if (!handle) return;
 
     handle.setMovement({ ...keys.current });
-
-    // Every frame, not at the 20 Hz store rate, or the camera stutters.
-    const cc = cameraControls.current;
-    if (cc) {
-      const p = handle.currPos;
-      void cc.moveTo(p.x, p.y + CAMERA.lookHeight, p.z, true);
-    }
 
     // Expire a one-shot action (shoot, hit). `eliminated` holds until respawn.
     if (action.current && state.clock.elapsedTime >= actionUntil.current) {
@@ -162,13 +154,15 @@ export function Player({ spawn = [0, 1, 0], followCamera = true, children }: Pro
 
   return (
     <>
+      {/* Every frame, not at the 20 Hz store rate, or the camera stutters. */}
       {followCamera ? (
-        <EcctrlCameraControls
-          ref={cameraControls}
-          makeDefault
-          smoothTime={CAMERA.smoothTime}
-          minDistance={CAMERA.minDistance}
-          maxDistance={CAMERA.maxDistance}
+        <CameraArm
+          ecctrl={ecctrl}
+          body={bodyMesh}
+          zone={zone}
+          onBodyHidden={(hidden) => {
+            if (bodyMesh.current) bodyMesh.current.visible = !hidden;
+          }}
         />
       ) : null}
       <Ecctrl
@@ -180,8 +174,9 @@ export function Player({ spawn = [0, 1, 0], followCamera = true, children }: Pro
         maxRunVel={MOVEMENT.maxRunVel}
         jumpVel={MOVEMENT.jumpVel}
         floatHeight={MOVEMENT.floatHeight}
+        lockForward={followCamera}
       >
-        {children ?? <PlaceholderCharacter />}
+        <group ref={bodyMesh}>{children ?? <PlaceholderCharacter />}</group>
       </Ecctrl>
       <EcctrlAnimationStateController
         ecctrl={ecctrl}

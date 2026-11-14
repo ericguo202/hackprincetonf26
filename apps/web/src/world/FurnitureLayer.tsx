@@ -8,13 +8,15 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html, useGLTF } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import { RigidBody } from "@react-three/rapier";
 import type { Group } from "three";
 
 import { useStore, type PlacedObject } from "../store";
 import type { Asset, Point2, Room } from "../contracts.gen";
 import { pushOut, rectFromPlacement, rotationY, type Rect } from "./geometry";
+import { usePackGLTF } from "./gltf";
+import { FURNITURE_COLLIDER } from "./collisionGroups";
 
 type Props = {
   /** asset_id -> Asset, from the pack's furniture catalog. */
@@ -39,7 +41,7 @@ function FurniturePiece({
   index: number;
   showLabel: boolean;
 }) {
-  const { scene } = useGLTF(url);
+  const { scene } = usePackGLTF(url);
   // Clone per instance: two couches from one glb must not share a transform.
   const model = useMemo(() => scene.clone(true), [scene]);
   const group = useRef<Group>(null);
@@ -58,6 +60,7 @@ function FurniturePiece({
     <RigidBody
       type="fixed"
       colliders="cuboid"
+      collisionGroups={FURNITURE_COLLIDER}
       position={[obj.x, obj.y, obj.z]}
       rotation={[0, rotationY(obj.rot_deg), 0]}
     >

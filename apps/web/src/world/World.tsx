@@ -1,46 +1,151 @@
-// Lane C: the scene. Ground, light, physics, the local player, and a few
-// obstacles to walk around until the block and house packs land.
+// Lane C: the scene. Loads the pack, renders the zone the local player is in
+// (the block, or one house), and runs the door trigger that switches zones.
 //
 // WASD / arrows to move, Shift to run, Space to jump. Drag to orbit the
-// camera, wheel to zoom.
+// camera, wheel to zoom. Walk into a lit door to go inside; walk back to it
+// to leave.
+//
+// Zones (AGENTS.md section 8): me.zone is "block" or a listing_id, and me.pos
+// is in that zone's own frame. Only one zone's geometry is mounted at a time.
+// net/game.ts sees me.zone change and sends enter_zone.
+
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Physics, RigidBody } from "@react-three/rapier";
+import { Physics } from "@react-three/rapier";
 import { Sky } from "@react-three/drei";
 
+import { useStore } from "../store";
 import { Player } from "../player/Player";
+import { BlockScene } from "./BlockScene";
+import { PHYSICS_PRIORITY } from "./frameOrder";
+import { HouseScene } from "./HouseScene";
+import {
+  blockSpawn,
+  devStart,
+  roomIdAt,
+  stepZone,
+  type LoadedPack,
+  type Vec3,
+  type ZoneState,
+} from "./pack";
+import { usePack } from "./usePack";
 
-/** Placeholder obstacles: [position, size], meters. Replaced by block/collision.glb. */
-const TEST_BOXES: { pos: [number, number, number]; size: [number, number, number] }[] = [
-  { pos: [3, 0.5, -3], size: [1, 1, 1] },
-  { pos: [-4, 0.75, -1], size: [1.5, 1.5, 1.5] },
-  { pos: [0, 0.4, -7], size: [3, 0.8, 1] },
-];
+/** Drop the body from a little above the floor so it never starts inside it. */
+const SPAWN_LIFT_M = 1;
+const lift = (p: Vec3): Vec3 => [p[0], p[1] + SPAWN_LIFT_M, p[2]];
+
+/**
+ * Dev switch: VITE_START_ROOM=<room_id> starts inside that room's house at the
+ * room's centroid instead of on the block. Unset in production.
+ */
+const START_ROOM = import.meta.env.VITE_START_ROOM as string | undefined;
+
+/** Where the page starts: the dev room if set and valid, else the block's sidewalk. */
+function initialPlacement(pack: LoadedPack): { zone: string; pos: Vec3; roomId: string | null } {
+  return devStart(pack, START_ROOM) ?? { zone: "block", pos: blockSpawn(pack.manifest), roomId: null };
+}
 
 export function World() {
+  const pack = usePack();
   return (
-    <Canvas shadows camera={{ position: [0, 3.4, 5], fov: 50 }}>
-      <Sky sunPosition={[100, 40, 100]} />
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[20, 30, 10]} intensity={1.2} castShadow />
-      <Physics>
-        <RigidBody type="fixed" colliders="cuboid">
-          <mesh position={[0, -0.05, 0]} receiveShadow>
-            <boxGeometry args={[200, 0.1, 200]} />
-            <meshStandardMaterial color="#7a8b6a" />
-          </mesh>
-        </RigidBody>
+    <>
+      <Canvas shadows camera={{ position: [0, 3.4, 9], fov: 50 }}>
+        <Sky sunPosition={[100, 40, 100]} />
+        <ambientLight intensity={0.45} />
+        <directionalLight position={[20, 30, 10]} intensity={1.2} castShadow />
+        {/* Fixed 1/60 s step with interpolation (the defaults) suits 60-144 Hz displays;
+            the camera must follow the interpolated body, see CameraArm. */}
+        <Physics updatePriority={PHYSICS_PRIORITY} timeStep={1 / 60} interpolate>
+          {pack.status === "ready" ? <Zones pack={pack.pack} /> : null}
+        </Physics>
+      </Canvas>
+      <PackBadge status={pack} />
+    </>
+  );
+}
 
-        {TEST_BOXES.map((b, i) => (
-          <RigidBody key={i} type="fixed" colliders="cuboid" position={b.pos}>
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={b.size} />
-              <meshStandardMaterial color="#9a9a9a" />
-            </mesh>
-          </RigidBody>
-        ))}
+function Zones({ pack }: { pack: LoadedPack }) {
+  const setMe = useStore((s) => s.setMe);
+  const [start] = useState(() => initialPlacement(pack));
+  // The zone we render. Owned here and copied into the store, not read back from
+  // it: on the first render the store still holds its default ("block"), and
+  // reading that would mount the block for a frame and fetch its meshes.
+  const [zone, setZone] = useState(start.zone);
+  const [spawn, setSpawn] = useState<Vec3>(() => lift(start.pos));
+  // Bumped on every zone change: remounts the Player at the new spawn, in the new frame.
+  const [epoch, setEpoch] = useState(0);
+  const zoneState = useRef<ZoneState>({ zone: start.zone, armed: true });
 
-        <Player spawn={[0, 1, 0]} />
-      </Physics>
-    </Canvas>
+  // Put the store where the Player starts, whatever it held before the pack
+  // loaded. The Player already mounts at that spawn (initial state above).
+  useEffect(() => {
+    zoneState.current = { zone: start.zone, armed: true };
+    setMe(start);
+  }, [start, setMe]);
+
+  // Door trigger and room tracking, on every position the Player writes (20 Hz).
+  useEffect(
+    () =>
+      useStore.subscribe((s, prev) => {
+        if (s.me.pos === prev.me.pos) return;
+        const { state, change } = stepZone(zoneState.current, s.me.pos, pack.doors);
+        zoneState.current = state;
+        if (change) {
+          const rooms = pack.roomsByHouse[change.zone] ?? [];
+          setMe({
+            zone: change.zone,
+            pos: change.spawn,
+            roomId: change.zone === "block" ? null : roomIdAt(change.spawn, rooms),
+          });
+          setZone(change.zone);
+          setSpawn(lift(change.spawn));
+          setEpoch((e) => e + 1);
+          return;
+        }
+        if (s.me.zone !== "block") {
+          const roomId = roomIdAt(s.me.pos, pack.roomsByHouse[s.me.zone] ?? []);
+          if (roomId !== s.me.roomId) setMe({ roomId });
+        }
+      }),
+    [pack, setMe],
+  );
+
+  const inHouse = zone !== "block" && pack.manifest.houses.some((h) => h.listing_id === zone);
+  return (
+    <>
+      {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
+      <Player key={epoch} spawn={spawn} zone={zone} />
+    </>
+  );
+}
+
+/** Small corner tag so a placeholder world reads as intentional, not broken. */
+function PackBadge({ status }: { status: ReturnType<typeof usePack> }) {
+  const zone = useStore((s) => s.me.zone);
+  const roomId = useStore((s) => s.me.roomId);
+  let text: string;
+  if (status.status === "loading") text = "Loading world pack…";
+  else if (status.status === "error") text = `World pack failed: ${status.error}`;
+  else {
+    const { manifest, source } = status.pack;
+    const where = zone === "block" ? "on the block" : `inside ${zone}${roomId ? ` · ${roomId}` : ""}`;
+    text = `${manifest.block_id} v${manifest.version} · ${source === "fixture" ? "fixture world, placeholder geometry" : "pack"} · ${where}`;
+  }
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 16,
+        bottom: 16,
+        padding: "6px 10px",
+        borderRadius: 6,
+        background: "rgba(16,20,26,0.75)",
+        color: "#e8eaed",
+        fontSize: 12,
+        pointerEvents: "none",
+      }}
+    >
+      {text}
+    </div>
   );
 }

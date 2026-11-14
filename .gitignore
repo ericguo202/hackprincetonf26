@@ -33,3 +33,6 @@ raw/
 .colyseus-cloud.json
 .devmode.json
 
+
+# world packs copied in for local dev (published to the bucket, never committed)
+apps/web/public/packs/
