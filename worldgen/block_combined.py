@@ -226,6 +226,10 @@ def wall_style(samples: np.ndarray) -> dict | None:
 # ---------------------------------------------------------------- materials
 
 
+# 3D Cities facade textures are dark and yellow next to the Matterport facade photos of 6915
+# (white balance per channel, linear): a mild blue lift toward the scanned colours
+WALL_WB = np.array([1.0, 1.03, 1.2])
+GABLE_SIDING = np.clip(srgb_to_lin(np.array([0.78, 0.74, 0.66])) / 0.75, 0, 1)
 GROUND_MEAN = 0.6
 # class -> (Poly Haven texture, tile size m, contrast)
 GROUND_TEX = {
@@ -492,7 +496,7 @@ def build(args) -> dict:
                 if st["kind"] == "siding"
                 else ("wall_brick3" if st["sat"] > 0.3 else "wall_brick")
             )
-            col = np.asarray(st["lin"])
+            col = np.asarray(st["lin"]) * WALL_WB
         b.wall_mat, b.wall_col = wall, np.clip(col * gain / wall_mean[wall], 0, 1)
         target = bufs if not b.tag else hero_bufs.setdefault(b.tag, {k: MeshBuf() for k in bufs})
         emit_building(b, target, wall_tex_m, ground, road_lines, ortho)
@@ -515,10 +519,26 @@ def build(args) -> dict:
     road = road_polygon(ways, circles, HALF, ortho)
     land_buf, road_buf, curb_buf, curb_top, far_buf = MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf()
     near_land = P.difference(road)
+    exteriors = {}
+    for spec in args.hero_exterior:
+        for lid, path in resolve_exteriors(spec).items():
+            exteriors[lid] = load_exterior(path, lid, ground, images, mats)
+            near_land = near_land.difference(exteriors[lid]["yard"]).buffer(0)
+            log(
+                f"hero exterior {lid}: {path.name}, {exteriors[lid]['triangles']} triangles, "
+                f"dy {exteriors[lid]['dy']:+.2f} m"
+            )
     class_bufs: dict[str, MeshBuf] = {}
     if args.ground_classes:
         built = unary_union([b.poly.buffer(-0.3) for b in buildings])
-        gc = GroundClasses(ortho_g, road, built)
+        crown_px = ndimage.binary_dilation((nd > 1.8) & ~bmask, iterations=2)
+
+        def crown_fn(x, z):
+            c = np.clip(((x + HALF) / RES).astype(int), 0, crown_px.shape[1] - 1)
+            r = np.clip(((z + HALF) / RES).astype(int), 0, crown_px.shape[0] - 1)
+            return crown_px[r, c]
+
+        gc = GroundClasses(ortho_g, road, built, crown_fn=crown_fn)
         cp = gc.polygons()
         rest = near_land
         areas = {}
@@ -632,10 +652,43 @@ def build(args) -> dict:
         Node("far_zone", children=far_nodes, extras={"render_only": True, "source": "Vexcel 3D Cities"}),
         Node("trees", children=tree_nodes),
     ]
+    lot_trees: dict[str, list[Node]] = {t: [] for t in HEROES}
+    for nd_ in [n for n in tree_nodes if n.name.endswith("_hero_lot")]:
+        x, z = nd_.matrix[12], nd_.matrix[14]
+        tag = next((t for t, lot in hero_lots.items() if lot.contains(Point(x, z))), None)
+        if tag:
+            tree_nodes.remove(nd_)
+            lot_trees[tag].append(nd_)
     for tag, hb in hero_bufs.items():
         lid = tag.removeprefix("hero_")
-        roots.append(Node(tag, mesh=[(hb[k], k) for k in hb], extras={"listing_id": lid}))
-        roots.append(Node(f"lot_props_{lid}", mesh=[(hero_fence[tag], "fence")], extras={"listing_id": lid}))
+        ext = exteriors.get(lid)
+        if ext is None:
+            roots.append(
+                Node(tag, mesh=[(hb[k], k) for k in hb], extras={"listing_id": lid, "source": "procedural"})
+            )
+            # fences and trees on the hero lot: a scanned exterior replaces them (see --hero-exterior)
+            roots.append(
+                Node(
+                    f"lot_props_{lid}",
+                    mesh=[(hero_fence[tag], "fence")],
+                    children=lot_trees[tag],
+                    extras={"listing_id": lid},
+                )
+            )
+        else:
+            keep = (
+                []
+                if ext["has_roof"]
+                else [(hb["roof"], "roof"), (hb["trim"], "trim"), (hb["soffit"], "soffit")]
+            )
+            roots.append(
+                Node(
+                    tag,
+                    mesh=keep,
+                    children=ext["nodes"],
+                    extras={"listing_id": lid, "source": f"matterport exterior {ext['file']}"},
+                )
+            )
     raw = OUT / "render_raw.glb"
     st = write_glb(raw, roots, mats, images)
     log(f"raw glb {st}")
@@ -671,6 +724,88 @@ def build(args) -> dict:
     return summary
 
 
+def resolve_exteriors(spec: str) -> dict[str, Path]:
+    """'LISTING=path.glb', or 'auto': every hero with out/cache/glb/<model>_exterior.glb (exterior.py,
+    lane-a/outdoor). The glb is house-local (Y up, floor y = 0), placed by Listing.world."""
+    if spec == "auto":
+        out = {}
+        for lid, w in HERO_WORLD.items():
+            p = bd.WORLDGEN / "out" / "cache" / "glb" / f"{w['model']}_exterior.glb"
+            if p.exists():
+                out[lid] = p
+        return out
+    lid, _, path = spec.partition("=")
+    return {lid: Path(path)}
+
+
+def load_exterior(path: Path, lid: str, ground, images: dict, mats: dict, tex_px: int = 1024) -> dict:
+    """A scanned hero exterior (yard, facades, roof, outdoor pieces, trees; the backdrop dome is
+    dropped) placed into the block: block = position + rotY(heading_deg) * local, lifted so its yard
+    meets the block ground. Photo-baked: unlit materials, textures down to tex_px."""
+    import trimesh
+
+    w = HERO_WORLD[lid]
+    h = math.radians(w["heading_deg"])
+    c, s_ = math.cos(h), math.sin(h)
+    R = np.array([[c, 0, s_], [0, 1, 0], [-s_, 0, c]])
+    px, pz = w["position"]
+    scene = trimesh.load(path, force="scene")
+    parts = []
+    for node in scene.graph.nodes_geometry:
+        if node.startswith("backdrop"):
+            continue
+        tf, gname = scene.graph[node]
+        g = scene.geometry[gname].copy()
+        g.apply_transform(tf)
+        v = np.asarray(g.vertices) @ R.T + [px, 0.0, pz]
+        parts.append((node, g, v))
+    yard = [v for n, _, v in parts if n.startswith("yard")]
+    if yard:
+        yv = np.concatenate(yard)
+        dy = float(np.median(ground(yv[:, 0], yv[:, 2]) - yv[:, 1]))
+    else:
+        dy = float(ground(px, pz)[0]) + 0.3
+    nodes, tris, yard_polys = [], 0, []
+    for i, (node, g, v) in enumerate(parts):
+        v = v + [0, dy, 0]
+        key = f"ext_{lid}_{i}"
+        mat = getattr(g.visual, "material", None)
+        img = getattr(mat, "baseColorTexture", None) if mat is not None else None
+        uv = getattr(g.visual, "uv", None)
+        buf = MeshBuf()
+        buf.add(
+            v,
+            np.asarray(g.faces),
+            uv=None if uv is None else np.c_[uv[:, 0], 1 - uv[:, 1]],
+            normals=np.asarray(g.vertex_normals),
+        )
+        if img is not None:
+            img = img.copy()
+            img.thumbnail((tex_px, tex_px))
+            images[key] = img
+        mats[key] = Material(
+            key,
+            texture=key if img is not None else None,
+            unlit=True,
+            double_sided=not node.startswith("facade"),
+            alpha_mask=0.5 if (img is not None and img.mode == "RGBA") else None,
+        )
+        nodes.append(Node(node, mesh=[(buf, key)]))
+        tris += len(g.faces)
+        if node.startswith("yard"):
+            f = np.asarray(g.faces)
+            tri = shapely.polygons(v[f][:, :, [0, 2]])
+            yard_polys.append(shapely.union_all(shapely.make_valid(tri)))
+    return {
+        "nodes": nodes,
+        "triangles": tris,
+        "dy": dy,
+        "file": path.name,
+        "yard": unary_union(yard_polys).buffer(0.05) if yard_polys else Polygon(),
+        "has_roof": any(n.startswith("roof") for n, _, _ in parts),
+    }
+
+
 def hero_parcels(parcels) -> dict[str, Polygon]:
     out = {}
     for tag, (hx, hz) in HEROES.items():
@@ -703,7 +838,9 @@ def emit_building(b: Building, bufs, wall_tex_m, ground, road_lines, ortho) -> N
         outer_walls(bufs["trim"], p, e - FASCIA, e + 0.02, 1.0)
     horizontal(bufs["soffit"], b.poly.difference(wp), e - FASCIA, up=False)
     roof_mesh(bufs["roof"], b, bpr.uv_ortho, y0)
-    gable_ends(bufs[wall], b, y0, tex_m, col)
+    # Houston tract homes: brick walls, painted lap siding in the gables
+    gable = np.r_[GABLE_SIDING, 1.0] if wall != "wall_siding" else col
+    gable_ends(bufs["wall_siding"], b, y0, 2.0, gable)
 
 
 def far_zone(tiles, surf, P, mesh_fp, proc_fp, mats, images, keep_crowns=False) -> tuple[list[Node], int]:
@@ -726,6 +863,10 @@ def far_zone(tiles, surf, P, mesh_fp, proc_fp, mats, images, keep_crowns=False) 
         # crowns of the 2023 mesh are faceted shells cut at 3.4 m: model trees replace them everywhere
         keep &= bld if not keep_crowns else bld | (~inP & ~low)
         keep &= ~(~bld & (c[:, 1] < 0.3))  # mesh ground: replaced by the ortho ground layer
+        # tree crowns hanging over mesh houses (green faces above 2 m): gone, model trees stand there
+        col = piece_colours(p, np.arange(len(c)), np.full((len(c), 3), 1 / 3))
+        green = (col[:, 1] > col[:, 0] + 0.015) & (col[:, 1] > col[:, 2] + 0.03)
+        keep &= ~(bld & green & (hag.min(axis=1) > 2.0))
         sp = bp.submesh(p, keep, p.name)
         if sp is None:
             continue
@@ -822,6 +963,25 @@ def place_trees(crowns, variants, P, road, buildings, hero_lots, ortho, ground, 
     return nodes, info
 
 
+def solar_elevation(azimuth_deg: float, lat: float = bd.ORIGIN[0], decl: float = -23.2) -> float:
+    """Sun elevation on the day (declination `decl`) when its azimuth (from north, clockwise) is
+    `azimuth_deg`, at latitude `lat`."""
+    phi, d = math.radians(lat), math.radians(decl)
+    best = (1e9, 0.0)
+    for hdeg in np.arange(-90, 90, 0.05):
+        H = math.radians(hdeg)
+        sin_el = math.sin(phi) * math.sin(d) + math.cos(phi) * math.cos(d) * math.cos(H)
+        el = math.asin(sin_el)
+        az = (
+            math.degrees(math.atan2(math.sin(H), math.cos(H) * math.sin(phi) - math.tan(d) * math.cos(phi)))
+            + 180.0
+        )
+        err = abs((az - azimuth_deg + 180) % 360 - 180)
+        if err < best[0]:
+            best = (err, math.degrees(el))
+    return best[1]
+
+
 def estimate_sun(ortho: Ortho, buildings: list[Building], ground) -> dict:
     """Sun azimuth/elevation of the ortho capture from building shadows: for each house, the direction
     (of 72) where the ground just outside the roof outline is darkest is away from the sun; the shadow
@@ -880,6 +1040,10 @@ def estimate_sun(ortho: Ortho, buildings: list[Building], ground) -> dict:
         elev = float(np.degrees(np.arctan(np.median(L[:, 1] / np.maximum(L[:, 0], 0.3)))))
     else:
         elev = 45.0
+    shadow_elev = elev
+    elev = solar_elevation(
+        sun_az
+    )  # the ortho was captured 2025-12-19 .. 2026-01-02 (elements_detect metadata)
     el, azr = math.radians(elev), math.radians(sun_az)
     # direction TO the sun in the block frame (+X east, +Y up, +Z south)
     vec = [math.cos(el) * math.sin(azr), math.sin(el), -math.cos(el) * math.cos(azr)]
@@ -889,6 +1053,9 @@ def estimate_sun(ortho: Ortho, buildings: list[Building], ground) -> dict:
         "elevation_deg": round(elev, 1),
         "direction_to_sun": [round(v, 3) for v in vec],
         "houses_used": len(lens),
+        "elevation_from_shadow_lengths_deg": round(shadow_elev, 1),
+        "method": "azimuth from house shadows in the ortho; elevation from solar geometry at that azimuth "
+        "for the capture dates (declination -23.2 deg, latitude 29.70)",
     }
 
 
@@ -943,7 +1110,7 @@ def write_collision(buildings, ground, P, fence_lines_) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--wall-gain", type=float, default=1.6, help="photo wall colour -> albedo gain")
+    ap.add_argument("--wall-gain", type=float, default=2.0, help="photo wall colour -> albedo gain")
     ap.add_argument("--no-sun", dest="sun", action="store_false", help="skip the sun estimate")
     ap.add_argument("--no-compress", dest="compress", action="store_false", help="debug: raw glb")
     ap.add_argument("--no-ground-classes", dest="ground_classes", action="store_false")
@@ -1096,13 +1263,13 @@ def chaikin(xy: np.ndarray, iters: int = 3) -> np.ndarray:
     return np.vstack([pts, pts[:1]])
 
 
-def smooth_polys(g, min_area: float = 0.6):
+def smooth_polys(g, min_area: float = 0.6, iters: int = 3):
     out = []
     for p in polys_of(g):
         if p.area < min_area or len(p.exterior.coords) < 4:
             continue
-        holes = [chaikin(np.asarray(r.coords)) for r in p.interiors if Polygon(r).area >= min_area]
-        q = Polygon(chaikin(np.asarray(p.exterior.coords)), holes).buffer(0)
+        holes = [chaikin(np.asarray(r.coords), iters) for r in p.interiors if Polygon(r).area >= min_area]
+        q = Polygon(chaikin(np.asarray(p.exterior.coords), iters), holes).buffer(0)
         if not q.is_empty:
             out.append(q)
     return unary_union(out) if out else Polygon()
@@ -1112,7 +1279,9 @@ class GroundClasses:
     """Lawn / concrete / beds / photo (pools, decks, anything else) from the ortho (crowns and cars
     painted out), on a 0.2 m raster; plus per-class low-frequency colour fields for vertex tints."""
 
-    def __init__(self, og: Ortho, road, built, half: float = HALF) -> None:
+    def __init__(self, og: Ortho, road, built, half: float = HALF, crown_fn=None) -> None:
+        """crown_fn(X, Z) -> bool: ground hidden under a tree crown in the ortho (painted out there,
+        so its colour says nothing about the class: it takes the nearest visible class instead)."""
         self.half = half
         Xc, Zc = grid_xz(half, GRES)
         n = Xc.shape[0]
@@ -1150,6 +1319,13 @@ class GroundClasses:
                 sc = score.copy()
                 sc[k] = -1
                 lab[small] = sc.argmax(0)[small]
+        # under crowns and in deep shadow the photo cannot tell lawn from pavement: nearest visible class
+        hidden = (lum < 38) if crown_fn is None else (crown_fn(Xc, Zc) | (lum < 38))
+        crown = np.zeros_like(hidden) if crown_fn is None else crown_fn(Xc, Zc)
+        src = (lab >= 0) & ~hidden
+        _, (ii, jj) = ndimage.distance_transform_edt(~src, return_indices=True)
+        fix = hidden & (lab >= 0)
+        lab[fix] = lab[ii[fix], jj[fix]]
         self.lab = lab
         self.rgb = rgb
         self.fields = {}
@@ -1158,7 +1334,7 @@ class GroundClasses:
         masks = {name: lab == i for i, name in enumerate(GROUND_CLASSES)}
         masks["road"] = self.road_m
         for name, m in masks.items():
-            w = m.astype(np.float32)
+            w = (m & ~crown).astype(np.float32)
             num = np.stack([ndimage.gaussian_filter(rgb[..., k] * w, sig) for k in range(3)], -1)
             den = ndimage.gaussian_filter(w, sig)[..., None]
             num2 = np.stack([ndimage.gaussian_filter(rgb[..., k] * w, 4 * sig) for k in range(3)], -1)
@@ -1168,13 +1344,16 @@ class GroundClasses:
                 num / np.maximum(den, 1e-4),
                 np.where(den2 > 0.01, num2 / np.maximum(den2, 1e-4), blur_all),
             )
+            f = np.where(crown[..., None], f * 0.78, f)  # shade under the (unshadowed) model crowns
             self.fields[name] = f.astype(np.float32)
 
     def polygons(self) -> dict:
         out = {}
         for i, name in enumerate(GROUND_CLASSES):
             p = raster_polys(self.lab, i, self.half, GRES)
-            out[name] = smooth_polys(p.simplify(0.15))
+            # paving is man-made: straighter outlines (coarser simplify, lighter corner cutting)
+            tol, it = (0.35, 2) if name == "concrete" else (0.15, 3)
+            out[name] = smooth_polys(p.simplify(tol), iters=it)
         return out
 
     def colour(self, name: str, x, z) -> np.ndarray:
