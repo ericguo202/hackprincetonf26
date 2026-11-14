@@ -6,7 +6,13 @@ Run from worldgen/ (uses worldgen.panos.Raycaster, i.e. embree):
     uv run python scripts/preview/render_compare.py <glb> out/cache/matterport/<id>.json out/raw/<id>/skybox_2k out.jpg 11,13 [1,2,3,4]
 
   Score (mean abs RGB error, 0-255, over every indoor pano's 4 side faces; lower is better):
-    uv run python scripts/preview/render_compare.py --score <glb> out/cache/matterport/<id>.json out/raw/<id>/skybox_2k
+    uv run python scripts/preview/render_compare.py --score <glb> out/cache/matterport/<id>.json out/raw/<id>/skybox_2k [labels]
+
+  With pano labels (e.g. 3,11,18) only those panoramas are scored. Use this with a hold-out build
+  (`build_house --holdout 3,11,18 --version 99`, which writes out/cache/glb/<id>_interior_pano_holdout.glb):
+  the bake never saw those photos, so the score measures what a player sees between scan positions.
+  Besides the mean it prints p95_err (95th-percentile pixel error) and bad_fraction (pixels off by more than
+  60): small ugly artefacts (shards, smears) move these long before they move the mean.
 
 Purple (40, 0, 60) = the ray hit nothing (a hole). NO_CEILING=1 skips ceiling nodes.
 CAVEAT: the bake used these same panoramas, so the score at pano positions is optimistic. It still catches
@@ -59,7 +65,7 @@ def render(scene, pos, fwd, right, up, W=640, H=640, fov=90):
 
 def yup(v): return np.array([v[0], v[2], -v[1]])
 
-def score(glb, model_json, sky, size=192):
+def score(glb, model_json, sky, only=None, size=192):
     from shapely.geometry import Point
     from shapely.ops import unary_union
     tris, uvs, tid, texs = load(glb)
@@ -67,8 +73,11 @@ def score(glb, model_json, sky, size=192):
     m = json.load(open(model_json))
     # indoor = inside the union of room polygons (rooms.json next to interior.glb in the pack is house-local;
     # here we use the footprint of the glb itself: a pano is indoor if a ray straight up hits geometry)
-    errs, holes, used = [], [], 0
+    errs, holes, used, pix = [], [], 0, []
+    only = set(only.split(",")) if only else None
     for p in m["panoLocations"]:
+        if only and p["label"] not in only:
+            continue
         R = quat_matrix(p["rotation"]); pos = np.array([p["position"][k] for k in "xyz"])
         t, prim = scene[4].cast(yup(pos)[None], np.array([[0.0, 1.0, 0.0]]))
         if prim[0] < 0 or t[0] > 6:
@@ -81,13 +90,17 @@ def score(glb, model_json, sky, size=192):
             hole = (img == [40, 0, 60]).all(-1)
             holes.append(hole.mean())
             errs.append(np.abs(img[~hole] - real[~hole]).mean() if (~hole).any() else 255.0)
+            pix.append(np.abs(img[~hole] - real[~hole]).mean(-1))
+    pix = np.concatenate(pix) if pix else np.zeros(1)
     print(json.dumps({"indoor_panos": used, "mean_abs_err": round(float(np.mean(errs)), 2),
+                      "p95_err": round(float(np.quantile(pix, 0.95)), 1),
+                      "bad_fraction": round(float((pix > 60).mean()), 4),
                       "hole_fraction": round(float(np.mean(holes)), 4)}))
 
 
 if __name__ == "__main__":
     if sys.argv[1] == "--score":
-        score(*sys.argv[2:5])
+        score(*sys.argv[2:6])
         sys.exit(0)
     glb, model_json, sky, out = sys.argv[1:5]
     labels = sys.argv[5].split(",")
