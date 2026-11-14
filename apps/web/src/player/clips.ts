@@ -42,6 +42,16 @@ export const CLIPS: Record<AnimState, PackClip> = {
   shoot: "Idle_Shoot",
   hit: "HitReact",
   eliminated: "Death",
+  // The kit has no crouch clip. Duck is a dodge: down by 0.33 s, held low
+  // (0.97 m) until 1.0 s, back up by 1.67 s. Trimmed to its first 0.5 s
+  // (CLIP_TRIM) and held, it is the pack's own crouch pose; nothing faked.
+  // No crouch-walk clip exists either: moving while crouched slides this pose.
+  crouch: "Duck",
+};
+
+/** Play only the first `endS` seconds of a clip (then once + clamp holds the last frame). */
+export const CLIP_TRIM: Partial<Record<PackClip, { endS: number }>> = {
+  Duck: { endS: 0.5 },
 };
 
 /**
@@ -60,6 +70,7 @@ export const ONE_SHOT: Partial<Record<PackClip, { then?: PackClip }>> = {
   Jump: { then: "Jump_Idle" },
   HitReact: {},
   Death: {},
+  Duck: {},
 };
 
 export const CROSSFADE_S = 0.2;

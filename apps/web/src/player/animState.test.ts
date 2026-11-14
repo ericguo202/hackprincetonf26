@@ -33,6 +33,7 @@ const ANIM_STATES: AnimState[] = [
   "shoot",
   "hit",
   "eliminated",
+  "crouch",
 ];
 
 const ALL_LOCOMOTION: LocomotionState[] = [
@@ -84,6 +85,23 @@ test("eliminated holds until respawn, one-shots expire", () => {
 test("animChanged only fires on a real change", () => {
   assert.ok(!animChanged("run", "run"));
   assert.ok(animChanged("run", "idle"));
+});
+
+test("crouch beats shoot and locomotion, but not hit or eliminated", () => {
+  assert.equal(toAnimState("IDLE", null, true), "crouch");
+  assert.equal(toAnimState("WALK", null, true), "crouch");
+  assert.equal(toAnimState("IDLE", "shoot", true), "crouch");
+  assert.equal(toAnimState("IDLE", "hit", true), "hit");
+  assert.equal(toAnimState("IDLE", "eliminated", true), "eliminated");
+  assert.equal(toAnimState("IDLE", "shoot", false), "shoot");
+});
+
+test("every wire state, crouch included, is reachable from toAnimState", () => {
+  const seen = new Set<string>();
+  for (const l of ALL_LOCOMOTION)
+    for (const a of [null, "shoot", "hit", "eliminated"] as const)
+      for (const c of [false, true]) seen.add(toAnimState(l, a, c));
+  for (const s of ANIM_STATES) assert.ok(seen.has(s), s);
 });
 
 if (!vitest) console.log(`\n${passed} passed`);

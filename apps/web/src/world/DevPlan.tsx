@@ -28,7 +28,7 @@ import { FURNITURE_COLLIDER, SHOT_QUERY } from "./collisionGroups";
 import { useIndoorSpawns } from "./indoorSpawns";
 import { localPlayer } from "../player/playerControl";
 
-const START_ROOM = import.meta.env.VITE_START_ROOM as string | undefined;
+import { START_ROOM } from "./devFlags";
 const SWAP_KEY = "KeyP";
 
 const FIXTURE_PLAN = JSON.parse(FIXTURE_RAW.plan) as PlacementPlan;

@@ -7,6 +7,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
 import { actionFor, blendedLift, buildRig, usedClips } from "./characterRig";
+import { CROUCH } from "./movement";
+import { LoopOnce } from "three";
 import { MOVEMENT } from "./movement";
 
 const MODEL = join(dirname(fileURLToPath(import.meta.url)), "../../public/characters/Character_Soldier.gltf");
@@ -102,5 +104,27 @@ describe("character rig (real Toon Shooter soldier)", () => {
       MOVEMENT.capsuleHalfHeight + MOVEMENT.capsuleRadius + MOVEMENT.floatHeight,
       9,
     );
+  });
+});
+
+describe("crouch pose (the kit's Duck, trimmed to its hold)", () => {
+  it("drops to and holds CROUCH.topM (0.97 m), feet on the floor", () => {
+    const rig = buildRig(scene, clips);
+    const duck = actionFor(rig, "Duck")!;
+    expect(duck.getClip().duration).toBeCloseTo(0.5, 6);
+    duck.reset().setLoop(LoopOnce, 1);
+    duck.clampWhenFinished = true;
+    duck.play();
+    rig.mixer.update(0.6); // past the end: clamped on the last (held) frame
+    rig.mixer.update(1.0);
+    const b = bounds(rig.root);
+    expect(b.max.y).toBeCloseTo(CROUCH.topM, 1);
+    expect(Math.abs(b.max.y - CROUCH.topM)).toBeLessThan(0.03);
+    expect(Math.abs(b.min.y)).toBeLessThan(0.01);
+  });
+
+  it("the crouched capsule's top is the crouched model's top", () => {
+    expect(MOVEMENT.floatHeight + 2 * (CROUCH.halfHeight + MOVEMENT.capsuleRadius)).toBeCloseTo(CROUCH.topM, 9);
+    expect(CROUCH.halfHeight).toBeGreaterThan(0);
   });
 });

@@ -2,7 +2,7 @@
 
 Lane C is the game client's world and player: `apps/web/src/world/` and
 `apps/web/src/player/` (AGENTS.md section 6). Written 2026-11-14 at main
-`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), and for the capsule radius (section 12). Read AGENTS.md first. Rules that matter most here: stay inside
+`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), for the capsule radius (section 12), for crouch and contracts v2.4.0 (section 13), and for the production pack path (section 14). Read AGENTS.md first. Rules that matter most here: stay inside
 those two folders (plus `apps/web/public/characters/`). Never edit
 `apps/web/src/store.ts` (Lane D) or anything in `contracts/` (all four lanes
 agree first). Cross-lane needs go in `HANDOFF.md`.
@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 176 tests in 12 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 200 tests in 13 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -211,7 +211,7 @@ The eye-height test keeps passing if `headOffsetY` is retuned to keep the eye at
   - furniture from plans, as boxes until real meshes are published;
   - the animated Toon Shooter character.
 - **Remote players:** rendered, interpolated and shootable (section 11), proven with fake players (`VITE_DEV_REMOTES`). The networked fight needs Lane D's server items in section 7: accepting moves after a zone change, the `fire` handler, and passing their sender as `onFire`.
-- **Verification:** most physics is proven headless. The character in the live page, the label fade and the jitter fix still need a browser pass.
+- **Verification:** most physics is proven headless. The character in the live page, the label fade, the jitter fix and all of crouch (section 13) still need a browser pass.
 
 **Single next task:** check 7014's doors once Lane A's committed publish lands, then do the browser pass. (Section 12 records that the radius decision is done.)
 1. After Lane A's publish is on main (HANDOFF 16:30, now OK'd by Lane C), set `/.env.local` to `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` and `VITE_START_ROOM=hou_236595179.r3` (the hero house). Delete the stale `apps/web/public/packs/hou_navidad_01/` from `packs.zip` first, so it never gets committed alongside.
@@ -257,3 +257,72 @@ Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, 
 - **The door check is now a committed tool:** `apps/web/scripts/door-check.ts <house dir>`. It resolves Rapier through `@react-three/rapier`, so no new dependency, and it exits non-zero if a bathroom is unreachable.
 
 **HANDOFF:** Lane C replied OK to Lane A's static-site hosting proposal (16:30), noting that the `.gitignore` line they'll remove is Lane C's and is fine to drop.
+
+## 13. Session 3, later: crouch and contracts v2.4.0
+
+**Contracts v2.4.0** (team-agreed; commit `79d72f5`):
+- `ANIM_STATES` adds `crouch`.
+- `fire` gains `weapon?: "blaster" | "noodle"` (`WEAPONS` in `game-state.ts`). An absent field means `blaster`. `noodle`, the pool noodle, is reserved for Lane D to define.
+- No fixture carries an anim state or a `fire` payload, so none changed. `pnpm gen:types` gives no diff.
+- A HANDOFF note tells Lanes B and D to pull and regenerate.
+- It was pushed to main on its own, ahead of the client commit, so Lanes B and D could pull at once. For the few minutes between the two pushes, main failed web typecheck (and Render's `pnpm build`), because `clips.ts` had no `crouch` entry yet.
+
+**Crouch, client side:**
+- **Input:** hold **C**. Not Ctrl, which the browser owns (Ctrl+W).
+- **Capsule:** half-height 0.40 → 0.085 m, so its top drops to 0.97 m, the crouched model's top. That's done by passing ecctrl a different `capsuleHalfHeight` prop.
+- **Camera:** the eye is the body centre + 0.65, so it drops with the capsule, from 1.6 m to about 1.285 m.
+- **Movement:** walk only at 1.3 m/s; no run, no jump.
+- **Anim priority:** eliminated > hit > crouch > shoot > locomotion. A player firing from crouch stays `crouch` on the wire, so remotes see and hit the lower body that's actually there.
+- **Clip:** the Quaternius kit has no crouch clip and no crouch-walk. `crouch` plays the kit's `Duck` dodge trimmed to its first 0.5 s, down into its held 0.97 m pose, then clamped there. Nothing is faked or retargeted. Moving while crouched slides that pose, because no crouch-walk exists.
+- **Remote players:** a crouched remote's hitbox spans 0–0.97 m. Their feet ease between postures, because the anim flips at once while the body glides down.
+- **Blaster:** `fire` always sends `weapon: "blaster"`.
+
+**Never seen in a browser.** All of the following is inferred from code and unit and headless tests only:
+- ecctrl rebuilding the collider when `capsuleHalfHeight` changes, and the body settling to the crouched height;
+- the camera dropping smoothly with it;
+- the Duck hold actually showing on the local and remote models;
+- the whole crouch feel: speed, the transition, and the sliding pose while moving.
+
+Also not handled: standing up under something low. The capsule regrows into it.
+
+**Cover finding** (headless, against 6915's real `collision.glb` and dev plan B, with the same numbers pinned in `apps/web/src/world/cover.test.ts`):
+- **Setup:** plan B's 0.85 m sectional (2.8 × 1.9 m) stands in the middle of the living room. The target is 0.45 m behind it. Five standing shooters with 1.6 m eyes each fire at a 25 × 5 grid of aim points on the target's standing body.
+- **Result:** 265 shots hit the standing target, and 103 of those still land crouched. So crouching behind the sofa blocks 61% of the shots that would hit you standing.
+- **Why some still land:** they occur at aim heights of 0.75–0.95 m. A standing 1.6 m eye looks down over the sofa back, so lines aimed even 10 cm below the back clear its top edge. And the crouched head (0.97 m) is 12 cm above the 0.85 m back.
+- **Plan A has no hiding spot:** its fixture sofa (0.79 m ABO) stands 0.305 m from the south wall, too narrow for the 0.5 m capsule.
+- **This is correct, and kept:** a sofa is `half` cover under the section 9 definition (0.5 to 1.2 m), so partial is the right behaviour.
+- **Full cover is a layout choice, not a physics change.** It's for Lane B's `furnish-for-play` skill: place `full` cover pieces taller than 1.2 m, such as a bookshelf, or arrange a sectional so that shooters can't look down over it.
+- **What the tests guarantee:** crouching never makes you easier to hit, nothing aimed above the crouched head lands, and the sofa stops low shots in both postures.
+
+**Next task:** unchanged (section 10): run the 7014 door check once Lane A's publish lands, then the browser pass, which now has to include crouch.
+
+## 14. Production pack path (Gate 2 prep)
+
+**Proven locally, not yet on Render.**
+- **Build:** `tsc -b && vite build`, as Render runs it, with `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1`.
+- **Packs:** 6915, laid out the way Lane A will publish (`dist/packs/packs/hou_navidad_01/v1/...`, `dist/packs/listings/index.json`).
+- **Host:** a plain static server, not Vite, run in two modes:
+  - Render's `render.yaml` rewrite, `/*` → `/index.html`, where a missing file answers 200 with HTML;
+  - plain 404.
+- **Loaded in both modes:** the manifest, the listings index, `rooms.json` (10 rooms), the door, the derived spawn, `collision.glb` (2 meshes, 1,544 triangles), and `interior.glb`'s meshopt geometry (26 meshes, 40,433 triangles).
+- **Fallbacks:** the missing furniture catalog and missing block meshes each fell back with one warning.
+- **Not tested:**
+  - **Interior textures:** WebP decoding needs a browser.
+  - **The furniture catalog:** no library exists yet; Lane A hasn't published.
+  - **The listings index:** a one-house stand-in built from Lane A's 16:46 numbers, in the scratch tree only.
+
+**Missing-file handling** (`meshProbe.classifyHead`): 200 + HTML (Render's rewrite, Vite) and 404/403 mean missing. 405/501 (a host that rejects `HEAD`) mean unknown, so the loader tries instead of hiding a real mesh. `fetchJson` already treats non-2xx and HTML answers as missing.
+
+**Dev switches never ship.** `world/devFlags.ts` gates `VITE_DEV_PLAN` and `VITE_START_ROOM` on `import.meta.env.DEV`, the same way `VITE_DEV_REMOTES` already was.
+- **Before:** a production build with them set shipped the dev plan, plan B, the dev catalog and the start room ID.
+- **Now:** building with all three set gives no trace of any of them in `dist/assets/*.js`.
+- **Re-check after changes:** `VITE_DEV_PLAN=1 VITE_START_ROOM=x.r1 VITE_DEV_REMOTES=1 ./node_modules/.bin/vite build --outDir /tmp/x`, then grep the JS for `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM` and `__laneC`. All should be absent.
+- **Effect:** deployed players start on the block, at the spawn derived near the hero's door (section 12), and walk in through the door once the listings index is published.
+- **Choosing the hero house:** `VITE_HERO_LISTING` (e.g. `hou_236595179`) names it, so the derived spawn goes in front of that house even if the manifest lists another first. Unset or not on the block, it falls back to the first house in manifest order. It's not a dev switch: it ships in production builds, and Lane D sets it on Render (HANDOFF). Tests cover both manifest orderings.
+
+**What Lane D needs** (HANDOFF, this session):
+- set `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` and `VITE_HERO_LISTING=hou_236595179` on the web service (both are baked in at build time);
+- keep the rewrite;
+- set none of the dev switches;
+- `buildFilter` already covers Lane A's committed publish;
+- a static deploy doesn't restart the game service.

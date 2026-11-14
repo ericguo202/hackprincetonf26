@@ -37,13 +37,20 @@ const LOCOMOTION: Record<LocomotionState, AnimState> = {
 };
 
 /**
- * `action` wins when present: being eliminated looks like being eliminated
- * even while the body is still falling.
+ * Priority: eliminated > hit > crouch > shoot > locomotion.
+ *
+ * Being eliminated or hit shows whatever the legs are doing. Crouch beats
+ * shoot: a crouched player firing over cover stays crouched on the wire, so
+ * remote players see (and hit) the lower body that is actually there; the
+ * shot itself still shows as a tracer and muzzle flash.
  */
 export function toAnimState(
   locomotion: LocomotionState,
   action: PlayerAction = null,
+  crouched = false,
 ): AnimState {
+  if (action === "eliminated" || action === "hit") return action;
+  if (crouched) return "crouch";
   return action ?? LOCOMOTION[locomotion];
 }
 

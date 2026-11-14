@@ -14,6 +14,7 @@
 //   4. TRACER: from the muzzle to the shot's hit point.
 
 import { viewDir, rightDir, type V3 } from "./armMath.ts";
+import type { Weapon } from "../../../../contracts/game-state";
 
 export const BLASTER = {
   /** Server: under 5 shots/s. 4/s leaves room for network jitter bunching two shots. */
@@ -189,10 +190,11 @@ export function resolveHit(worldT: number | null, box: HitboxHit | null, range =
 }
 
 /** The `fire` message (contracts/messages.md). target_id only on a player hit. */
-export type FirePayload = { origin: V3; dir: V3; target_id?: string };
+/** contracts v2.4.0: weapon is always sent; the foam blaster is "blaster". */
+export type FirePayload = { origin: V3; dir: V3; target_id?: string; weapon: Weapon };
 
 export function firePayload(shot: Ray, hit: ShotHit): FirePayload {
-  const p: FirePayload = { origin: shot.origin, dir: shot.dir };
+  const p: FirePayload = { origin: shot.origin, dir: shot.dir, weapon: "blaster" };
   if (hit.kind === "player") p.target_id = hit.targetId;
   return p;
 }

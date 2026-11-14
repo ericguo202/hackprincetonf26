@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NetPlayer } from "../store";
 import { aimRay, firePayload, nearestHitbox, resolveHit, shotRay, aimPoint, type Ray } from "../player/blasterMath";
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "../player/characterAsset";
-import { MOVEMENT } from "../player/movement";
+import { CENTRE_ABOVE_FLOOR_M, CROUCH, MOVEMENT } from "../player/movement";
 import {
   INTERP_DELAY_S,
   feetFromBody,
@@ -197,16 +197,37 @@ describe("dev fake players (VITE_DEV_REMOTES)", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const id = DEV_REMOTE_IDS[0];
     const pose = fakePose(id, 0, [0, 0], 1);
-    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1] }, 10);
-    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: "someone-else" }, 10);
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], weapon: "blaster" }, 10);
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: "someone-else", weapon: "blaster" }, 10);
     expect(fakeAnim(id, 10, pose)).toBe("run");
-    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id }, 10);
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id, weapon: "blaster" }, 10);
     expect(fakeAnim(id, 10.1, pose)).toBe("hit");
-    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id }, 11);
-    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id }, 12);
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id, weapon: "blaster" }, 11);
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id, weapon: "blaster" }, 12);
     expect(fakeAnim(id, 12.5, pose)).toBe("eliminated");
     expect(fakeAlive(id, 12.5)).toBe(false);
     expect(fakeAlive(id, 15.1)).toBe(true);
     expect(fakeAnim(id, 15.1, pose)).toBe("run");
+  });
+});
+
+describe("crouched remote players", () => {
+  const standingBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.standing, 0];
+  const crouchedBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.crouched, 0];
+  const span = (b: ReturnType<typeof hitboxFromBody>) => [b.centre[1] - b.halfHeight - b.radius, b.centre[1] + b.halfHeight + b.radius];
+
+  it("stand on the floor in both postures, crouched 0.97 m tall", () => {
+    const [lo, hi] = span(hitboxFromBody("p", crouchedBody, "crouch"));
+    expect(lo).toBeCloseTo(0, 9);
+    expect(hi).toBeCloseTo(CROUCH.topM, 9);
+    const [lo2, hi2] = span(hitboxFromBody("p", standingBody, "idle"));
+    expect(lo2).toBeCloseTo(0, 9);
+    expect(hi2).toBeCloseTo(CHARACTER.heightM, 9);
+  });
+
+  it("a dart over a crouched head misses; the same dart hits them standing", () => {
+    const ray: Ray = { origin: [0, 1.1, 5], dir: [0, 0, -1] };
+    expect(nearestHitbox(ray, [hitboxFromBody("p", crouchedBody, "crouch")], 0, 40)).toBeNull();
+    expect(nearestHitbox(ray, [hitboxFromBody("p", standingBody, "idle")], 0, 40)?.id).toBe("p");
   });
 });

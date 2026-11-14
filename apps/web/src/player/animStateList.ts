@@ -4,4 +4,4 @@
 // this list honest at typecheck time instead.
 import type { AnimState } from "../../../../contracts/game-state";
 
-export const ANIM_STATES_FOR_TEST: AnimState[] = ["idle", "run", "jump", "shoot", "hit", "eliminated"];
+export const ANIM_STATES_FOR_TEST: AnimState[] = ["idle", "run", "jump", "shoot", "hit", "eliminated", "crouch"];

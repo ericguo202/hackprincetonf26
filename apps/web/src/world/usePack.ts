@@ -16,7 +16,12 @@ export function usePack(): PackStatus {
   const [state, setState] = useState<PackStatus>({ status: "loading" });
   useEffect(() => {
     let alive = true;
-    loadPack({ base: import.meta.env.VITE_PACK_BASE_URL, fixtures: FIXTURE_RAW })
+    loadPack({
+      base: import.meta.env.VITE_PACK_BASE_URL,
+      fixtures: FIXTURE_RAW,
+      // Not a dev switch: the deployed build sets it so players start at the hero house.
+      heroListing: import.meta.env.VITE_HERO_LISTING as string | undefined,
+    })
       .then((pack) => alive && setState({ status: "ready", pack }))
       .catch((e: Error) => {
         console.error("[pack]", e);

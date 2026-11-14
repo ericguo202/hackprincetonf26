@@ -1,4 +1,4 @@
-# Game service messages (contracts v2)
+# Game service messages (contracts v2.4.0)
 
 Colyseus 0.18, one room type `NeighborhoodRoom` keyed by `block_id`, up to 16 players.
 Shared state schema: `game-state.ts`. Positions are in the player's current zone frame
@@ -10,11 +10,19 @@ Shared state schema: `game-state.ts`. Positions are in the player's current zone
 | ------------ | ---------------------------------------------- | ------------------------------------------------------------- |
 | `move`       | `{x, y, z, yaw, anim}`                         | 20 Hz; reject a jump over 3 m since the last accepted move    |
 | `enter_zone` | `{zone}` (`"block"` or a `listing_id`)         | Sets `Player.zone`                                            |
-| `fire`       | `{origin: [x,y,z], dir: [x,y,z], target_id?}`  | Hit counts only if both alive, same zone, under 5 shots/s, under 40 m, origin within 1.5 m of last position |
+| `fire`       | `{origin: [x,y,z], dir: [x,y,z], target_id?, weapon?}` | Hit counts only if both alive, same zone, under 5 shots/s, under 40 m, origin within 1.5 m of last position |
 | `set_mode`   | `{mode: "explore" or "foam"}`                  | Host toggle                                                   |
 | `chat`       | `{text}`                                       | Relayed to the room                                           |
 
-`anim` is one of `idle, run, jump, shoot, hit, eliminated`.
+`anim` is one of `idle, run, jump, shoot, hit, eliminated, crouch` (`ANIM_STATES` in `game-state.ts`).
+`crouch` (v2.4.0): the player is crouched. Their body is lower: the client's
+crouched capsule top is about 0.97 m above the floor instead of 1.3 m, so a
+server-side hit check that models the body should use the lower height.
+
+`weapon` (v2.4.0) is one of `blaster, noodle` (`WEAPONS` in `game-state.ts`).
+Absent means `blaster`, so older payloads stay valid. `noodle` (the pool
+noodle) is reserved; its rules (for example a short reach instead of 40 m)
+are Lane D's to define.
 
 ## Game -> client broadcasts (besides state patches)
 
