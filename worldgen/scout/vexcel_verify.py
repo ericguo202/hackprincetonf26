@@ -86,6 +86,18 @@ def target_clusters(clusters: dict) -> list[dict]:
             )
             if not dup:
                 out.append({**c, "market": market, "key": f"{market}_{R}_{c['rank']}"})
+    for i, pr in enumerate((clusters.get("demo_areas") or {}).get("pairs", [])[:1], 1):
+        out.append(
+            {
+                "key": f"demo_pair_{i}",
+                "market": pr["market"],
+                "centre_lat": pr["centre_lat"],
+                "centre_lon": pr["centre_lon"],
+                "radius_to_cover_splats_m": pr["distance_m"] / 2,
+                "splat_members": [{"property_id": m["property_id"]} for m in pr["members"]],
+                "interior_only_members": [],
+            }
+        )
     return out
 
 
@@ -116,6 +128,12 @@ def target_homes(scores: list[dict], clusters: dict) -> dict[int, list[str]]:
             add(e["property_id"], f"strategy B best {k}")
     for o in oblique_targets(scores, clusters):
         add(o["property_id"], f"oblique Tier B check ({o['cluster']})")
+    demo = clusters.get("demo_areas") or {}
+    for pr in demo.get("pairs", [])[:3]:
+        for m in pr["members"]:
+            add(m["property_id"], "demo-prompt pair")
+    for sh in demo.get("single_houses", [])[:5]:
+        add(sh["property_id"], "demo-prompt single house")
     return t
 
 
@@ -487,6 +505,12 @@ def run_derive(args) -> None:
     heights = parse_heights()
     for r in rows:
         hgt = heights.get(r["property_id"])
+        # A DSM-DTM difference under 2.5 m means the sample hit ground/vegetation, not a roof (stale or
+        # misplaced footprint): keep the number but do not use it.
+        r["roof_height_raw_m"] = hgt
+        if hgt is not None and hgt < 2.5:
+            hgt = None
+            r["roof_height_note"] = "DSM-DTM < 2.5 m at the footprint: no roof sampled; height unusable"
         r["roof_height_m"] = hgt
         r["roof_height_source"] = "max(DSM - DTM) at 1-2 points inside the primary footprint" if hgt else None
         r["stories_est_from_height"] = None if hgt is None else 1 if hgt < 6.5 else 2 if hgt < 10.0 else 3
@@ -585,9 +609,12 @@ def run_heights(args) -> None:
     load_env()
     mcp = VexcelMCP(ledger_path=CALLS)
     mcp.initialize()
+    done = {pid for e in raw.values() for pid, _, _ in e["points"]}
     for market, plist in pts.items():
-        if not plist or market in raw:
+        plist = [p for p in plist if p[0] not in done]
+        if not plist:
             continue
+        key = market if market not in raw else f"{market}_{len(raw)}"
         wkt = "MULTIPOINT(" + ", ".join(f"({lon} {lat})" for _, lat, lon in plist) + ")"
         entry = {"points": plist}
         for name, tool, a in (
@@ -611,7 +638,7 @@ def run_heights(args) -> None:
                 entry[name] = VexcelMCP.content_json(mcp.call_tool(tool, a))
             except VexcelError as e:
                 entry[name] = {"error": str(e)}
-        raw[market] = entry
+        raw[key] = entry
         write_json(path, raw)
         print(f"  {market}: {len(plist)} points", file=sys.stderr)
     mcp.close()

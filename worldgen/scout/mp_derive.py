@@ -36,6 +36,7 @@ AMENITY_NAME = re.compile(
     re.I,
 )
 SMALL_BEDROOM_M2 = 12.0
+NURSERY_MIN_M2 = 5.0  # smaller "Bedroom" rooms are mislabelled closets (seen: 2.8 m2), not a nursery
 OPEN_PLAN_MIN_M2 = 30.0  # a Kitchen/Dining room this big with no Living label is an open-plan living area
 SPECIFIC_MIN_SHARE = 0.3  # below this share of area with specific labels, rooms count as unlabelled
 TV_WALL_MIN_M = 3.0
@@ -326,7 +327,10 @@ def derive(model_id: str, rec: dict, home: dict | None) -> dict[str, Any]:
     row["has_staircase"] = labels.get("Staircase", 0) > 0
 
     # ---- bedrooms ----
-    beds = sorted((r for r in labelled.values() if r["base"] == "Bedroom"), key=lambda r: -r["area"])
+    bed_rooms = sorted((r for r in labelled.values() if r["base"] == "Bedroom"), key=lambda r: -r["area"])
+    # "Bedroom" rooms under NURSERY_MIN_M2 are mislabelled closets/nooks: listed, but not counted as bedrooms.
+    beds = [r for r in bed_rooms if r["area"] >= NURSERY_MIN_M2]
+    row["tiny_bedroom_labels_m2"] = [round(r["area"], 1) for r in bed_rooms if r["area"] < NURSERY_MIN_M2]
     row["bedrooms"] = len(beds)
     row["bedroom_areas_m2"] = [round(r["area"], 1) for r in beds]
     row["bathrooms"] = labels.get("Bathroom", 0)
@@ -343,7 +347,7 @@ def derive(model_id: str, rec: dict, home: dict | None) -> dict[str, Any]:
             (dist[r["id"]], r["area"], r)
             for r in beds
             if r["id"] != primary["id"]
-            and r["area"] < SMALL_BEDROOM_M2
+            and NURSERY_MIN_M2 <= r["area"] < SMALL_BEDROOM_M2
             and r["id"] in dist
             and dist[r["id"]] <= 2
         ]

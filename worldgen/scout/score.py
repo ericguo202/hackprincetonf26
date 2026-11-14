@@ -296,7 +296,7 @@ def contradictions(h: dict, m: dict | None, vx: dict | None) -> list[dict]:
     if not m or not m.get("ok"):
         return out
     labels_ok = m["label_completeness"] >= 0.75
-    st = h["stories"]
+    st = h["stories"] or None  # 0 means unknown in CoStar, not "zero stories"
     if st is not None:
         if st <= 1 and (m["floors_real"] >= 2 or m["has_staircase"]):
             out.append(

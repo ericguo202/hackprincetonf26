@@ -173,6 +173,55 @@ def max_splats_in_ball(rows: list[dict], radius: float) -> dict:
     return {"max_in_ball": best[0], "max_pairwise_group": clique}
 
 
+DEMO_PROMPTS = ("infant", "movie", "nerf")  # the scripted demo: new parents search, movie room, nerf war
+
+
+def demo_areas(rows: list[dict], radius: float = 300.0) -> dict:
+    """Hero houses that answer all three scripted demo prompts, alone or as a pair within `radius` m.
+    The brief's cluster rank counts splat homes first; this view counts demo-prompt coverage instead."""
+    heroes = [r for r in rows if r["hero_eligible"]]
+    singles = [
+        {
+            "property_id": r["property_id"],
+            "address": r["address"],
+            "model_id": r["model_id"],
+            "strong_personas": r["strong_personas"],
+            "total": r["total"],
+        }
+        for r in heroes
+        if all(p in r["strong_personas"] for p in DEMO_PROMPTS)
+    ]
+    pairs = []
+    for a, b in combinations(heroes, 2):
+        d = haversine_m(a["lat"], a["lon"], b["lat"], b["lon"])
+        if d > radius or a["market"] != b["market"]:
+            continue
+        cov = set(a["strong_personas"]) | set(b["strong_personas"])
+        if all(p in cov for p in DEMO_PROMPTS):
+            pairs.append(
+                {
+                    "members": [
+                        {
+                            "property_id": x["property_id"],
+                            "address": x["address"],
+                            "model_id": x["model_id"],
+                            "strong_personas": x["strong_personas"],
+                            "defurnished_mesh": x["defurnished_mesh"],
+                        }
+                        for x in (a, b)
+                    ],
+                    "distance_m": round(d, 1),
+                    "centre_lat": round((a["lat"] + b["lat"]) / 2, 6),
+                    "centre_lon": round((a["lon"] + b["lon"]) / 2, 6),
+                    "market": a["market"],
+                    "coverage": sorted(cov),
+                }
+            )
+    pairs.sort(key=lambda p: (-len(p["coverage"]), p["distance_m"]))
+    singles.sort(key=lambda r: (-len(r["strong_personas"]), -r["total"]))
+    return {"radius_m": radius, "prompts": list(DEMO_PROMPTS), "pairs": pairs, "single_houses": singles}
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.parse_args(argv)
@@ -207,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         "persona_coverage": sorted(k for k, v in best_by_persona.items() if v),
         "best_by_persona": best_by_persona,
     }
+    result["demo_areas"] = demo_areas(rows)
     write_json(OUT / "clusters.json", result)
 
     # Shortlist for phases 4-5: top-10 clusters' members, top 40 homes, all splat homes with interior >= 20.
