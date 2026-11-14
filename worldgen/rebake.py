@@ -36,6 +36,7 @@ WALL_INSET = 0.05  # wall surface sits about half a wall thickness inside the ce
 SHELL_TOL = 0.08  # scan faces this close to (and parallel to) a shell plane are replaced by it
 PAGE = 2048
 PAD = 4
+UNSEEN_PLANE = 0.05  # a shell plane cameras saw less of than this is painted in its room's colour
 
 
 # ---------------------------------------------------------------- scan
@@ -50,6 +51,13 @@ class Scan:
     areas: np.ndarray  # (n,)
     images: list[np.ndarray]  # RGB uint8
     rays: Raycaster
+    # Line-of-sight tests while texturing use `sight` when set: the scan plus stand-in solids for things
+    # that were removed from the model (ceiling fans), so their photo is not projected onto what is behind.
+    sight: Raycaster | None = None
+
+    @property
+    def eyes(self) -> Raycaster:
+        return self.sight or self.rays
 
 
 def load_scan(obj_path: Path) -> Scan:
@@ -120,6 +128,11 @@ class Plane:
     rect: tuple[int, int, int, int] | None = None  # x, y, w, h of the padded image in its page
     page: int = 0
     carve: bool = True  # walls only: may be cut out where a camera sees through
+    room: int = -1  # shell planes: index of the room they belong to
+    box: int = -1  # kind "box": index of the Box this face belongs to
+    seen: float = 0.0  # fraction of texels some camera saw (set by bake_plane)
+    unseen: np.ndarray | None = None  # (H, W) texels no camera saw (set by bake_plane)
+    shape_mask: np.ndarray | None = None  # (H, W) texels inside the plane's shape (set by bake_plane)
 
 
 def measure_ceiling(scan: Scan, room: ShellRoom) -> None:
@@ -198,7 +211,8 @@ def wall_runs(r: ShellRoom) -> list[tuple[np.ndarray, np.ndarray, float, list[tu
 def shell_planes(rooms: list[ShellRoom]) -> list[Plane]:
     planes: list[Plane] = []
     ex, ey, ez = np.eye(3)
-    for r in rooms:
+    for ri, r in enumerate(rooms):
+        first = len(planes)
         minx, miny, maxx, maxy = r.poly.bounds
         flat = Polygon([(x - minx, y - miny) for x, y in r.poly.exterior.coords])
         w, h = maxx - minx, maxy - miny
@@ -228,6 +242,8 @@ def shell_planes(rooms: list[ShellRoom]) -> list[Plane]:
                 step = room_top(r) - low
                 o = np.array([p0[0] + u[0] * a, p0[1] + u[1] * a, low])
                 planes.append(Plane("wall", o, u, ez, n, b - a, step, box(0, 0, b - a, step), carve=False))
+        for p in planes[first:]:
+            p.room = ri
     return planes
 
 
@@ -264,7 +280,7 @@ def bake_plane(
     hit[mask] = near
     k = max(3, int(0.12 * res) | 1)
     smooth = base + ndimage.uniform_filter(off, k) / np.maximum(ndimage.uniform_filter(hit, k), 1e-6)
-    rgb, valid = shade(pts + nrm * smooth[mask][:, None], nrm, panos, scan.rays, snap=False)
+    rgb, valid = shade(pts + nrm * smooth[mask][:, None], nrm, panos, scan.eyes, snap=False)
     img = np.zeros((H, W, 3), np.uint8)
     img[mask] = np.clip(rgb, 0, 255).astype(np.uint8)
     ok = np.zeros((H, W), bool)
@@ -288,6 +304,9 @@ def bake_plane(
         carved = float(e.sum()) / res / res
     p.image = np.dstack([_fill(img, ok), alpha])
     stats = {"area": p.shape.area, "seen": float(ok.sum()) / max(1, mask.sum()), "carved_m2": carved}
+    p.seen = stats["seen"]
+    p.unseen = mask & ~ok & (alpha > 0)
+    p.shape_mask = mask
     return stats, frames
 
 
@@ -451,20 +470,680 @@ def plane_mesh(p: Plane) -> trimesh.Trimesh | None:
     return trimesh.util.concatenate(meshes) if meshes else None
 
 
+# ---------------------------------------------------------------- relief boxes (wall-attached fixtures)
+
+RELIEF_RES = 50.0  # relief map cells per metre (2 cm)
+RELIEF_REACH = 1.0  # how far into the room a wall-attached fixture may stick out
+RELIEF_MIN = 0.12  # shallower relief is trim, sills and scan noise: left to the wall texture
+RELIEF_LEVEL_TOL = 0.05  # cells within this of a depth level belong to it
+RELIEF_MIN_AREA = 0.08  # m2 of front face below which a level or rectangle is ignored
+RELIEF_MIN_SIDE = 0.2  # m; narrower strips are slanted or round things, left as scan geometry
+RELIEF_MAX_TILT = 0.15  # metres of depth per metre along the wall (about 8 degrees): steeper is not a front
+RELIEF_MAX_ROUGH = 0.15  # median depth change between neighbouring cells, metres per metre
+RELIEF_MAX_SPREAD = 0.013  # m; median absolute deviation of a front's depth
+RELIEF_MAX_HOLE = 0.35  # m2; a smaller hole enclosed by a flat front is bridged
+BOX_TOL = 0.08  # scan faces this close to a box are replaced by it
+
+
+@dataclass
+class Box:
+    """A fixture that sticks out of a wall with a flat front (cabinet, counter, fridge, tub surround, wall
+    stub): the wall rectangle s0..s1 x t0..t1 extruded `depth` into the room. `origin` is the wall run's
+    start at floor level, u runs along the wall, n points into the room. `attached` is False on an open
+    stretch of the room outline (no wall behind it), where the box also needs a back face."""
+
+    origin: np.ndarray
+    u: np.ndarray
+    n: np.ndarray
+    s0: float
+    s1: float
+    t0: float
+    t1: float
+    depth: float
+    attached: bool = True
+    wall_ends: tuple[bool, bool] = (False, False)  # the box touches a wall at its s0 / s1 end
+    to_ceiling: bool = False  # the box reaches the ceiling (no top face)
+    back: float = 0.0  # unattached boxes: how far the fixture reaches behind the outline (a half wall)
+
+    def footprint(self, grow: float = 0.0) -> Polygon:
+        o, u, n = self.origin[:2], self.u[:2], self.n[:2]
+        a, b = self.s0 - grow, self.s1 + grow
+        lo, hi = -self.back - grow, self.depth + grow
+        return Polygon([o + a * u + lo * n, o + b * u + lo * n, o + b * u + hi * n, o + a * u + hi * n])
+
+    @property
+    def z0(self) -> float:
+        return float(self.origin[2] + self.t0)
+
+    @property
+    def z1(self) -> float:
+        return float(self.origin[2] + self.t1)
+
+    def contains(self, pts: np.ndarray, grow: float = 0.0) -> np.ndarray:
+        rel = pts - self.origin
+        s, d, t = rel @ self.u, rel @ self.n, rel[:, 2]
+        return (
+            (s > self.s0 - grow)
+            & (s < self.s1 + grow)
+            & (d > -self.back - grow)
+            & (d < self.depth + grow)
+            & (t > self.t0 - grow)
+            & (t < self.t1 + grow)
+        )
+
+    def face_planes(self) -> list[tuple[np.ndarray, float]]:
+        """(outward normal, offset along it) of the six faces."""
+        up = np.array([0.0, 0.0, 1.0])
+        ou, on = float(self.origin @ self.u), float(self.origin @ self.n)
+        return [
+            (self.n, on + self.depth),
+            (-self.n, -(on - self.back)),
+            (-self.u, -(ou + self.s0)),
+            (self.u, ou + self.s1),
+            (up, self.z1),
+            (-up, -self.z0),
+        ]
+
+    def triangles(self) -> np.ndarray:
+        """(12, 3, 3) triangles of the box, for collision."""
+        m = trimesh.creation.box(extents=[self.s1 - self.s0, self.depth + self.back, self.t1 - self.t0])
+        rot = np.eye(4)
+        rot[:3, 0], rot[:3, 1], rot[:3, 2] = self.u, self.n, [0, 0, 1]
+        centre = (
+            self.origin
+            + self.u * (self.s0 + self.s1) / 2
+            + self.n * (self.depth - self.back) / 2
+            + np.array([0, 0, (self.t0 + self.t1) / 2])
+        )
+        rot[:3, 3] = centre
+        m.apply_transform(rot)
+        return np.asarray(m.triangles)
+
+
+def relief_runs(r: ShellRoom) -> list[tuple[np.ndarray, np.ndarray, float, list[tuple[float, float]]]]:
+    """wall_runs with collinear neighbours joined, so a counter that passes a vertex of the room outline
+    (where a closet wall meets the other side, say) is measured as one piece."""
+    runs = wall_runs(r)
+    if not runs:
+        return []
+
+    def continues(a, b) -> bool:
+        ua, ub = (a[1] - a[0]) / a[2], (b[1] - b[0]) / b[2]
+        return float(ua @ ub) > 0.999 and float(np.linalg.norm(b[0] - a[1])) < 0.12
+
+    start = next((i for i in range(len(runs)) if not continues(runs[i - 1], runs[i])), 0)
+    runs = runs[start:] + runs[:start]
+    out: list[list] = []
+    for i, run in enumerate(runs):
+        p0, p1, length, covered = run
+        if out and i > 0 and continues(runs[i - 1], run):
+            prev = out[-1]
+            shift = float(np.linalg.norm(p0 - prev[0]))
+            prev[3] = prev[3] + [(a + shift, b + shift) for a, b in covered]
+            prev[1], prev[2] = p1, float(np.linalg.norm(p1 - prev[0]))
+        else:
+            out.append([p0, p1, length, list(covered)])
+    return [(p0, p1, length, covered) for p0, p1, length, covered in out]
+
+
+def wall_relief(
+    scan: Scan, room: ShellRoom, p0: np.ndarray, p1: np.ndarray, length: float, res: float = RELIEF_RES
+) -> np.ndarray:
+    """How far the scanned surface stands out from a wall line, as an (H, W) map in metres (row 0 = top of
+    the wall, 0 = bare wall). Rays run from inside the room toward the wall and stop at the first surface
+    that faces the room, so the map holds what a player in the room sees. A ray never starts outside the
+    room (a closet is shallower than RELIEF_REACH)."""
+    u = np.array([p1[0] - p0[0], p1[1] - p0[1], 0.0]) / length
+    n = np.array([-u[1], u[0], 0.0])
+    height = room_top(room) - room.floor_z
+    W, H = max(1, math.ceil(length * res)), max(1, math.ceil(height * res))
+    s = (np.arange(W) + 0.5) / res
+    t = height - (np.arange(H) + 0.5) / res
+    # Per column: the largest start distance that stays inside the room.
+    steps = np.arange(0.1, RELIEF_REACH + 1e-6, 0.05)
+    base = p0[None, :] + s[:, None] * u[None, :2]
+    probe = base[:, None, :] + steps[None, :, None] * n[None, None, :2]
+    inside = shapely.contains_xy(room.poly, probe[..., 0].ravel(), probe[..., 1].ravel()).reshape(W, -1)
+    n_in = np.where(inside.all(1), len(steps), np.argmin(inside, axis=1))
+    reach = np.where(n_in > 0, steps[np.maximum(n_in - 1, 0)], 0.0)  # (W,)
+    S, T = np.meshgrid(s, t)
+    R = np.broadcast_to(reach[None, :], (H, W)).ravel()
+    pts = np.array([p0[0], p0[1], room.floor_z]) + S.ravel()[:, None] * u + T.ravel()[:, None] * [0, 0, 1.0]
+    depth = np.zeros(len(pts))
+    todo = np.nonzero(R > 0.2)[0]
+    walked = np.zeros(len(pts))
+    for _ in range(4):
+        if not len(todo):
+            break
+        o = pts[todo] + n * (R[todo] - walked[todo])[:, None]
+        tt, prim = scan.rays.cast(o, np.tile(-n, (len(todo), 1)))
+        hit = prim >= 0
+        d = R[todo] - walked[todo] - tt
+        facing = np.zeros(len(todo), bool)
+        facing[hit] = scan.normals[prim[hit]] @ n > 0.2
+        good = hit & facing & (d > 0)
+        depth[todo[good]] = d[good]
+        again = hit & ~facing & (d > 0)  # a back face (we started inside something): keep going
+        walked[todo[again]] += tt[again] + 1e-3
+        todo = todo[again]
+    return depth.reshape(H, W)
+
+
+def _largest_rect(mask: np.ndarray) -> tuple[int, int, int, int]:
+    """The largest all-True axis-aligned rectangle in a mask, as (c0, c1, r0, r1) with exclusive ends."""
+    H, W = mask.shape
+    heights = np.zeros(W, int)
+    best, best_area = (0, 0, 0, 0), 0
+    for r in range(H):
+        heights = np.where(mask[r], heights + 1, 0)
+        stack: list[int] = []
+        for c in range(W + 1):
+            h = heights[c] if c < W else 0
+            while stack and heights[stack[-1]] >= h:
+                top = stack.pop()
+                left = stack[-1] + 1 if stack else 0
+                area = heights[top] * (c - left)
+                if area > best_area:
+                    best_area, best = area, (left, c, r - heights[top] + 1, r + 1)
+            stack.append(c)
+    return best
+
+
+def _fill_small_holes(mask: np.ndarray, max_cells: int) -> np.ndarray:
+    """Fill holes enclosed by the mask when they are smaller than max_cells (an oven window the scanner
+    saw through, a dent in a steel fridge), so one appliance stays one rectangle."""
+    holes, n = ndimage.label(ndimage.binary_fill_holes(mask) & ~mask)
+    if not n:
+        return mask
+    size = np.bincount(holes.ravel())
+    small = size <= max_cells
+    small[0] = False
+    return mask | small[holes]
+
+
+def _refine_edge(solid: np.ndarray, lo: int, hi: int, at: int, step: int, rows: bool, reach: int) -> int:
+    """Move one edge of a rectangle (found on the coarse grid) to where the fine mask really ends: the
+    outermost row (or column) within `reach` cells of `at` that is at least half solid between lo and hi.
+    step = -1 for a top or left edge (exclusive end semantics are handled by the caller)."""
+    n = solid.shape[0] if rows else solid.shape[1]
+    best = at
+    for k in range(at + reach * step, at - reach * step - step, -step):  # from outside in
+        if not 0 <= k < n:
+            continue
+        line = solid[k, lo:hi] if rows else solid[lo:hi, k]
+        if line.mean() >= 0.5:
+            best = k
+            break
+    else:
+        return at
+    return best
+
+
+def relief_rects(depth: np.ndarray, res: float = RELIEF_RES) -> list[tuple[int, int, int, int, float]]:
+    """Flat-fronted rectangles in a relief map, as (c0, c1, r0, r1, depth).
+
+    1. Depth levels: repeatedly the most common depth among cells not yet assigned (within
+       RELIEF_LEVEL_TOL), while a level still covers RELIEF_MIN_AREA.
+    2. Levels are fitted from the one that sticks out furthest to the shallowest. For a level, "solid" is
+       every cell at least that far out, so a counter's rectangle runs on behind the stove that stands 6 cm
+       proud of it, and dents in a badly scanned front (a steel fridge) are bridged where they are small.
+    3. Each connected solid region is cut into rectangles: the largest rectangle that is mostly solid on a
+       coarse (8 cm) grid, its edges then moved to where the fine mask ends, repeated on what is left.
+    4. Edges close to the floor, the ceiling or the ends of the wall snap to them (toe kicks, cabinets that
+       end at a corner).
+    Relief with no dominant depth (a slanted fireplace, a toilet) yields nothing and stays scan geometry."""
+    H, W = depth.shape
+    D = ndimage.median_filter(depth, size=5)
+    todo = (D >= RELIEF_MIN) & (D <= RELIEF_REACH - 0.04)
+    min_cells = RELIEF_MIN_AREA * res * res
+    side = int(RELIEF_MIN_SIDE * res)
+    levels: list[float] = []
+    left = todo.copy()
+    for _ in range(16):
+        if left.sum() < min_cells:
+            break
+        hist = np.bincount(np.round(D[left] / 0.02).astype(int))
+        win = np.convolve(hist, np.ones(3), "same")
+        if win.max() < min_cells:
+            break
+        levels.append(float(np.argmax(win)) * 0.02)
+        left &= np.abs(D - levels[-1]) > RELIEF_LEVEL_TOL
+    out: list[tuple[int, int, int, int, float]] = []
+    boxed = np.zeros((H, W), bool)  # cells inside a rectangle already fitted (to a level further out)
+    f = 4  # coarse grid factor
+    for level in sorted(levels, reverse=True):
+        at = todo & (np.abs(D - level) <= RELIEF_LEVEL_TOL)
+        solid = D >= level - RELIEF_LEVEL_TOL
+        solid = ndimage.binary_opening(ndimage.binary_closing(solid, iterations=3), iterations=2)
+        solid = _fill_small_holes(solid, int(RELIEF_MAX_HOLE * res * res))
+        Hc, Wc = math.ceil(H / f), math.ceil(W / f)
+        pad = np.zeros((Hc * f, Wc * f))
+        pad[:H, :W] = solid
+        coarse = pad.reshape(Hc, f, Wc, f).mean((1, 3)) >= 0.6
+        labels, _ = ndimage.label(coarse)
+        for i, sl in enumerate(ndimage.find_objects(labels), 1):
+            comp = labels[sl] == i
+            for _ in range(6):
+                c0, c1, r0, r1 = _largest_rect(comp)
+                if (c1 - c0) * (r1 - r0) * f * f < min_cells / 2:
+                    break
+                comp[r0:r1, c0:c1] = False
+                c0, c1 = (c0 + sl[1].start) * f, min((c1 + sl[1].start) * f, W)
+                r0, r1 = (r0 + sl[0].start) * f, min((r1 + sl[0].start) * f, H)
+                r0 = _refine_edge(solid, c0, c1, r0, -1, True, f)
+                r1 = _refine_edge(solid, c0, c1, r1 - 1, 1, True, f) + 1
+                c0 = _refine_edge(solid, r0, r1, c0, -1, False, f)
+                c1 = _refine_edge(solid, r0, r1, c1 - 1, 1, False, f) + 1
+                own = at[r0:r1, c0:c1]
+                if c1 - c0 < side or r1 - r0 < side or own.sum() < min_cells / 2:
+                    continue
+                # Flat front: most of what no further-out rectangle explains must be at this level. A slope
+                # fails here (its cells are spread over every depth), so does a rectangle that only repeats
+                # a further-out one.
+                if own.sum() < 0.6 * max(1, (~boxed[r0:r1, c0:c1]).sum()):
+                    continue
+                rr, cc = np.nonzero(own)
+                fit = np.linalg.lstsq(np.c_[np.ones(len(rr)), rr, cc], D[r0:r1, c0:c1][own], rcond=None)[0]
+                if math.hypot(fit[1], fit[2]) * res > RELIEF_MAX_TILT:
+                    continue  # a tilted surface cut off by the level tolerance, not a flat front
+                # Wavy or crumpled (a shower curtain, a heap of scan noise): rough from cell to cell AND
+                # spread in depth. A box there would be a painted block where the real thing is soft.
+                vals = D[r0:r1, c0:c1][own]
+                gy, gx = np.gradient(D[r0:r1, c0:c1])
+                rough = float(np.median(np.hypot(gx, gy)[own])) * res
+                spread = float(np.median(np.abs(vals - np.median(vals))))
+                if own.mean() < 0.3 or (rough > RELIEF_MAX_ROUGH and spread > RELIEF_MAX_SPREAD):
+                    continue
+                d = float(np.median(vals))
+                r1 = H if H - r1 <= 0.15 * res else r1  # toe kick: the box stands on the floor
+                if H - r0 >= 1.5 * res and H - r1 <= 0.4 * res:
+                    r1 = H  # tall things (a fridge, a wall bump, a door leaf) stand on the floor too
+                r0 = 0 if r0 <= 0.10 * res else r0
+                c0 = 0 if c0 <= 0.08 * res else c0
+                c1 = W if W - c1 <= 0.08 * res else c1
+                out.append((c0, c1, r0, r1, d))
+                boxed[r0:r1, c0:c1] = True
+                todo[r0:r1, c0:c1] &= D[r0:r1, c0:c1] > level + RELIEF_LEVEL_TOL
+    return out
+
+
+def _snap_depths(rects: list[tuple[int, int, int, int, float]], tol: float = 0.035) -> list:
+    """Give rectangles on one wall whose depths differ by less than tol the same depth (area-weighted mean),
+    so the pieces of one cabinet run or one fridge do not step by a centimetre or two where they meet."""
+    order = sorted(range(len(rects)), key=lambda i: rects[i][4])
+    out = list(rects)
+    group: list[int] = []
+    for i in [*order, None]:
+        if i is not None and (not group or rects[i][4] - rects[group[-1]][4] < tol):
+            group.append(i)
+            continue
+        if group:
+            area = [(rects[k][1] - rects[k][0]) * (rects[k][3] - rects[k][2]) for k in group]
+            d = float(np.average([rects[k][4] for k in group], weights=area))
+            for k in group:
+                out[k] = (*rects[k][:4], d)
+        group = [i] if i is not None else []
+    return out
+
+
+def relief_boxes(scan: Scan, rooms: list[ShellRoom], debug: Path | None = None) -> list[Box]:
+    """Every flat-fronted fixture standing out from a wall (or from an open stretch of a room's outline,
+    like a kitchen peninsula on the line between kitchen and living room), as boxes."""
+    boxes: list[Box] = []
+    for ri, r in enumerate(rooms):
+        height = room_top(r) - r.floor_z
+        runs = relief_runs(r)
+        for wi, (p0, p1, length, covered) in enumerate(runs):
+            if length < RELIEF_MIN_SIDE:
+                continue
+            # Is there a wall around the corner at each end of this run? Then a box that reaches the end
+            # needs no side face there.
+            prev, nxt = runs[wi - 1], runs[(wi + 1) % len(runs)]
+            wall_before = any(b > prev[2] - 0.3 for _, b in prev[3])
+            wall_after = any(a < 0.3 for a, _ in nxt[3])
+            D = wall_relief(scan, r, p0, p1, length)
+            rects = _snap_depths(relief_rects(D))
+            if debug is not None:
+                _relief_debug(D, rects, debug / f"relief_room{ri + 1}_wall{wi}.png")
+            u = np.array([p1[0] - p0[0], p1[1] - p0[1], 0.0]) / length
+            n = np.array([-u[1], u[0], 0.0])
+            origin = np.array([p0[0], p0[1], r.floor_z])
+            H = D.shape[0]
+            for c0, c1, r0, r1, d in rects:
+                s0, s1 = c0 / RELIEF_RES, min(c1 / RELIEF_RES, length)
+                t0, t1 = max(height - r1 / RELIEF_RES, 0.0), height - r0 / RELIEF_RES
+                if r1 >= H:
+                    t0 = 0.0
+                on_wall = sum(max(0.0, min(b, s1) - max(a, s0)) for a, b in covered)
+                ends = (wall_before and s0 < 0.03, wall_after and s1 > length - 0.03)
+                attached = on_wall > 0.5 * (s1 - s0)
+                b = Box(origin, u, n, s0, s1, t0, t1, d, attached, ends, to_ceiling=r0 == 0)
+                if not attached:
+                    b.back = _back_extent(scan, b)
+                boxes.append(b)
+    return boxes
+
+
+def _back_extent(scan: Scan, b: Box, reach: float = 0.5) -> float:
+    """For a box on an open stretch of the room outline: how far the fixture goes on behind the outline
+    (a half wall under a breakfast bar stands partly in the next room). Rays from behind look for the
+    surface that faces away from the room; the median over the box's rectangle, 0 when most rays miss."""
+    s = np.arange(b.s0 + 0.03, b.s1, 0.06)
+    t = np.arange(b.t0 + 0.03, b.t1, 0.06)
+    S, T = np.meshgrid(s, t)
+    pts = b.origin + S.ravel()[:, None] * b.u + T.ravel()[:, None] * [0, 0, 1.0] - b.n * reach
+    tt, prim = scan.rays.cast(pts, np.tile(b.n, (len(pts), 1)))
+    ok = (prim >= 0) & (tt < reach + b.depth)
+    ok[ok] &= scan.normals[prim[ok]] @ b.n < -0.2
+    if ok.mean() < 0.5:
+        return 0.0
+    return float(np.clip(np.median(reach - tt[ok]), 0.0, reach))
+
+
+LEAF_MAX_BULGE = 0.06  # m; 90% of a leaf's scanned surface lies within this of its plane
+LEAF_MIN_AREA = 0.6  # m2 of scanned surface
+
+
+def leaf_boxes(scan: Scan, faces: np.ndarray, rooms: list[ShellRoom]) -> list[Box]:
+    """Thin, flat, upright pieces that stand free in a room (an open door leaf, a shower screen, a wall
+    stub that is not in the floor plan) as slabs. They scan as crumpled sheets; a slab textured from the
+    photos is a clean door.
+
+    A connected piece of scan qualifies when its best-fit plane is vertical, 90% of its surface lies within
+    LEAF_MAX_BULGE of that plane, it starts near the floor, is at least 1.6 m tall and 0.4 to 1.3 m wide,
+    and the scan covers at least half of that rectangle. The slab is as thick as the scan says (twice the
+    median distance to the plane, at least 4 cm)."""
+    if not len(faces):
+        return []
+    soup = scan.tris[faces].reshape(-1, 3)
+    m = trimesh.Trimesh(soup, np.arange(len(soup)).reshape(-1, 3), process=False)
+    m.merge_vertices()
+    up = np.array([0.0, 0.0, 1.0])
+    out = []
+    for comp in trimesh.graph.connected_components(m.face_adjacency, nodes=np.arange(len(faces))):
+        f = faces[comp]
+        area = scan.areas[f]
+        if area.sum() < LEAF_MIN_AREA:
+            continue
+        pts = scan.tris[f].reshape(-1, 3)
+        w = np.repeat(area / 3, 3)
+        mu = np.average(pts, axis=0, weights=w)
+        _, vec = np.linalg.eigh(np.cov((pts - mu).T, aweights=w))
+        n = vec[:, 0]
+        if abs(n[2]) > 0.15:
+            continue  # not upright
+        n = np.array([n[0], n[1], 0.0]) / math.hypot(n[0], n[1])
+        u = np.cross(n, up)  # (u, n, up) is right-handed, like a wall run and its inward normal
+        dist = np.abs((pts - mu) @ n)
+        if np.quantile(dist, 0.9) > LEAF_MAX_BULGE:
+            continue
+        s = (pts - mu) @ u
+        s0, s1 = np.quantile(s, [0.02, 0.98])
+        z0, z1 = np.quantile(pts[:, 2], [0.02, 0.98])
+        floor = next((r.floor_z for r in rooms if r.poly.contains(Point(mu[0], mu[1]))), None)
+        if floor is None or z1 - floor < 1.6 or z0 - floor > 0.25 or not 0.4 <= s1 - s0 <= 1.3:
+            continue
+        if area.sum() < 0.5 * (s1 - s0) * (z1 - z0):
+            continue  # too little of the rectangle was scanned to trust it
+        thick = max(0.04, 2 * float(np.median(dist)))
+        origin = mu + u * s0 - n * thick / 2
+        origin[2] = floor
+        out.append(Box(origin, u, n, 0.0, float(s1 - s0), 0.0, float(z1 - floor), thick, attached=False))
+    return out
+
+
+def _write_box_list(boxes: list[Box], dest: Path) -> None:
+    """The fitted boxes as JSON (plan coordinates, metres), for finding the one to drop by hand."""
+    import json
+
+    rows = []
+    for b in boxes:
+        c = b.origin + b.u * (b.s0 + b.s1) / 2 + b.n * (b.depth - b.back) / 2
+        rows.append(
+            {
+                "centre": [round(float(c[0]), 2), round(float(c[1]), 2), round((b.z0 + b.z1) / 2, 2)],
+                "width": round(b.s1 - b.s0, 2),
+                "depth": round(b.depth + b.back, 2),
+                "z": [round(b.z0, 2), round(b.z1, 2)],
+                "attached_to_wall": b.attached,
+            }
+        )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(rows, indent=1) + "\n", encoding="utf-8")
+
+
+def _relief_debug(D: np.ndarray, rects: list, dest: Path) -> None:
+    """Relief map (brighter = further out of the wall) with the fitted rectangles outlined in red."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    g = (np.clip(D / RELIEF_REACH, 0, 1) * 255).astype(np.uint8)
+    img = np.kron(np.dstack([g, g, g]), np.ones((4, 4, 1), np.uint8))
+    for c0, c1, r0, r1, _ in rects:
+        a, b, c, d = c0 * 4, c1 * 4 - 1, r0 * 4, r1 * 4 - 1
+        img[c : d + 1, [a, a + 1, b - 1, b]] = (255, 0, 0)
+        img[[c, c + 1, d - 1, d], a : b + 1] = (255, 0, 0)
+    Image.fromarray(img).save(dest)
+
+
+def _hidden(shape: Polygon, face_origin, fu, fv, fn, fw: float, own: Box, others: list[Box], idx: int):
+    """The part of a box face (shape, in the face's own (s, t) metres) not buried in another box. A face
+    that lies in the same plane as a face of another box, looking the same way (two cabinet fronts at one
+    depth), is a tie: the earlier box keeps the overlap and the later one loses it."""
+    grow = 0.006
+    offset = float(face_origin @ fn)
+    for j, other in enumerate(others):
+        if other is own:
+            continue
+        tie = any(float(fn @ m) > 0.99 and abs(offset - o) < 0.012 for m, o in other.face_planes())
+        if tie and j > idx:
+            continue
+        if abs(fn[2]) > 0.5:  # top or bottom: buried where the other box spans this height
+            z = face_origin[2]
+            if not (other.z0 - grow < z < other.z1 + grow):
+                continue
+            ring = np.asarray(other.footprint(grow).exterior.coords)[:-1] - face_origin[:2]
+            cut = Polygon(np.c_[ring @ fu[:2], ring @ fv[:2]])
+        else:  # vertical face: buried along the stretch of its line that lies inside the other footprint
+            a = face_origin[:2]
+            line = LineString([a, a + fu[:2] * fw])
+            lo, hi = other.z0 - grow - face_origin[2], other.z1 + grow - face_origin[2]
+            cuts = [box(s0, lo, s1, hi) for s0, s1 in _intervals(line, other.footprint(grow))]
+            if not cuts:
+                continue
+            cut = unary_union(cuts)
+        shape = shape.difference(cut)
+        if shape.is_empty:
+            return None
+    return shape
+
+
+def box_planes(boxes: list[Box]) -> list[Plane]:
+    """Textured faces of the boxes (kind "box"): front, the two sides, top and bottom, and a back where no
+    wall stands behind the box. Faces that touch the floor, the room's own walls or lie inside another box
+    are left out."""
+    up = np.array([0.0, 0.0, 1.0])
+    planes: list[Plane] = []
+    for i, b in enumerate(boxes):
+        w, h, deep = b.s1 - b.s0, b.t1 - b.t0, b.depth + b.back
+        corner = b.origin + b.s0 * b.u + b.t0 * up - b.back * b.n
+        faces = [(corner + deep * b.n, b.u, up, b.n, w, h)]  # front
+        if not b.wall_ends[0]:
+            faces.append((corner, b.n, up, -b.u, deep, h))
+        if not b.wall_ends[1]:
+            faces.append((corner + w * b.u, b.n, up, b.u, deep, h))
+        if not b.to_ceiling:
+            faces.append((corner + h * up, b.u, b.n, up, w, deep))  # top
+        if b.t0 > 0.03:
+            faces.append((corner, b.u, b.n, -up, w, deep))
+        if not b.attached:
+            faces.append((corner, b.u, up, -b.n, w, h))
+        for origin, fu, fv, fn, fw, fh in faces:
+            shape = _hidden(box(0, 0, fw, fh), origin, fu, fv, fn, fw, b, boxes, i)
+            if shape is None or shape.area < 0.004:
+                continue
+            p = Plane("box", origin, fu, fv, fn, fw, fh, shape, carve=False)
+            p.box = i
+            planes.append(p)
+    return planes
+
+
+def _paint_unseen_planes(planes: list[Plane]) -> None:
+    """A wall, floor or ceiling that no camera saw (the wall behind a shower curtain, a closet nobody
+    scanned) takes the median colour of what cameras did see of the same kind of surface in its room, or in
+    the whole house when its room has none. Without this it is a flat grey that belongs to no room."""
+
+    def colour_of(group: list[Plane]) -> np.ndarray | None:
+        px = [p.image[..., :3][p.shape_mask & ~p.unseen][::17] for p in group if p.seen >= 0.3]
+        px = [x for x in px if len(x)]
+        return np.median(np.concatenate(px), axis=0).astype(np.uint8) if px else None
+
+    for kind in ("wall", "floor", "ceiling"):
+        of_kind = [p for p in planes if p.kind == kind]
+        house = colour_of(of_kind)
+        for p in of_kind:
+            if p.seen >= UNSEEN_PLANE:
+                continue
+            colour = colour_of([q for q in of_kind if q.room == p.room and q.room >= 0])
+            colour = house if colour is None else colour
+            if colour is not None:
+                p.image[..., :3][p.unseen] = colour
+
+
+BOX_MIN_SEEN = 0.35  # a box whose front the cameras see less of than this is not trusted
+
+
+def seen_boxes(boxes: list[Box], scan: Scan, panos: PanoSet) -> tuple[list[Box], int]:
+    """Drop boxes whose front no camera really sees: the relief found a surface there, but the photos
+    look straight through it (scan debris, the far side of a curtain). Their scan triangles stay as they
+    were. The check bakes each front at low resolution. Returns (kept boxes, number dropped)."""
+    if not boxes:
+        return boxes, 0
+    fronts: dict[int, Plane] = {}
+    for p in box_planes(boxes):
+        fronts.setdefault(p.box, p)  # box_planes lists the front first; it is missing when fully hidden
+    keep = []
+    for i, b in enumerate(boxes):
+        p = fronts.get(i)
+        if p is not None and float(p.n @ b.n) > 0.9:
+            bake_plane(p, scan, panos, 32.0)
+            if p.seen < BOX_MIN_SEEN:
+                continue
+        keep.append(b)
+    return keep, len(boxes) - len(keep)
+
+
+def _paint_unseen_faces(faces: list[Plane]) -> None:
+    """Box faces that cameras saw almost nothing of (the top of a tall cabinet, the side of a fridge in a
+    corner) take the median colour of the best-seen face of their box where nothing was seen, instead of a
+    blur of the few texels that were."""
+    by_box: dict[int, list[Plane]] = {}
+    for p in faces:
+        by_box.setdefault(p.box, []).append(p)
+    for group in by_box.values():
+        best = max(group, key=lambda p: p.seen * p.shape.area)
+        if best.seen < 0.2:
+            continue
+        colour = np.median(best.image[..., :3][~best.unseen].reshape(-1, 3), axis=0).astype(np.uint8)
+        for p in group:
+            if p.seen < 0.15:
+                p.image[..., :3][p.unseen] = colour
+
+
+def in_boxes(pts: np.ndarray, boxes: list[Box], grow: float = BOX_TOL) -> np.ndarray:
+    """Which points lie in (or within `grow` of) any box."""
+    out = np.zeros(len(pts), bool)
+    for b in boxes:
+        out |= b.contains(pts, grow)
+    return out
+
+
 # ---------------------------------------------------------------- pieces (scan geometry)
 
 
-def piece_faces(scan: Scan, rooms: list[ShellRoom]) -> tuple[np.ndarray, np.ndarray]:
-    """Scan faces to keep as geometry, as (fixture indices, scanned-ceiling indices).
+def _under_a_ceiling(scan: Scan, faces: np.ndarray, reach: float = 0.8) -> np.ndarray:
+    """Which faces have a ceiling (a downward-facing scan surface) within `reach` above them. True for a
+    fan blade or a lamp on a short rod; False for the ceiling itself and for a beam, which are the top
+    layer. The ray starts just behind the face, so a beam's side starts inside the beam and finds nothing.
+    `reach` is short on purpose: scans often hold loose surfaces a metre above a ceiling (roof, attic)."""
+    out = np.zeros(len(faces), bool)
+    if not len(faces):
+        return out
+    o = scan.tris[faces].mean(1) - scan.normals[faces] * 0.02
+    up = np.tile([0.0, 0.0, 1.0], (len(faces), 1))
+    todo = np.arange(len(faces))
+    walked = np.zeros(len(faces))
+    for _ in range(4):
+        if not len(todo):
+            break
+        t, prim = scan.rays.cast(o[todo] + up[todo] * walked[todo, None], up[todo])
+        hit = (prim >= 0) & (walked[todo] + t < reach)
+        ceiling = np.zeros(len(todo), bool)
+        ceiling[hit] = scan.normals[prim[hit], 2] < -0.3
+        ceiling &= walked[todo] + t > 0.05  # not the face itself
+        out[todo[ceiling]] = True
+        again = hit & ~ceiling
+        walked[todo[again]] += t[again] + 1e-3
+        todo = todo[again]
+    return out
+
+
+HANG_MAX_FACE = 0.3  # m2; a larger triangle is a piece of ceiling, not of a fan
+HANG_MAX_SPAN = 2.2  # m; a hanging object (and its stand-in solid) is at most this long
+HANG_MIN_Z = 1.75  # m above the floor; a stand-in solid never reaches below this
+
+
+def _clumps(scan: Scan, faces: np.ndarray, grow: float = 0.1) -> list[tuple[Polygon, np.ndarray]]:
+    """Groups of faces that touch when seen from above (each outline grown by `grow`) and lie in the same
+    height layer (layers are separated by 0.4 m with no face in it), as (outline, positions into `faces`)."""
+    if not len(faces):
+        return []
+    centres = scan.tris[faces].mean(1)
+    order = np.argsort(centres[:, 2])
+    layer = np.zeros(len(faces), int)
+    layer[order] = np.cumsum(np.r_[0, np.diff(centres[order, 2]) > 0.4])
+    out = []
+    for k in range(layer.max() + 1):
+        members = np.nonzero(layer == k)[0]
+        tri = scan.tris[faces[members]]
+        polys = [Polygon(t[:, :2]).buffer(grow) for t in tri if Polygon(t[:, :2]).area > 1e-6]
+        blobs = unary_union(polys) if polys else None
+        if blobs is None or blobs.is_empty:
+            continue
+        for blob in [blobs] if blobs.geom_type == "Polygon" else list(blobs.geoms):
+            inside = members[shapely.contains_xy(blob, centres[members, 0], centres[members, 1])]
+            if len(inside):
+                out.append((blob, inside))
+    return out
+
+
+def _span(blob: Polygon) -> float:
+    minx, miny, maxx, maxy = blob.bounds
+    return float(math.hypot(maxx - minx, maxy - miny))
+
+
+def _in_compact_clumps(scan: Scan, faces: np.ndarray) -> np.ndarray:
+    """Which faces belong to a clump no longer than HANG_MAX_SPAN (a fan, a lamp), as opposed to a long
+    strip (the side of a beam) or a wide patch (a lower part of the ceiling)."""
+    out = np.zeros(len(faces), bool)
+    for blob, inside in _clumps(scan, faces):
+        if _span(blob) <= HANG_MAX_SPAN:
+            out[inside] = True
+    return out
+
+
+def piece_faces(scan: Scan, rooms: list[ShellRoom]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Scan faces to keep as geometry, as (fixture indices, scanned-ceiling indices), plus the indices of
+    hanging things that were dropped.
 
     A face inside a room is dropped only when a shell plane replaces it: it lies within SHELL_TOL of the
     floor, a flat ceiling or a wall AND is roughly parallel to it. Faces across the wall thickness (door
-    jambs, window reveals) and everything else stay. In rooms with a flat ceiling, things hanging from the
-    ceiling away from the walls (fans, lamps: they scan as crumpled sheets) are dropped."""
+    jambs, window reveals) and everything else stay. Things hanging from the ceiling away from the walls
+    (fans, pendant lamps: they scan as crumpled sheets) are dropped: in a flat-ceiling room anything above
+    1.9 m, in a vaulted room anything above 1.9 m that has ceiling above it."""
     c = scan.tris.mean(1)
     nrm = scan.normals
     keep = np.zeros(len(c), bool)
     ceil = np.zeros(len(c), bool)
+    hang = np.zeros(len(c), bool)
     for r in rooms:
         idx = np.nonzero(shapely.contains_xy(r.poly, c[:, 0], c[:, 1]))[0]
         inset = _inset(r.poly)
@@ -493,20 +1172,57 @@ def piece_faces(scan: Scan, rooms: list[ShellRoom]) -> tuple[np.ndarray, np.ndar
         on_wall = wall_d < SHELL_TOL  # everything in the wall slab: openings get clean jamb planes instead
         outside = (z < -0.3) | (z > top + 0.3)
         k = ~(on_floor | on_ceiling | on_wall | outside)
-        if r.flat_ceiling:
-            k &= ~((z > 1.9) & (wall_d > 0.35))  # hanging fans and lamps
-        else:
+        high = k & (z > 1.9) & (wall_d > 0.35)  # hanging fans and lamps
+        if not r.flat_ceiling:
+            # Part of a vaulted ceiling can be lower than another part: only what has ceiling above it,
+            # is made of small triangles and forms a compact clump is a hanging object.
+            high &= scan.areas[idx] < HANG_MAX_FACE
+            high[high] = _under_a_ceiling(scan, idx[high])
+            high[high] = _in_compact_clumps(scan, idx[high])
+        hang[idx[high]] = True
+        k &= ~high
+        if not r.flat_ceiling:
             is_ceiling = (z > 1.8) & (nrm[idx, 2] < -0.3)
             ceil[idx[k & is_ceiling]] = True
             k &= ~is_ceiling
         keep[idx[k]] = True
-    return _drop_crumbs(scan, np.nonzero(keep)[0]), _drop_crumbs(scan, np.nonzero(ceil)[0])
+    fixtures, ceilings = _drop_crumbs(scan, np.nonzero(keep)[0]), _drop_crumbs(scan, np.nonzero(ceil)[0])
+    return fixtures, ceilings, np.nonzero(hang)[0]
+
+
+def hanging_solids(scan: Scan, faces: np.ndarray, rooms: list[ShellRoom]) -> list[np.ndarray]:
+    """Stand-in solids (one (n, 3, 3) triangle array each) for dropped hanging things: per clump, the
+    outline of its faces seen from above, grown a little, extruded over its height. A fan scans as a few
+    crumpled blades, so the scan alone lets most of its photo through onto the ceiling; the solid blocks
+    it.
+
+    A solid hides whatever is behind it from the cameras, so it is only made for a clump that really is a
+    hanging object: no longer than HANG_MAX_SPAN and entirely above HANG_MIN_Z over the floor (cameras
+    stand lower than that, so none can end up inside one). Other dropped faces (the top of an open door, a
+    tall cabinet's upper edge) get no solid."""
+    out = []
+    for blob, inside in _clumps(scan, faces):
+        if scan.areas[faces[inside]].sum() < 0.05 or _span(blob) > HANG_MAX_SPAN:
+            continue  # a stray crumb, or too big to be one object
+        z = scan.tris[faces[inside]][..., 2]
+        centre = blob.representative_point()
+        floor = next((r.floor_z for r in rooms if r.poly.contains(centre)), None)
+        if floor is None or z.min() - floor < HANG_MIN_Z:
+            continue
+        z0, z1 = z.min() - 0.03, z.max() + 0.03
+        # Fan blades scan badly: the real fan is wider than what is left of it in the mesh.
+        solid = trimesh.creation.extrude_polygon(blob.convex_hull.buffer(0.2), height=float(z1 - z0))
+        solid.apply_translation([0, 0, z0])
+        out.append(np.asarray(solid.triangles))
+    return out
 
 
 def _seen(scan: Scan, faces: np.ndarray, panos: PanoSet) -> np.ndarray:
     """The faces whose centre at least one panorama sees from its front side."""
     if not len(faces):
         return faces
+    # Tested against the scan alone, not the stand-in solids: the ceiling above a removed fan stays (its
+    # texels fall back to the scan's own texture) instead of leaving a hole.
     _, valid = shade(scan.tris[faces].mean(1), scan.normals[faces], panos, scan.rays, snap=False)
     return faces[valid]
 
@@ -573,7 +1289,7 @@ def bake_triangles(
         y2 = (gj[None, :] + 0.5 - pad) / r[grp, None]
         pts = A[grp, None, :] + x2[..., None] * ex[grp, None, :] + y2[..., None] * ey[grp, None, :]
         nrm = np.broadcast_to(scan.normals[faces[grp], None, :], pts.shape)
-        rgb, valid = shade(pts.reshape(-1, 3), nrm.reshape(-1, 3), panos, scan.rays, snap=False)
+        rgb, valid = shade(pts.reshape(-1, 3), nrm.reshape(-1, 3), panos, scan.eyes, snap=False)
         miss = ~valid
         if miss.any():
             lc = y2 / cy[grp, None]
@@ -631,6 +1347,9 @@ def write_rebaked_interior_glb(
     dest: Path,
     res: float = 256.0,
     piece_res: float = 160.0,
+    debug: Path | None = None,
+    fit_boxes: bool = True,
+    drop_boxes: list[tuple[float, float, float]] | None = None,
 ) -> tuple[dict, np.ndarray]:
     """interior.glb: shell nodes `floor_N`, `walls_N`, `ceiling_N` and scan-geometry nodes `fixtures_N`,
     `ceiling_scan_N`, all textured from the panoramas. Returns (stats for the build report, the fixture
@@ -642,20 +1361,48 @@ def write_rebaked_interior_glb(
     )
     for r in rooms:
         measure_ceiling(scan, r)
+    fixtures, ceilings, hanging = piece_faces(scan, rooms)
+    solids = hanging_solids(scan, hanging, rooms)
+    if solids:
+        scan.sight = Raycaster(np.concatenate([scan.tris, *solids]))
     planes = shell_planes(rooms)
     behind = unary_union([r.poly for r in rooms]).buffer(-0.02)
     stats, frames = [], []
     for p in planes:
         st, fr = bake_plane(p, scan, panos, res, behind)
         stats.append(st)
+        for f in fr:
+            f.room = p.room
         frames += fr
     for p in frames:
         bake_plane(p, scan, panos, res)
+    # Wall-attached fixtures with flat fronts (cabinets, counters, fridges, tub surrounds) become boxes.
+    boxes = relief_boxes(scan, rooms, debug) if fit_boxes else []
+    if fit_boxes:
+        # Free-standing door leaves, from what the wall boxes left over (plus the dropped tops of doors).
+        loose = np.concatenate([fixtures[~in_boxes(scan.tris[fixtures].mean(1), boxes)], hanging])
+        leaves = leaf_boxes(scan, loose, rooms)
+        boxes += leaves
+    boxes, phantom = seen_boxes(boxes, scan, panos)
+    # Hand fixes (overrides/<model>.json "drop_boxes"): a box that contains one of these points is not a
+    # real fixture (the scan bulges in front of a mirror, say) and goes back to being scan triangles.
+    if drop_boxes:
+        pts = np.asarray(drop_boxes, float).reshape(-1, 3)
+        boxes = [b for b in boxes if not b.contains(pts).any()]
+    if debug is not None:
+        _write_box_list(boxes, debug / "boxes.json")
+    faces = box_planes(boxes)
+    for p in faces:
+        bake_plane(p, scan, panos, res)
+    _paint_unseen_faces(faces)
     planes += frames
+    _paint_unseen_planes(planes)
+    planes += faces
     pages = pack(planes)
     scene = trimesh.Scene()
     mats = [_material(pg, f"shell_{i}") for i, pg in enumerate(pages)]
-    for kind, node in (("floor", "floor"), ("wall", "walls"), ("ceiling", "ceiling")):
+    nodes = (("floor", "floor"), ("wall", "walls"), ("ceiling", "ceiling"), ("box", "fixtures_box"))
+    for kind, node in nodes:
         for pi in range(len(pages)):
             parts = [plane_mesh(p) for p in planes if p.page == pi and p.kind == kind]
             parts = [m for m in parts if m is not None]
@@ -666,7 +1413,7 @@ def write_rebaked_interior_glb(
             m.apply_transform(hm.Z_UP_TO_Y_UP)
             scene.add_geometry(m, node_name=f"{node}_{pi}", geom_name=f"{node}_{pi}")
 
-    fixtures, ceilings = piece_faces(scan, rooms)
+    fixtures = fixtures[~in_boxes(scan.tris[fixtures].mean(1), boxes)]
     # Keep only pieces some indoor camera sees (drops the roof above a vaulted ceiling, junk inside walls).
     fixtures = _drop_crumbs(scan, _seen(scan, fixtures, panos))
     ceilings = _seen(scan, ceilings, panos)
@@ -681,7 +1428,11 @@ def write_rebaked_interior_glb(
     scene.export(dest)
     area = sum(s["area"] for s in stats)
     report = {
-        "planes": {k: sum(p.kind == k for p in planes) for k in ("wall", "floor", "ceiling")},
+        "planes": {k: sum(p.kind == k for p in planes) for k in ("wall", "floor", "ceiling", "box")},
+        "relief_boxes": len(boxes),
+        "door_leaf_slabs": len(leaves) if fit_boxes else 0,
+        "relief_boxes_unseen_dropped": phantom,
+        "hanging_objects_removed": len(solids),
         "vaulted_rooms": sum(not r.flat_ceiling for r in rooms),
         "texture_pages": n_pages,
         "fixture_faces": int(len(fixtures)),
@@ -691,4 +1442,5 @@ def write_rebaked_interior_glb(
         "framed_openings": len(frames),
     }
     report["panoramas_indoor"] = len(panos)
-    return report, scan.tris[fixtures]
+    solid = [scan.tris[fixtures], *[b.triangles() for b in boxes]]
+    return report, np.concatenate(solid)

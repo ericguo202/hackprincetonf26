@@ -618,6 +618,9 @@ def build(
     refresh: bool = False,
     texture_size: int = 2048,
     bake_res: float = 256.0,
+    debug_dir: Path | None = None,
+    holdout: tuple[str, ...] = (),
+    fit_boxes: bool = True,
 ) -> dict:
     block = load_block(block_id)
     house = next((h for h in block["houses"] if h["listing_id"] == listing_id), None)
@@ -673,9 +676,25 @@ def build(
         # Clean shell + scan pieces, every texel coloured from the original panoramas (worldgen/rebake.py).
         mp.download_skyboxes(model_id, raw / "skybox_2k", "2k")
         panos = PanoSet(model, raw / "skybox_2k")
-        tmp = out / "cache" / "glb" / f"{model_id}_interior_pano.glb"
+        # The uncompressed glb is kept for the preview and scoring scripts. worldgen/out is shared by every
+        # worktree, so builds of other pack versions get their own file and cannot overwrite each other.
+        suffix = "" if version == 1 else f"_v{version}"
+        tmp = out / "cache" / "glb" / f"{model_id}_interior_pano{suffix}.glb"
+        if holdout:
+            # Quality measurement: bake without these panoramas, then score against them
+            # (scripts/preview/render_compare.py --score ... <labels>). Never ship a hold-out build.
+            label = {q["id"]: q.get("label") for q in model.get("panoLocations") or []}
+            panos = panos.subset([i for i, q in enumerate(panos.panos) if label.get(q.id) not in holdout])
+            tmp = tmp.with_name(f"{model_id}_interior_pano_holdout{suffix}.glb")
         interior_counts, fixture_tris = rb.write_rebaked_interior_glb(
-            scan, shell_rooms(parts), panos, tmp, bake_res
+            scan,
+            shell_rooms(parts),
+            panos,
+            tmp,
+            bake_res,
+            debug=debug_dir,
+            fit_boxes=fit_boxes,
+            drop_boxes=[tuple(d["at"]) for d in overrides.get("drop_boxes") or []],
         )
         interior_counts["panoramas"] = len(panos)
         hm.compress_glb(tmp, house_dir / "interior.glb", texture_size)
@@ -732,6 +751,21 @@ def main(argv: list[str] | None = None) -> int:
         default=2048,
         help="max texture edge in interior.glb (1024 halves GPU memory)",
     )
+    p.add_argument(
+        "--debug-dir",
+        type=Path,
+        help="write QA images here (wall relief maps with the fitted fixture boxes)",
+    )
+    p.add_argument(
+        "--holdout",
+        default="",
+        help="comma-separated pano labels to leave out of the bake, for scoring (use with --version 99)",
+    )
+    p.add_argument(
+        "--no-boxes",
+        action="store_true",
+        help="keep wall-attached fixtures as scan triangles instead of fitting clean boxes (fallback)",
+    )
     args = p.parse_args(argv)
     from worldgen import versions
 
@@ -746,6 +780,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.refresh,
                 args.texture_size,
                 args.bake_res,
+                args.debug_dir,
+                tuple(x for x in args.holdout.split(",") if x),
+                not args.no_boxes,
             ),
             indent=1,
         )

@@ -21,5 +21,11 @@
         { "label": "dining_room", "point": [0.0, 0.0], "confidence": 0.85 }
       ]
     }
+  ],
+  "drop_boxes": [
+    {
+      "at": [7.43, 10.7, 1.8],
+      "why": "Bathroom r11: the scan bulges 0.34 m out of the wall where the big mirror above the sink is (mirrors confuse the depth camera), and the fitted box stood in front of the mirror like a pillar. Plan coordinates (x, y, z); any fitted box that contains the point is dropped."
+    }
   ]
 }
