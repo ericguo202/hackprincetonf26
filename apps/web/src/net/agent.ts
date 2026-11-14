@@ -10,6 +10,7 @@ import {
 } from "../store";
 
 const AGENT_URL = import.meta.env.VITE_AGENT_URL ?? "/agent";
+let stream: EventSource | null = null;
 const EVENTS = [
   "agent.todos",
   "agent.subagent",
@@ -46,11 +47,16 @@ export function applyAgentEvent(type: string, raw: unknown) {
       const data = raw as AgentEvents["agent.message"];
       const last = s.messages.at(-1);
       // Streamed text: append to the open agent message until one arrives with final: true.
+      // Lane B closes a turn with {text: "", final: true}.
       if (last && last.role === "agent" && !last.final) {
         const merged: ChatMessage = { role: "agent", text: last.text + data.text, final: data.final };
-        return s.set({ messages: [...s.messages.slice(0, -1), merged] });
+        return s.set({ messages: [...s.messages.slice(0, -1), merged], waiting: !data.final });
       }
-      return s.set({ messages: [...s.messages, { role: "agent", text: data.text, final: data.final }] });
+      if (!data.text && data.final) return s.set({ waiting: false });
+      return s.set({
+        messages: [...s.messages, { role: "agent", text: data.text, final: data.final }],
+        waiting: !data.final,
+      });
     }
     case "listings.results":
       return s.set({ listings: (raw as AgentEvents["listings.results"]).matches });
@@ -60,31 +66,50 @@ export function applyAgentEvent(type: string, raw: unknown) {
     }
     case "error": {
       const text = `Error: ${(raw as AgentEvents["error"]).message}`;
-      return s.set({ messages: [...s.messages, { role: "agent", text, final: true }] });
+      return s.set({ messages: [...s.messages, { role: "agent", text, final: true }], waiting: false });
     }
   }
 }
 
 export async function startAgentSession(playerId: string, blockId: string): Promise<string> {
+  stream?.close();
+  stream = null;
   const r = await fetch(`${AGENT_URL}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ player_id: playerId, block_id: blockId }),
   });
+  if (!r.ok) throw new Error(`agent session failed (${r.status})`);
   const { session_id } = (await r.json()) as { session_id: string };
   const es = new EventSource(`${AGENT_URL}/sessions/${session_id}/stream`);
   for (const type of EVENTS) {
     es.addEventListener(type, (e) => applyAgentEvent(type, JSON.parse((e as MessageEvent).data)));
   }
+  es.onerror = () => {
+    // EventSource retries on its own; a dead agent still shows up as a chat error once.
+  };
+  stream = es;
+  useStore.getState().set({ agentSessionId: session_id, agentStatus: "live" });
   return session_id;
 }
 
 export async function sendAgentMessage(sessionId: string, text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
   const s = useStore.getState();
-  s.set({ messages: [...s.messages, { role: "user", text, final: true }] });
-  await fetch(`${AGENT_URL}/sessions/${sessionId}/messages`, {
+  s.set({
+    messages: [...s.messages, { role: "user", text: trimmed, final: true }],
+    waiting: true,
+    todos: [],
+    subagents: [],
+    tools: [],
+  });
+  const r = await fetch(`${AGENT_URL}/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text: trimmed }),
   });
+  if (!r.ok) {
+    applyAgentEvent("error", { message: `could not send (${r.status})` });
+  }
 }
