@@ -2,7 +2,7 @@
 
 Lane C is the game client's world and player: `apps/web/src/world/` and
 `apps/web/src/player/` (AGENTS.md section 6). Written 2026-11-14 at main
-`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), for the capsule radius (section 12), for crouch and contracts v2.4.0 (section 13), and for the production pack path (section 14). Read AGENTS.md first. Rules that matter most here: stay inside
+`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), for the capsule radius (section 12), for crouch and contracts v2.4.0 (section 13), for the production pack path (section 14), and for the block walk-in and the pool noodle (section 15). Read AGENTS.md first. Rules that matter most here: stay inside
 those two folders (plus `apps/web/public/characters/`). Never edit
 `apps/web/src/store.ts` (Lane D) or anything in `contracts/` (all four lanes
 agree first). Cross-lane needs go in `HANDOFF.md`.
@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 200 tests in 13 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 218 tests in 14 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -326,3 +326,30 @@ Also not handled: standing up under something low. The capsule regrows into it.
 - set none of the dev switches;
 - `buildFilter` already covers Lane A's committed publish;
 - a static deploy doesn't restart the game service.
+
+## 15. Block-to-house walk-in, and the pool noodle
+
+**Walk-in, verified headless.** This is the only way into a house on the production build, which now starts players on the block.
+- **Setup:** 6915 stands in as the hero, since it's the only house whose collision is on this machine (`~/Downloads/packs`); 7014 needs Lane A's publish. The run uses the client's own `loadPack` (with the hero spawn), `blockLayout`, `stepZone` and `roomIdAt`, the real `collision.glb`, the yard and ceilings, and a player-sized capsule at walking speed.
+- **Found and fixed:** with one placeholder box over all rooms, the walk stopped 1.21 m from the door, outside the 0.9 m trigger. 6915's front door is on the living room's west wall, about a metre in from the bedrooms, and the box covered it. With that, nobody could get into the house on the production build. The block now draws and collides one box per room (`placeholder.houseBoxesLocal`), and a unit test with a recessed entry guards it.
+- **After the fix:**
+  1. From the derived spawn (2.20, −95.14) the capsule walks east along the street and switches zone at 5.3 s.
+  2. It lands at (−1.99, −0.13), house-local coordinates (the block door was at (16.70, −95.19)), in `r4`, the living room, with the door disarmed.
+  3. Walking in to (0.6, −1.2) keeps it in `r4` and re-arms the door.
+  4. Walking back to the door switches to the block, landing at (15.50, −95.19), 1.2 m from the door.
+  5. It doesn't bounce while standing there for 2 s.
+  6. It re-enters after walking 2.5 m away and back.
+- **Not covered:** this is a plain capsule, not ecctrl's floating one, and nothing was rendered.
+
+**Pool noodle** (contracts 2.4.0 `weapon: "noodle"`):
+- **Defaults:** every number is a named constant in `player/weapons.ts` (`NOODLE`, `WEAPON_RULES`), and Lane D may overrule any of them (HANDOFF).
+  - **Swing:** melee, measured from the head. Reach is 2.0 m to the target's body surface in 3D. The arc is 60° wide, horizontal, centred on the aim, and grazing a body's side counts.
+  - **Cooldown:** 0.8 s; the blaster stays at 4 shots/s.
+  - **To eliminate:** 2 noodle hits, against 3 from the blaster.
+- **What it hits:** players only. The swing ignores walls and furniture, and doesn't stop darts. That also means it can hit through a thin wall within 2 m; a server line-of-sight check would close that.
+- **The `fire` payload:** `{origin: head, dir: aim, weapon: "noodle", target_id?}`. The swing plays the `shoot` anim; there's no new state.
+- **Switching:** keys 1 and 2 (`weaponState`). The held weapon picks the prop in `Character`/`characterRig`.
+- **The prop:** the kit has no noodle, so it's a 1.2 m foam cylinder on the blaster's hand bone, placed like the blaster.
+- **Remote players always show the blaster:** the wire has no per-player weapon field, so showing it would be a contract change.
+- **Not seen in a browser:** the noodle prop, the swing feel and the absence of a swing effect. There's no swoosh visual yet, only the anim and the hit marker.
+- **Dev stand-in:** `fakeRemotes` uses health 6, so 3 blaster or 2 noodle hits eliminate.
