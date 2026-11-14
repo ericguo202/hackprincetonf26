@@ -1,0 +1,1 @@
+One folder per skill with a SKILL.md (AGENTS.md section 10): furnish-living-room (first, in the demo), furnish-for-play, home-search, listing-audit, furnish-bedroom, furnish-nursery. Lane B owns this directory.

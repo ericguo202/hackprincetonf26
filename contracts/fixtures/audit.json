@@ -1,0 +1,7 @@
+{
+  "listing_id": "hou_000123",
+  "findings": [
+    { "check": "beds_vs_rooms", "severity": "conflict", "listed": 3, "observed": 2, "evidence": "listing.beds; rooms[label in (bedroom, primary_bedroom)]" },
+    { "check": "area_vs_scan", "severity": "info", "listed": 172, "observed": 161.4, "evidence": "listing.area_m2; sum(rooms.area_m2), off 6%" }
+  ]
+}

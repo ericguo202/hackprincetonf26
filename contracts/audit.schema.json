@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "audit.schema.json",
+  "title": "Audit",
+  "description": "houses/<listing_id>/audit.json: deterministic contradictions found between data layers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["listing_id", "findings"],
+  "properties": {
+    "listing_id": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check", "severity", "listed", "observed", "evidence"],
+        "properties": {
+          "check": { "type": "string", "description": "e.g. stories_vs_scan, beds_vs_rooms, area_vs_scan, pool_vs_vexcel" },
+          "severity": { "enum": ["info", "warn", "conflict"] },
+          "listed": { "description": "Value from the listing (CoStar)" },
+          "observed": { "description": "Value from the scan or imagery" },
+          "evidence": { "type": "string", "description": "Data fields used, e.g. listing.stories, rooms[label=staircase]" }
+        }
+      }
+    }
+  }
+}

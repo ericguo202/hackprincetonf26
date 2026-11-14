@@ -1,0 +1,28 @@
+{"type": "agent.todos", "data": {"todos": [{"content": "Find the living room the player is in", "status": "in_progress"}, {"content": "Pick movie-night furniture sized to the room", "status": "pending"}, {"content": "Lay out, validate, fix", "status": "pending"}, {"content": "Place it in the house", "status": "pending"}]}}
+{"type": "agent.tool", "data": {"agent": "concierge", "tool": "get_player_context", "status": "finished", "summary": "Player in hou_000123, living room r1"}}
+{"type": "agent.subagent", "data": {"name": "room-scout", "status": "started", "summary": "Choose the room for a family movie setup"}}
+{"type": "agent.tool", "data": {"agent": "room-scout", "tool": "get_room_geometry", "status": "finished", "summary": "hou_000123.r1: 25.2 m2, 2 doors, 1 window"}}
+{"type": "agent.subagent", "data": {"name": "room-scout", "status": "finished", "summary": "hou_000123.r1 living room, 25.2 m2"}}
+{"type": "agent.todos", "data": {"todos": [{"content": "Find the living room the player is in", "status": "completed"}, {"content": "Pick movie-night furniture sized to the room", "status": "in_progress"}, {"content": "Lay out, validate, fix", "status": "pending"}, {"content": "Place it in the house", "status": "pending"}]}}
+{"type": "agent.subagent", "data": {"name": "asset-curator", "status": "started", "summary": "Movie-night living room, max 6.0 x 4.2 m"}}
+{"type": "agent.tool", "data": {"agent": "asset-curator", "tool": "search_assets", "status": "finished", "summary": "couch_01, tv_stand_01 match"}}
+{"type": "agent.subagent", "data": {"name": "asset-curator", "status": "finished", "summary": "2 items: couch_01, tv_stand_01"}}
+{"type": "agent.todos", "data": {"todos": [{"content": "Find the living room the player is in", "status": "completed"}, {"content": "Pick movie-night furniture sized to the room", "status": "completed"}, {"content": "Lay out, validate, fix", "status": "in_progress"}, {"content": "Place it in the house", "status": "pending"}]}}
+{"type": "agent.subagent", "data": {"name": "layout-planner", "status": "started", "summary": "Place couch_01 and tv_stand_01 in hou_000123.r1"}}
+{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "propose_poses", "status": "finished", "summary": "couch_01: 5 poses against_wall"}}
+{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "propose_poses", "status": "finished", "summary": "tv_stand_01: 3 poses facing couch_01"}}
+{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "validate_layout", "status": "finished", "summary": "p_01: 0 conflicts"}}
+{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "commit_placement", "status": "finished", "summary": "p_01: 2 objects placed"}}
+{"type": "agent.subagent", "data": {"name": "layout-planner", "status": "finished", "summary": "p_01 placed, 2 objects, none dropped"}}
+{"type": "agent.todos", "data": {"todos": [{"content": "Find the living room the player is in", "status": "completed"}, {"content": "Pick movie-night furniture sized to the room", "status": "completed"}, {"content": "Lay out, validate, fix", "status": "completed"}, {"content": "Place it in the house", "status": "completed"}]}}
+{"type": "agent.message", "data": {"text": "Done. The couch is against the south wall facing the TV, ", "final": false}}
+{"type": "agent.message", "data": {"text": "and both doors keep a 0.75 m walkway (validate_layout, 0 conflicts).", "final": true}}
+{"type": "agent.todos", "data": {"todos": [{"content": "Turn needs into criteria", "status": "in_progress"}, {"content": "Search all listings", "status": "pending"}, {"content": "Audit the top candidates in parallel", "status": "pending"}, {"content": "Rank and mark the best home", "status": "pending"}]}}
+{"type": "agent.tool", "data": {"agent": "concierge", "tool": "search_listings", "status": "finished", "summary": "for_sale, max 450000, min 3 beds: 1 match with interior"}}
+{"type": "listings.results", "data": {"matches": [{"listing_id": "hou_000123", "score": 0.82, "evidence": [{"criterion": "price", "passed": true, "value": 425000, "source": "listing.price_usd"}, {"criterion": "stories", "passed": true, "value": 1, "source": "listing.stories"}, {"criterion": "fenced_yard", "passed": true, "value": true, "source": "listing.features.fenced_yard"}, {"criterion": "pool", "passed": true, "value": false, "source": "listing.features.pool"}]}]}}
+{"type": "agent.subagent", "data": {"name": "listing-auditor", "status": "started", "summary": "Audit hou_000123 for an infant"}}
+{"type": "agent.tool", "data": {"agent": "listing-auditor", "tool": "get_audit", "status": "finished", "summary": "hou_000123: 1 conflict, 1 info"}}
+{"type": "audit.findings", "data": {"listing_id": "hou_000123", "findings": [{"check": "beds_vs_rooms", "severity": "conflict", "listed": 3, "observed": 2, "evidence": "listing.beds; rooms[label in (bedroom, primary_bedroom)]"}]}}
+{"type": "agent.subagent", "data": {"name": "listing-auditor", "status": "finished", "summary": "hou_000123: fits 4 of 5 needs; beds mismatch"}}
+{"type": "agent.tool", "data": {"agent": "concierge", "tool": "focus_listing", "status": "finished", "summary": "Beacon on hou_000123"}}
+{"type": "agent.message", "data": {"text": "hou_000123 fits: one story, fenced yard, no pool, $425,000. Note it is listed with 3 beds, but the scan shows 2 bedrooms.", "final": true}}

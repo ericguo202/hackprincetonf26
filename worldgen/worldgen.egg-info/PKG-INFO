@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: worldgen
+Version: 0.1.0
+Summary: Offline world-pack builder: CoStar index, Matterport houses, Vexcel block, furniture catalog, audit
+Requires-Python: >=3.11
+Requires-Dist: boto3>=1.44.3
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: jsonschema>=4.26.0
+Requires-Dist: numpy>=2.4.6
+Requires-Dist: pandas>=3.1.1
+Requires-Dist: pygltflib>=1.16.5
+Requires-Dist: python-dotenv>=1.2.4
+Requires-Dist: shapely>=2.2.0
+Requires-Dist: trimesh>=5.2.1

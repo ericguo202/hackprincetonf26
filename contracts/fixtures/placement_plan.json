@@ -1,18 +1,11 @@
 {
   "plan_id": "p_01",
-  "listing_id": "house_a",
-  "room_id": "house_a.r3",
+  "listing_id": "hou_000123",
+  "room_id": "hou_000123.r1",
   "status": "validated",
   "objects": [
-    {
-      "instance_id": "o1",
-      "asset_id": "crib_01",
-      "x": 2.4,
-      "y": 0.0,
-      "z": 3.1,
-      "rot_deg": 90,
-      "reason": "Against the interior wall, away from the window"
-    }
+    { "instance_id": "o1", "asset_id": "couch_01", "x": 3.0, "y": 0.0, "z": 0.45, "rot_deg": 0, "reason": "Against the south wall, facing the TV" },
+    { "instance_id": "o2", "asset_id": "tv_stand_01", "x": 3.0, "y": 0.0, "z": 3.95, "rot_deg": 180, "reason": "Opposite the couch, clear of the window" }
   ],
   "conflicts": []
 }

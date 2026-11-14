@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "worldgen-tools",
+  "description": "Node CLIs used by worldgen: gltf-transform for Draco/meshopt compression (npx gltf-transform ...)",
+  "devDependencies": {
+    "@gltf-transform/cli": "4.5.1"
+  }
+}

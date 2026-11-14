@@ -25,6 +25,11 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
-# raw sponsor downloads (convert before committing)
-data/raw/
+# worldgen output (published to the bucket, never committed) and raw sponsor downloads
+worldgen/out/
+raw/
+
+# colyseus
+.colyseus-cloud.json
+.devmode.json
 

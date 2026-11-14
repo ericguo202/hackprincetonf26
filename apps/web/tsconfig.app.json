@@ -14,7 +14,9 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    // contracts/game-state.ts lives outside this package; resolve its import from here.
+    "paths": { "@colyseus/schema": ["./node_modules/@colyseus/schema"] }
   },
-  "include": ["src"]
+  "include": ["src", "../../contracts/game-state.ts"]
 }

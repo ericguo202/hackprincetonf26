@@ -1,0 +1,18 @@
+{
+  "block_id": "hou_heights_01",
+  "version": 1,
+  "origin": { "lat": 29.79, "lon": -95.4 },
+  "block": { "render": "block/render.glb", "collision": "block/collision.glb" },
+  "houses": [
+    {
+      "listing_id": "hou_000123",
+      "interior": "houses/hou_000123/interior.glb",
+      "collision": "houses/hou_000123/collision.glb",
+      "rooms": "houses/hou_000123/rooms.json",
+      "graph": "houses/hou_000123/graph.json",
+      "audit": "houses/hou_000123/audit.json"
+    }
+  ],
+  "spawns": [[0.0, 0.0, 4.0], [3.0, 0.0, 4.0]],
+  "furniture_catalog": "furniture/catalog.json"
+}

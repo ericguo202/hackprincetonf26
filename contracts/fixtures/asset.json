@@ -1,12 +1,13 @@
 {
-  "id": "crib_01",
-  "name": "Crib",
-  "category": "crib",
-  "tags": ["nursery", "infant", "sleep"],
-  "file": "assets/furniture/crib_01.glb",
-  "size_m": { "w": 0.75, "d": 1.35, "h": 0.95 },
+  "id": "couch_01",
+  "name": "Couch",
+  "category": "couch",
+  "tags": ["living_room", "seating", "cover"],
+  "file": "furniture/couch_01.glb",
+  "size_m": { "w": 2.1, "d": 0.9, "h": 0.85 },
   "placement": "wall",
-  "clearance_m": { "front": 0.6 },
+  "clearance_m": { "front": 0.75 },
+  "cover": "half",
   "license": "CC0",
-  "source": "Poly Haven"
+  "source": "Kenney"
 }

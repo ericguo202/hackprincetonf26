@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "graph.schema.json",
+  "title": "HouseGraph",
+  "description": "houses/<listing_id>/graph.json: rooms as nodes, doors and stairs as edges.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["nodes", "edges"],
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "area_m2", "floor", "has_window"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_]+\\.r[0-9]+$" },
+          "label": { "type": "string" },
+          "area_m2": { "type": "number", "minimum": 0 },
+          "floor": { "type": "integer" },
+          "has_window": { "type": "boolean" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["a", "b", "kind", "width_m"],
+        "properties": {
+          "a": { "type": "string" },
+          "b": { "type": "string" },
+          "kind": { "enum": ["door", "stairs", "open"] },
+          "width_m": { "type": ["number", "null"], "minimum": 0 }
+        }
+      }
+    }
+  }
+}

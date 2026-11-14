@@ -2,12 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "listing.schema.json",
   "title": "Listing",
+  "description": "One entry of listings/index.json. Fields the CoStar folder does not have stay null; never fabricate them.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "id", "address", "lat", "lon", "status", "price_usd", "rent_usd_month",
-    "beds", "baths", "area_m2", "stories", "year_built", "property_type",
-    "features", "site", "has_interior", "interior_mesh", "world", "source"
+    "id", "address", "lat", "lon", "block_id", "status", "property_type",
+    "price_usd", "rent_usd_month", "tax_usd_year", "beds", "baths", "area_m2",
+    "stories", "year_built", "features", "schools", "site", "has_interior",
+    "world", "source"
   ],
   "$defs": {
     "vec3": {
@@ -22,43 +24,73 @@
     "address": { "type": "string" },
     "lat": { "type": "number", "minimum": -90, "maximum": 90 },
     "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+    "block_id": {
+      "type": ["string", "null"],
+      "description": "The world pack this listing is placed in; null when it is in the index but on no built block"
+    },
     "status": { "enum": ["for_sale", "for_rent"] },
+    "property_type": { "enum": ["single_family", "multi_family", "apartment", "commercial", "other"] },
     "price_usd": { "type": ["number", "null"], "minimum": 0 },
     "rent_usd_month": { "type": ["number", "null"], "minimum": 0 },
-    "beds": { "type": "integer", "minimum": 0 },
-    "baths": { "type": "number", "minimum": 0 },
-    "area_m2": { "type": "number", "minimum": 0 },
-    "stories": { "type": "integer", "minimum": 1 },
+    "tax_usd_year": { "type": ["number", "null"], "minimum": 0 },
+    "beds": { "type": ["integer", "null"], "minimum": 0 },
+    "baths": { "type": ["number", "null"], "minimum": 0 },
+    "area_m2": { "type": ["number", "null"], "minimum": 0 },
+    "stories": { "type": ["integer", "null"], "minimum": 1 },
     "year_built": { "type": ["integer", "null"] },
-    "property_type": { "type": "string" },
-    "features": { "type": "array", "items": { "type": "string" } },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pool", "parking_spaces", "garage", "fenced_yard", "utilities"],
+      "properties": {
+        "pool": { "type": ["boolean", "null"] },
+        "parking_spaces": { "type": ["integer", "null"], "minimum": 0 },
+        "garage": { "type": ["boolean", "null"] },
+        "fenced_yard": { "type": ["boolean", "null"] },
+        "utilities": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "schools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "level", "distance_m", "rating"],
+        "properties": {
+          "name": { "type": "string" },
+          "level": { "enum": ["elementary", "middle", "high", "other"] },
+          "distance_m": { "type": ["number", "null"], "minimum": 0 },
+          "rating": { "type": ["number", "null"], "minimum": 0, "maximum": 10 }
+        }
+      }
+    },
     "site": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["yard_area_m2", "parking_spaces", "street_class"],
+      "required": ["yard_area_m2", "street_class"],
       "properties": {
         "yard_area_m2": { "type": ["number", "null"], "minimum": 0 },
-        "parking_spaces": { "type": ["integer", "null"], "minimum": 0 },
         "street_class": { "type": ["string", "null"] }
       }
     },
     "has_interior": { "type": "boolean" },
-    "interior_mesh": { "type": ["string", "null"] },
     "world": {
-      "type": "object",
+      "description": "Placement of the house group in the block frame; null when the listing is not on a built block",
+      "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["position", "heading_deg", "door"],
       "properties": {
         "position": { "$ref": "#/$defs/vec3" },
         "heading_deg": { "type": "number" },
-        "door": { "$ref": "#/$defs/vec3" }
+        "door": { "$ref": "#/$defs/vec3", "description": "House-local door point" }
       }
     },
     "source": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["costar_id", "matterport_model_id", "vexcel"],
       "properties": {
-        "costar_id": { "type": ["string", "null"] },
+        "costar_id": { "type": "string", "description": "Raw CoStar record id, kept for traceability" },
         "matterport_model_id": { "type": ["string", "null"] },
         "vexcel": { "type": ["string", "null"] }
       }

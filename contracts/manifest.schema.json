@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "manifest.schema.json",
+  "title": "PackManifest",
+  "description": "DRAFT (shape not fixed by AGENTS.md; see HANDOFF.md). packs/<block_id>/v<N>/manifest.json. Block frame: origin at block center, ground level; +X east, +Y up, +Z south.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["block_id", "version", "origin", "block", "houses", "spawns", "furniture_catalog"],
+  "$defs": {
+    "spawn": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+  },
+  "properties": {
+    "block_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "version": { "type": "integer", "minimum": 1 },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lat", "lon"],
+      "properties": {
+        "lat": { "type": "number" },
+        "lon": { "type": "number" }
+      }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["render", "collision"],
+      "properties": {
+        "render": { "type": "string" },
+        "collision": { "type": "string" }
+      }
+    },
+    "houses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["listing_id", "interior", "collision", "rooms", "graph", "audit"],
+        "properties": {
+          "listing_id": { "type": "string" },
+          "interior": { "type": "string" },
+          "collision": { "type": "string" },
+          "rooms": { "type": "string" },
+          "graph": { "type": "string" },
+          "audit": { "type": "string" }
+        }
+      }
+    },
+    "spawns": {
+      "description": "Sidewalk spawn points in the block frame",
+      "type": "array",
+      "items": { "$ref": "#/$defs/spawn" }
+    },
+    "furniture_catalog": { "type": "string" }
+  }
+}

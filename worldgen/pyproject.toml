@@ -1,0 +1,42 @@
+[project]
+name = "worldgen"
+version = "0.1.0"
+description = "Offline world-pack builder: CoStar index, Matterport houses, Vexcel block, furniture catalog, audit"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.44.3",
+    "httpx>=0.28.1",
+    "jsonschema>=4.26.0",
+    "numpy>=2.4.6",
+    "pandas>=3.1.1",
+    "pygltflib>=1.16.5",
+    "python-dotenv>=1.2.4",
+    "shapely>=2.2.0",
+    "trimesh>=5.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+# This folder is the `worldgen` package, so `uv run python -m worldgen.costar` works from here.
+[tool.setuptools]
+package-dir = { "worldgen" = "." }
+packages = ["worldgen", "worldgen.sources"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["out"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

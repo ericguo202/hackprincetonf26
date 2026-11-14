@@ -1,0 +1,4 @@
+# pnpm settings for this package (not a multi-package workspace).
+# msgpackr-extract is an optional native speedup for the Colyseus SDK; browsers never use it.
+allowBuilds:
+  msgpackr-extract: false

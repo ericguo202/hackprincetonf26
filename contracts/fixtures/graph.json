@@ -1,0 +1,13 @@
+{
+  "nodes": [
+    { "id": "hou_000123.r1", "label": "living_room", "area_m2": 25.2, "floor": 0, "has_window": true },
+    { "id": "hou_000123.r2", "label": "primary_bedroom", "area_m2": 15.6, "floor": 0, "has_window": true },
+    { "id": "hou_000123.r3", "label": "hallway", "area_m2": 4.5, "floor": 0, "has_window": false },
+    { "id": "hou_000123.r4", "label": "bedroom", "area_m2": 9.8, "floor": 0, "has_window": true }
+  ],
+  "edges": [
+    { "a": "hou_000123.r1", "b": "hou_000123.r3", "kind": "door", "width_m": 0.9 },
+    { "a": "hou_000123.r3", "b": "hou_000123.r2", "kind": "door", "width_m": 0.85 },
+    { "a": "hou_000123.r3", "b": "hou_000123.r4", "kind": "door", "width_m": 0.8 }
+  ]
+}

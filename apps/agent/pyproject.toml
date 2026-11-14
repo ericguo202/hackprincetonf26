@@ -1,0 +1,48 @@
+[project]
+name = "built-world-agent"
+version = "0.1.0"
+description = "Agent service: FastAPI + Deep Agents, layout planner, pack readers"
+requires-python = ">=3.11"
+dependencies = [
+    "deepagents>=0.5.3",
+    "fastapi>=0.162.7",
+    "httpx>=0.28.1",
+    "jsonschema>=4.26.0",
+    "langchain>=1.5.0",
+    "langchain-anthropic>=1.7.10",
+    "langgraph>=1.2.21",
+    "langsmith>=0.14.17",
+    "networkx>=3.6.1",
+    "pydantic>=2.14.3",
+    "python-dotenv>=1.2.4",
+    "shapely>=2.2.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "datamodel-code-generator>=0.96.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "ruff>=0.17.5",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-include = ["../../contracts/validate.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff.lint.per-file-ignores]
+# Generated from contracts/ by gen_models.py; long schema descriptions are expected.
+"contracts_gen/*" = ["E501"]

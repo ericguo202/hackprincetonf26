@@ -1,0 +1,76 @@
+# Render blueprint (AGENTS.md sections 5 and 8). Secrets are set in the Render dashboard (sync: false).
+# game: exactly ONE instance, never autoscale (rooms live in memory). No deploys during judging.
+services:
+  - type: web
+    name: game
+    runtime: node
+    plan: starter
+    numInstances: 1
+    rootDir: apps/game
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    buildFilter:
+      paths: ["apps/game/**", "contracts/**"]
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GAME_INTERNAL_SECRET
+        generateValue: true
+      - key: PACK_BASE_URL
+        sync: false
+
+  - type: web
+    name: agent
+    runtime: python
+    plan: starter
+    rootDir: apps/agent
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run --no-dev uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    buildFilter:
+      paths: ["apps/agent/**", "contracts/**"]
+    envVars:
+      - key: GAME_HOSTPORT
+        fromService: { type: web, name: game, property: hostport }
+      - key: GAME_INTERNAL_SECRET
+        fromService: { type: web, name: game, envVarKey: GAME_INTERNAL_SECRET }
+      - key: MODEL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: built-world-sandbox
+      - key: PACK_BASE_URL
+        sync: false
+      - key: USE_FIXTURES
+        value: "0"
+      - key: MOCK_AGENT
+        value: "0"
+      - key: FAKE_PLACEMENT
+        value: "0"
+      - key: HITL
+        value: "0"
+
+  - type: web
+    name: web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm i -g pnpm@12.18.0 && pnpm install --frozen-lockfile && pnpm build
+    staticPublishPath: dist
+    buildFilter:
+      paths: ["apps/web/**", "contracts/**"]
+    envVars:
+      # Public URLs of the other two services, e.g. wss://game-xxxx.onrender.com and https://agent-xxxx.onrender.com
+      - key: VITE_GAME_URL
+        sync: false
+      - key: VITE_AGENT_URL
+        sync: false
+      - key: VITE_PACK_BASE_URL
+        sync: false
+      - key: VITE_MATTERPORT_SDK_KEY
+        sync: false
