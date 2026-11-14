@@ -12,9 +12,9 @@ The goal of this work: given any Matterport model of a home, produce a house pac
 |---|---|
 | Branch | Merged into `main` (2026-11-14, after contracts v2.3.0). The `lane-a/hero-house` branch and its `/Users/pfu/hp-hero` worktree were deleted after the merge; start new house work on a fresh `lane-a/<topic>` branch from `main`. |
 | Checkout and data | Main checkout `/Users/pfu/hackprincetonf26`. All gitignored outputs below now live in its `worldgen/out/` (moved from the old worktree). New worktrees symlink `worldgen/out` and `.env` to the main checkout's, so every worktree shares one data folder. |
-| Pipeline code | `worldgen/build_house.py` (orchestration, rooms, doors, graph, collision), `worldgen/rebake.py` (clean shell, carving, fixtures, texture baking, glb export), `worldgen/panos.py` (panorama sampling, ray-caster, multi-view shading), `worldgen/house_mesh.py` (OBJ reading, collision.glb, gltf-transform compression, the older interior writers), `worldgen/sources/matterport.py` (the only Matterport client: read-only, cached), `worldgen/pack.py` (manifest; `furniture_catalog` is the shared library `furniture/v1/catalog.json`, contracts v2.3.0), `worldgen/publish.py` (`--local` only; also copies the furniture library). |
+| Pipeline code | `worldgen/build_house.py` (orchestration, rooms, doors, graph, collision), `worldgen/rebake.py` (clean shell, carving, fixtures, texture baking, glb export), `worldgen/panos.py` (panorama sampling, ray-caster, multi-view shading), `worldgen/exterior.py` (the scanned lot outdoors: yard, facades, roof, outdoor pieces, backdrop, outdoor collision; section 3.6), `worldgen/house_mesh.py` (OBJ reading, collision.glb, gltf-transform compression, the older interior writers), `worldgen/sources/matterport.py` (the only Matterport client: read-only, cached), `worldgen/pack.py` (manifest; `furniture_catalog` is the shared library `furniture/v1/catalog.json`, contracts v2.3.0), `worldgen/publish.py` (`--local` only; also copies the furniture library). |
 | Per-house config | `worldgen/blocks/hou_navidad_01.json` (listing id to Matterport model, which interior method to use, hero role). `worldgen/overrides/<model_id>.json` (hand room splits). |
-| Tests | `worldgen/tests/test_build_house.py`, `worldgen/tests/test_rebake.py`, `worldgen/tests/test_pack.py` (manifest). |
+| Tests | `worldgen/tests/test_build_house.py`, `worldgen/tests/test_rebake.py`, `worldgen/tests/test_exterior.py`, `worldgen/tests/test_pack.py` (manifest). |
 | Preview and scoring tools | `worldgen/scripts/preview/` (see section 6). Not part of the package; run with `uv run python scripts/preview/<name>.py` from `worldgen/`. |
 | Outputs (gitignored) | `worldgen/out/packs/hou_navidad_01/v1/houses/<listing_id>/{interior.glb, collision.glb, rooms.json, graph.json}` and `manifest.json`. Downloads in `worldgen/out/raw/<model_id>/` (MatterPak zip and OBJ, skybox faces, defurnished OBJ for 6915), caches in `worldgen/out/cache/` (Matterport JSON, uncompressed glbs). About 1.1 GB for the two houses. |
 | Notes for other lanes | `HANDOFF.md` entries dated 2026-11-14 16:30 to 23:40. |
@@ -41,6 +41,7 @@ cd worldgen
 uv sync && npm i                                   # npm installs gltf-transform (compression)
 uv run python -m worldgen.build_house --block hou_navidad_01 --listing hou_236595179   # ~5 min
 uv run python -m worldgen.build_house --block hou_navidad_01 --listing hou_237901269
+uv run python -m worldgen.exterior --block hou_navidad_01 --listing hou_236595179     # outdoors only, preview glb
 uv run pytest && uv run ruff check . && uv run python ../contracts/validate.py out/packs/hou_navidad_01
 uv run python -m worldgen.publish hou_navidad_01 --local     # copies the pack into apps/web/public/packs
 
@@ -48,7 +49,7 @@ cd ../apps/web
 VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1 VITE_START_ROOM=hou_236595179.r3 VITE_SOLO=1 npx -y pnpm@12.18.0 dev --port 5199
 ```
 
-`npx -y pnpm@12.18.0` is needed because the repo pins pnpm 12.18.0 and the locally installed pnpm fails to switch to it. `--refresh` on build_house re-fetches the Matterport model JSON. `--bake-res` (texels per metre on walls and floors, default 256) and `--texture-size` (max texture edge after compression, default 2048) are the quality/size knobs.
+`npx -y pnpm@12.18.0` is needed because the repo pins pnpm 12.18.0 and the locally installed pnpm fails to switch to it. `--refresh` on build_house re-fetches the Matterport model JSON. `--bake-res` (texels per metre on walls and floors, default 256) and `--texture-size` (max texture edge after compression, default 2048) are the quality/size knobs. `--no-exterior` builds the interior alone (no yard, facades, roof or backdrop); `--version N` (N > 1) also writes the uncompressed glb as `out/cache/glb/<model>_interior_pano_vN.glb`, so experiments do not overwrite the v1 file used for scoring.
 
 ---
 
@@ -135,6 +136,42 @@ Visual check at each step used `scripts/preview/render_compare.py` (our render n
 | Door positions from the defurnished mesh's semantic walls | 7014 has no semantic mesh | Ray-casting across the wall on the MatterPak mesh (works on any scan) |
 | Synthetic flat-coloured "wall cores" between wall faces (from 3.3) | Flat colour showed at every doorway | Removed; jambs are baked from the panoramas |
 
+### 3.6 Outdoors: the scanned lot (`worldgen/exterior.py`, added 2026-11-14)
+
+Decided with the user on 2026-11-14: the house zone becomes **house + its scanned lot**, in the same house-local frame and the same files (new nodes in `interior.glb` and `collision.glb`, no contract change). Past the scan's edge, a **panorama backdrop**. Trees: **scan geometry with a sky cutout** (fall back to library trees only if that looks bad). Doors: the **front and back doors open** for play; the garage door stays shut.
+
+Why it works: Matterport scans of houses include outdoor sweeps (15 of 38 positions on 7014, 11 of 31 on 6915), and the MatterPak mesh covers the whole lot, about 15 m around the house, with good ground, fence, deck, porch and facade geometry. So the outdoors gets the same treatment as the interior: clean geometry where the scan is noisy, scan triangles where it is not, every texel coloured from the panoramas (outdoor ones only; `outdoor_panos` = outside the union of room polygons).
+
+`add_exterior` runs inside `write_rebaked_interior_glb` through its `extra` hook, after the interior is baked. In order:
+
+1. **Ground** (`ground_grid`): a heightfield on a 0.15 m grid (`CELL`). Per cell, four rays are cast **upward from below the scan**; the first upward-facing surface hit (normal z > 0.6, stepping past others up to 4 times) is the ground, whatever is above it. Median of the 4, then a 5x5 median filter (textured at 96 texels/m, `GROUND_RES`, in tiles of at most 10 m) (grass noise goes, steps such as a deck edge or a curb stay). Cells inside the house outline are removed. The lot = cells with ground, closed (3), holes filled, opened (2), **every piece of 4 m2 or more** (the house splits front and back yards), outline simplified by 0.11 m.
+2. **Facades** (`house_footprint`, `facade_ring`, `facade_planes`): the house outline = union of room centreline polygons and dropped "Void" rooms, notches under 0.6 m closed; then every notch under 1.5 m wide (mitred closing, so it stays rectangular) with **no scanned ground** in it is added (a closet the plan left out, a chimney chase: 7014's closet behind bedroom r8). A notch with ground (7014's open entry alcove) stays outside. The same footprint decides which doors are outside doors. Each segment is moved out onto the real outer wall face (median hit distance of rays from 0.6 m outside, at 0.5 to 2.0 m up, counting only hits 0.02 to 0.45 m outside the centreline; segments under 0.6 m or unmeasured borrow their neighbours' offset), corners rebuilt by intersecting neighbouring segments, falling back to one uniform offset if the result is invalid or a corner moves over 0.7 m. Planes run from 0.15 m below the lowest ground along them to the eave height, or next to a room taller than that (a garage, a vaulted room) to that room's top + 0.1 m. `eave_height` measures the soffit per segment: horizontal rays at the wall every 5 cm up; the wall ends where most rays stop hitting within 12 cm of the facade plane for 30 cm (window heads, unscanned glass, dip for less); length-weighted median over segments, clamped to [floor + 2.1, highest room top + 1.0] (7014: about 2.3-2.45 m; 6915: about 2.45-2.5 m). Baked at 128 texels/m (`FACADE_RES`) with `bake_plane(..., fallback=True)`: texels no outdoor camera sees take the MatterPak's own colour where the scan has a surface there.
+3. **Roof**: `roof_coverage` = fraction of 0.5 m cells of the outline under upward-facing scan faces between the ceiling + 0.15 m and + 4 m (tree canopies are higher). At 0.7 or more (6915: 0.96) the **scanned roof** is kept as scan pieces (step 4), with sky-coloured texels on upward faces replaced by their chart's colour (`unsky`: cameras look past the roof edge). Below it (7014: 0.02) a **generated hip roof**: the facade outline plus a 0.45 m overhang (`OVERHANG`) at the eave height, height growing with the distance to the eave line (exact for convex outlines, a rounded valley at concave corners) but never below any room's top + 0.1 m inside that room (7014's garage and vaulted living room), pitch = median slope of sloped scan faces just above the eaves (14 to 40 degrees) else 5/12; a flat soffit under the overhang and a 0.2 m fascia band. Texels whose photo colour is sky count as unseen (`no_sky`) and are filled from the shingles around them.
+4. **Pieces** (`outdoor_faces`): every other scan face inside the lot (buffered 1 m) that is not inside the house volume, not on the facade (within 0.1 m and vertical), not in the wall slab, not on the ground (within 0.1 m of the heightfield and facing up), not more than 0.25 m below it, and not under a generated roof. Kept only if an outdoor camera sees it; pieces under 0.03 m2 dropped. Faces more than 2 m above the ground and away from the roof (`TREE_MIN_Z`) are **trees**: baked separately at 40 texels/m (`TREE_RES`) with alpha cut where the texel is sky (`_sky`: blue, or bright and grey); the rest at 96 (`PIECE_RES`).
+5. **Backdrop** (`backdrop_patches`): a ground disk and a dome of radius 45 m around the middle of the lot. The disk (32 texels/m) has a hole 0.3 m inside the lot and 0.5 m around the house footprint, follows the lot's edge height near the lot and flattens farther out; the dome is four 90 x 60 degree tiles at 16 texels per degree plus a cap. Shading normals point at an eye 1.5 m above the middle of the lot, so every outdoor camera counts as a frontal view and the ray-cast occlusion test against the scan picks the cameras that see past the house and the trees. It is a baked, ground-anchored panorama: right near the capture points, some parallax far from them.
+6. **Doors** (`build_house.play_doors`): outside doors (one room) on the house outline (both ends within 0.25 m), found open in the scan (so their position is measured), not in a garage, get `play_open`. They are cut from the room's wall planes (`ShellRoom.cuts`, `rebake._cut_boxes`), from the facade, and from collision; `door_frames` adds jambs, a lintel and a threshold through the whole wall (room wall surface to facade), baked from every camera. Both houses: front + back door. Doors into dropped Void closets are not on the outline and stay shut.
+7. **Collision** (`collision_meshes`): `ground` (the yard heightfield on a 0.45 m grid, about 5k triangles), `outdoor` (non-tree pieces below 2.2 m: fences, deck, railings, posts, the AC unit, shrubs, trunks) and `bounds` (0.3 m boxes, 4 m tall, along the outline of lot + house, simplified 0.3 m), added to `collision.glb` by `house_mesh.write_collision_glb(extra=...)`.
+8. **Textures**: planes and patches share pages (`rebake.pack`); every patch is cropped to the bounding box of its piece (`plan_tiles`), otherwise empty tile corners cost whole pages.
+
+Nodes added to `interior.glb`: `yard_N`, `facade_N`, `roof_N`, `backdrop_N` (shared pages), `outdoor_N`, `trees_N` (alpha MASK). Turn it off per house with `"exterior": false` in `blocks/<block>.json` or for a run with `--no-exterior`. Iterate on the outdoors alone with `uv run python -m worldgen.exterior --block <block> --listing <id>` (about 2.5-6 min; writes `out/cache/glb/<model>_exterior.glb` for the preview scripts, not the pack).
+
+Tried while building it, and changed:
+
+| Tried | Problem | Now |
+|---|---|---|
+| Ground cells from triangle centroids (lowest 10% by area) | The MatterPak covers flat concrete with few triangles metres long: the whole 7014 driveway had no ground cells | Upward ray casting per cell (4 rays) |
+| Keep only the largest lot piece | The house splits front and back yards; only the back yard survived (285 m2 instead of 518) | Every piece of 4 m2 or more |
+| One full texture per 15 m tile | 13 shell pages on 7014 for mostly empty tile corners | Each piece cropped to its bounding box |
+| Generated roof shaded like any surface | Cameras look past the real roof edge: blue and grey sky on the roof | Sky-coloured samples count as unseen (`no_sky`) |
+| Unseen facade texels filled from neighbours | Side walls no camera sees became grey smears | MatterPak texture fallback (`bake_plane(fallback=True)`) |
+| Trees at the fixture resolution | 59k canopy triangles at 96 texels/m: half the outdoor pages | Separate tree pages at 40 texels/m |
+| Backdrop disk with a hole only where the lot is | 7014's lot does not wrap around the house (the north side yard was not scanned), so the disk ran under the house and poked through the floors near the deck: indoor score 14.07 -> 17.58 | The disk always has a hole around the house footprint |
+| House outline = kept rooms only | An unmodelled closet in 7014 became an outdoor notch; its door leaf was kept as an "outdoor piece" in front of the bedroom's closet door | Void rooms and ground-less notches belong to the house (`house_footprint`) |
+| Outline gaps from the convex hull | Rectangular notches became triangles (diagonal facades); 6915's unscanned front garden became a wedge of house | Mitred closing, 1.5 m |
+| Collision ground = the render mesh | 49k triangles | 0.45 m grid |
+| Facade offset accepted down to 0.1 m inside the wall centreline | Where the outer wall was not scanned, rays hit inside surfaces: a facade plane stood in front of 7014's recessed fireplace and a closet door, seen from the room (indoor score 16.4) | Only hits outside the centreline; the MatterPak fallback only from faces facing out |
+| Eave = 97th percentile height of facade-facing scan faces | A tree trunk on the facade line: 12.6 m (12 m facades); gable walls: 3.6 m, with the real roof's photo painted on facades above the real soffit and the generated roof floating over it | Wall coverage profile per segment, median over segments |
+
 ---
 
 ## 4. Known problems, in the current output
@@ -154,7 +191,19 @@ Ranked by how much they hurt "feels like the real house".
 11. **Small holes** remain (0.09% of rendered pixels on 7014), mostly at vaulted-to-flat ceiling junctions (purple slivers in the previews).
 12. **GPU memory** is about 370 MB per house (15-17 pages of 2048 px), more than half of it fixture pages that are mostly padding.
 13. **Room splits are hand-written** for both houses (`overrides/*.json`). A new property will not get a living room without one.
-14. **Build time** is about 5 minutes per house, almost all in Python loops around `shade` and per-plane work.
+14. **Build time** is about 5 minutes per house, almost all in Python loops around `shade` and per-plane work. With the outdoors, about 10-12 minutes.
+
+### Outdoors (section 3.6), ranked the same way
+
+1. **Size.** With the lot, `interior.glb` is about 24 MB for 7014 (AGENTS.md's limit is 25 MB) and the house uses about 36 texture pages of 2048 px (roughly 600-800 MB of GPU memory with mipmaps). The report's `exterior.megatexels` says where it goes.
+2. **Trees** are crumpled scan sheets with the sky cut out; from below they read as trees, up close as torn paper. Leaves the scan missed are painted onto the backdrop's sky, and trunks near the ground can be blobs.
+3. **Backdrop parallax.** The street, parked cars and the neighbours' houses are photos on a ground disk and a 45 m dome: right near the capture points, sliding as you walk away from them. Cars on the street are flattened onto the road.
+4. **Unscanned side yards** (7014's north side) are outside the lot and fenced off; looking toward them shows the backdrop disk, mostly fill.
+5. **7014's generated roof** is a hip roof from the outline (the real roof has gables) and only about a third to a half of it is seen by a camera; the rest is filled from the seen shingles.
+6. **Facades no outdoor camera sees** (side walls) use the MatterPak's own texture: blurrier than the photo-textured walls.
+7. **Opened doors** show the yard where the indoor photos show a closed door; this costs about 0.6 on the indoor score of 7014 (14.07 -> about 14.6) and is intended.
+8. **Windows** stay photos on both sides (not carved): from inside you see the photo of the yard, not the yard geometry.
+9. **Outdoor collision** uses about 37k raw scan triangles for fences, shrubs and the deck: rough edges a capsule can catch on.
 
 ---
 
@@ -187,6 +236,15 @@ Each item says what to do, where, and how to tell it worked. Measure every chang
 15. **Odd floor plans.** The pipeline assumes room polygons close. `chain_polygon` takes the largest polygon from `polygonize`; the scout found a median 92% of rooms close cleanly. Rooms that do not close are dropped silently today; log them and fall back to the concave hull of the room's scan floor faces.
 16. **Batch runner.** A `worldgen/build_block.py --houses all` style loop over `blocks/<block>.json` that builds every house, writes one report per house (the dict `build` returns plus the score) and fails loudly on any house whose score or hole fraction regresses.
 
+### Outdoors
+
+17. **Size first** (outdoor problem 1). Either move the lot into its own `exterior.glb` (a manifest contract change, v2.4, all four lanes) so the client can stream it and drop it indoors, or lower the outdoor knobs in `exterior.py` (`DOME_RES`, `DISK_RES`, `GROUND_RES`, `TREE_RES`, `PIECE_RES`) and measure with the score. xatlas charts for outdoor pieces and trees (item 4) cut their pages the most.
+18. **Trees** (outdoor problem 2): keep trunks from the scan, replace canopies by library trees (CC0) sized from the scan canopy, or by camera-facing cards cut out of the photos.
+19. **Backdrop** (outdoor problem 3): pick the dome texels from the cameras on the player's side (one dome per yard, cross-faded by the client), or put the Vexcel block geometry (hp-block's work) around the lot and texture it from the panoramas like the yard.
+20. **Roof shape** (outdoor problem 5): Vexcel DSM heights over the footprint give the real roof (gables, ridge heights); needs the Matterport-to-geo registration checked against the Vexcel footprint first.
+21. **Carve windows on both sides** (outdoor problem 8): an exterior wall texel that no camera sees a surface at, and that sees the yard behind, is glass; cut it from the room's wall and the facade, keep collision solid.
+22. **Exposure compensation outdoors** together with item 1 (sun and shade change between outdoor sweeps).
+
 ---
 
 ## 6. Measuring quality
@@ -207,11 +265,14 @@ Baselines (2026-11-14):
 | 6915, raw MatterPak (3.2) | 16.02 | 1.49% |
 | 6915, panorama rebuild (current) | 14.76 | 0.01% |
 | 7014, panorama rebuild (current) | 14.07 | 0.09% |
+| 7014, with the outdoors (pack v40, 2026-11-14) | 14.81 indoors (the two opened doors show the yard where the photos show closed doors), 32.3 outdoors | 0.04%, 0% |
+| 6915, with the outdoors (pack v40, 2026-11-14) | 15.03 indoors, 24.95 outdoors | 0%, 0% |
 
 Read these with care:
 
 - **The score is biased**: the bake used the same panoramas it is scored against. It is good at catching regressions (misaligned geometry, wrong carving, holes, a broken convention) and bad at rewarding improvements. Next step: add a hold-out option (for example `--holdout 3,11,18`: bake with those pano labels removed from `PanoSet`, then score only on them). That turns it into a real measure of what a player sees between scan positions.
 - **Mean absolute error is not very sensitive** to small ugly artefacts (silver shards, crumpled fans) that people notice immediately. The raw MatterPak scored only 1.3 points worse while looking much worse. Keep looking at images. A useful addition: report the 95th-percentile error per face and the fraction of pixels with error over 60.
+- Outdoors: `OUTDOOR=1` scores the outdoor panoramas instead (same bias). Look at `render_compare.py` captures 5, 35 and 32 for 7014 and 27, 20 for 6915, plus free views from places no camera stood (the street, the far corners of the back yard), because that is where the generated roof, the facade fallback and the backdrop show their limits.
 - Always look at the same views before and after a change: `render_compare.py ... 11,13,17,18,22` for 7014 and `14,3,4` for 6915, plus the free views listed in `freeview.py`'s docstring, plus the web client.
 
 ---

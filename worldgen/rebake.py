@@ -17,7 +17,7 @@ Geometry is in Matterport Z-up plan coordinates; house_mesh.Z_UP_TO_Y_UP is appl
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -104,6 +104,9 @@ class ShellRoom:
     wall_lines: list[tuple[LineString, float]]  # (centreline, thickness) of this room's wall edges
     flat_ceiling: bool = True
     wall_top: float | None = None  # walls reach this z when the ceiling is not flat
+    # Doorways to cut out of this room's walls regardless of what the scan shows (outside doors opened for
+    # play): ((x0, y0), (x1, y1), z0, z1) along the wall's centreline. See exterior.py.
+    cuts: list[tuple[tuple[float, float], tuple[float, float], float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -195,6 +198,22 @@ def wall_runs(r: ShellRoom) -> list[tuple[np.ndarray, np.ndarray, float, list[tu
     return out
 
 
+def _cut_boxes(r: ShellRoom, p0: np.ndarray, u: np.ndarray, length: float):
+    """The room's forced doorway cuts that lie on the wall run starting at p0 (direction u), as boxes in the
+    wall plane's (s, t) coordinates."""
+    n2 = np.array([-u[1], u[0]])
+    out = []
+    for a, b, z0, z1 in r.cuts:
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        if abs((b - a) @ n2) > 0.05 * np.linalg.norm(b - a) or abs((a - p0[:2]) @ n2) > 0.35:
+            continue  # not parallel to, or not on, this run
+        s0, s1 = sorted(((a - p0[:2]) @ u[:2], (b - p0[:2]) @ u[:2]))
+        if s1 < 0 or s0 > length:
+            continue
+        out.append(box(s0, z0 - r.floor_z - 0.05, s1, z1 - r.floor_z))
+    return unary_union(out) if out else Polygon()
+
+
 def shell_planes(rooms: list[ShellRoom]) -> list[Plane]:
     planes: list[Plane] = []
     ex, ey, ez = np.eye(3)
@@ -213,6 +232,7 @@ def shell_planes(rooms: list[ShellRoom]) -> list[Plane]:
             origin = np.array([p0[0], p0[1], r.floor_z])
             if covered:
                 region = unary_union([box(a, 0, b, height) for a, b in covered])
+                region = region.difference(_cut_boxes(r, p0, u, length))
                 if region.area >= 0.01:
                     planes.append(Plane("wall", origin, u, ez, n, length, height, region))
             # Open stretches: where the room beyond has a lower ceiling, close the step with a header.
@@ -235,11 +255,18 @@ def shell_planes(rooms: list[ShellRoom]) -> list[Plane]:
 
 
 def bake_plane(
-    p: Plane, scan: Scan, panos: PanoSet, res: float, behind: Polygon | None = None
+    p: Plane,
+    scan: Scan,
+    panos: PanoSet,
+    res: float,
+    behind: Polygon | None = None,
+    fallback: bool = False,
 ) -> tuple[dict[str, float], list[Plane]]:
     """Texture a plane from the panoramas. For walls with a room behind them (`behind` = union of room
     polygons), texels with no scanned wall that a camera sees through are cut out (alpha 0); openings are
-    squared off and get jamb / lintel / sill planes (returned, not yet baked)."""
+    squared off and get jamb / lintel / sill planes (returned, not yet baked). With `fallback`, texels no
+    camera sees take the scan's own texture where the scan has a surface there (used outdoors, where whole
+    side walls can be out of every camera's view), instead of a blur of their neighbours."""
     res = min(res, (PAGE - 2 * PAD - 2) / max(p.w, p.h))
     W, H = max(2, math.ceil(p.w * res)), max(2, math.ceil(p.h * res))
     s = (np.arange(W) + 0.5) / res
@@ -253,7 +280,7 @@ def bake_plane(
     # disagree. `base` is the median distance from the plane to the scan. Then each texel: a clamped local
     # correction smoothed over about 12 cm, so real relief survives and scan noise (blinds, glass) does not.
     reach = 0.3
-    t_hit, _ = scan.rays.cast(pts + nrm * reach, -nrm)
+    t_hit, prim = scan.rays.cast(pts + nrm * reach, -nrm)
     delta = reach - t_hit
     found = t_hit < 2 * reach
     base = float(np.median(delta[found])) if found.mean() > 0.2 else 0.0
@@ -265,6 +292,15 @@ def bake_plane(
     k = max(3, int(0.12 * res) | 1)
     smooth = base + ndimage.uniform_filter(off, k) / np.maximum(ndimage.uniform_filter(hit, k), 1e-6)
     rgb, valid = shade(pts + nrm * smooth[mask][:, None], nrm, panos, scan.rays, snap=False)
+    photo = valid
+    if fallback and (near & ~valid).any():
+        # Only scan faces that face the same way as the plane: where the outer surface was not scanned the
+        # ray reaches the inside of the wall, whose texture is the room (a facade once showed the interior).
+        miss = near & ~valid & (scan.normals[prim] @ p.n > 0.3)
+        q = pts[miss] + nrm[miss] * (reach - t_hit[miss, None])  # where the ray met the scan
+        f = prim[miss]
+        rgb[miss] = scan_colors(scan, f, _bary(scan.tris[f], q))
+        valid = valid | miss
     img = np.zeros((H, W, 3), np.uint8)
     img[mask] = np.clip(rgb, 0, 255).astype(np.uint8)
     ok = np.zeros((H, W), bool)
@@ -287,8 +323,20 @@ def bake_plane(
         ok &= ~e
         carved = float(e.sum()) / res / res
     p.image = np.dstack([_fill(img, ok), alpha])
-    stats = {"area": p.shape.area, "seen": float(ok.sum()) / max(1, mask.sum()), "carved_m2": carved}
+    seen = float(ok.sum() - (valid & ~photo).sum())  # texels a camera saw (not the scan-texture fallback)
+    stats = {"area": p.shape.area, "seen": seen / max(1, mask.sum()), "carved_m2": carved}
     return stats, frames
+
+
+def _bary(tri: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """Barycentric coordinates of points q (n, 3) in triangles tri (n, 3, 3), clipped to the triangle."""
+    v0, v1, v2 = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0], q - tri[:, 0]
+    d00, d01, d11 = (v0 * v0).sum(1), (v0 * v1).sum(1), (v1 * v1).sum(1)
+    d20, d21 = (v2 * v0).sum(1), (v2 * v1).sum(1)
+    den = d00 * d11 - d01 * d01 + 1e-15
+    b1, b2 = (d11 * d20 - d01 * d21) / den, (d00 * d21 - d01 * d20) / den
+    b = np.clip(np.stack([1 - b1 - b2, b1, b2], 1), 0, 1)
+    return b / np.maximum(b.sum(1, keepdims=True), 1e-9)
 
 
 def _square_openings(
@@ -631,10 +679,13 @@ def write_rebaked_interior_glb(
     dest: Path,
     res: float = 256.0,
     piece_res: float = 160.0,
+    extra=None,
 ) -> tuple[dict, np.ndarray]:
     """interior.glb: shell nodes `floor_N`, `walls_N`, `ceiling_N` and scan-geometry nodes `fixtures_N`,
     `ceiling_scan_N`, all textured from the panoramas. Returns (stats for the build report, the fixture
-    triangles (n, 3, 3) in Z-up coordinates, for collision.glb)."""
+    triangles (n, 3, 3) in Z-up coordinates, for collision.glb). `extra(scene, all_panos)`, when given, adds
+    more nodes before export (exterior.py: the yard, facades, roof and backdrop)."""
+    all_panos = panos
     # Indoor cameras only: outdoor sweeps see doors open that indoor ones saw closed, and see the roof.
     indoors = unary_union([r.poly for r in rooms]).buffer(0.1)
     panos = panos.subset(
@@ -677,6 +728,8 @@ def write_rebaked_interior_glb(
             _add_soup(scene, scan, faces, pg_imgs, uv, pg, name)
             n_pages += len(pg_imgs)
 
+    if extra is not None:
+        extra(scene, all_panos)
     dest.parent.mkdir(parents=True, exist_ok=True)
     scene.export(dest)
     area = sum(s["area"] for s in stats)
