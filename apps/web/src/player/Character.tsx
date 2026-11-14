@@ -20,7 +20,7 @@ import { LoadBoundary } from "../world/Glb";
 import { usePackGLTF } from "../world/gltf";
 import { useMeshState } from "../world/meshProbe";
 import { CHARACTER } from "./characterAsset";
-import { blendedLift, buildRig } from "./characterRig";
+import { actionFor, blendedLift, buildRig } from "./characterRig";
 import { CROSSFADE_S, clipFor } from "./clips";
 
 type Props = {
@@ -57,7 +57,7 @@ function CharacterModel({ url, animState, moving }: { url: string; animState: An
       const name = e.action.getClip().name;
       const plan = clipFor(animState, moving);
       if (plan.clip !== name || !plan.then) return;
-      const next = rig.actions.get(plan.then);
+      const next = actionFor(rig, plan.then);
       if (!next) return;
       next.reset().setLoop(LoopRepeat, Infinity).play();
       next.crossFadeFrom(e.action, CROSSFADE_S, false);
@@ -70,7 +70,7 @@ function CharacterModel({ url, animState, moving }: { url: string; animState: An
   // New state: crossfade to its clip.
   useEffect(() => {
     const plan = clipFor(animState, moving);
-    const next = rig.actions.get(plan.clip);
+    const next = actionFor(rig, plan.clip);
     if (!next) return;
     const prev = current.current;
     if (prev === next && !plan.once) return; // already looping this clip
@@ -89,6 +89,8 @@ function CharacterModel({ url, animState, moving }: { url: string; animState: An
     () => () => {
       rig.mixer.stopAllAction();
       rig.mixer.uncacheRoot(rig.root);
+      // The action is gone with the cache; StrictMode's remount (same rig) must start clean.
+      current.current = null;
     },
     [rig],
   );

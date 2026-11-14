@@ -6,7 +6,7 @@ import { Box3, LoopRepeat, Mesh, MeshStandardMaterial, type AnimationClip, type 
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
-import { blendedLift, buildRig, usedClips } from "./characterRig";
+import { actionFor, blendedLift, buildRig, usedClips } from "./characterRig";
 import { MOVEMENT } from "./movement";
 
 const MODEL = join(dirname(fileURLToPath(import.meta.url)), "../../public/characters/Character_Soldier.gltf");
@@ -62,7 +62,7 @@ describe("character rig (real Toon Shooter soldier)", () => {
     expect(runLift).toBeLessThan(0.1);
 
     // Play the run with its lift applied: the lowest point over the cycle sits on the floor.
-    const run = rig.actions.get("Run_Gun")!;
+    const run = actionFor(rig, "Run_Gun")!;
     run.reset().setLoop(LoopRepeat, Infinity).play();
     let lowest = Infinity;
     for (let i = 0; i <= 24; i++) {
@@ -71,6 +71,25 @@ describe("character rig (real Toon Shooter soldier)", () => {
       lowest = Math.min(lowest, b.min.y + blendedLift(rig));
     }
     expect(Math.abs(lowest)).toBeLessThan(0.01);
+  });
+
+  it("survives unmount + remount with the same rig (React StrictMode), the browser crash", () => {
+    const rig = buildRig(scene, clips);
+    // Mount: play, as Character's crossfade effect does.
+    actionFor(rig, "Idle")!.reset().play();
+    rig.mixer.update(0.016);
+    // StrictMode's dev cleanup (and any real unmount): Character's cleanup effect.
+    rig.mixer.stopAllAction();
+    rig.mixer.uncacheRoot(rig.root);
+    // Remount with the same memoized rig: playing again must not throw.
+    expect(() => {
+      actionFor(rig, "Idle")!.reset().play();
+      const run = actionFor(rig, "Run_Gun")!;
+      run.reset().play();
+      run.crossFadeFrom(actionFor(rig, "Idle")!, 0.2, false);
+      rig.mixer.update(0.1);
+    }).not.toThrow();
+    expect(blendedLift(rig)).toBeGreaterThan(0);
   });
 
   it("measures every clip it plays", () => {

@@ -30,7 +30,14 @@ import { CLIPS, MOVING_SHOOT, ONE_SHOT, type PackClip } from "./clips";
 export type Rig = {
   root: Object3D;
   mixer: AnimationMixer;
-  actions: Map<string, AnimationAction>;
+  /**
+   * Clips by name. Deliberately no cached AnimationAction objects: after
+   * mixer.uncacheRoot() (unmount, including React StrictMode's dev
+   * unmount/remount) an old action has no bindings and play() throws
+   * "Cannot set properties of undefined (setting '_cacheIndex')". Always go
+   * through actionFor(), which asks the mixer and gets a live action.
+   */
+  clips: Map<string, AnimationClip>;
   /** Metres to raise the model while a clip plays, so its lowest foot meets the floor. */
   lift: Map<string, number>;
   scale: number;
@@ -122,17 +129,23 @@ export function buildRig(source: Object3D, clips: AnimationClip[]): Rig {
   root.position.y = baseY;
 
   const mixer = new AnimationMixer(root);
-  const actions = new Map<string, AnimationAction>();
-  for (const clip of clips) actions.set(clip.name, mixer.clipAction(clip));
-  return { root, mixer, actions, lift, scale };
+  return { root, mixer, clips: new Map(clips.map((c) => [c.name, c])), lift, scale };
+}
+
+/** A live action for a clip: the mixer's cached one, or a fresh one after an uncache. */
+export function actionFor(rig: Rig, name: string): AnimationAction | null {
+  const clip = rig.clips.get(name);
+  return clip ? rig.mixer.clipAction(clip) : null;
 }
 
 /** Lift for the current blend: each playing action's lift, by its weight. */
 export function blendedLift(rig: Rig): number {
   let sum = 0;
   let weight = 0;
-  for (const [name, action] of rig.actions) {
-    if (!action.isRunning() && !action.isScheduled()) continue;
+  for (const [name, clip] of rig.clips) {
+    // existingAction: never creates one, so measuring the blend allocates nothing.
+    const action = rig.mixer.existingAction(clip);
+    if (!action || (!action.isRunning() && !action.isScheduled())) continue;
     const w = action.getEffectiveWeight();
     if (w <= 0) continue;
     sum += (rig.lift.get(name) ?? 0) * w;
