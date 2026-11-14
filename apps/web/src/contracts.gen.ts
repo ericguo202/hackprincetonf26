@@ -1,17 +1,42 @@
 /* Generated from contracts/. Do not edit; run `pnpm gen:types`. */
 
 /**
- * One entry of furniture/catalog.json. Asset .glb: Y up, meters, origin at bottom center, front facing +Z, under 5 MB.
+ * One entry of furniture/catalog.json (AGENTS.md section 9). Asset .glb: Y up, meters, origin at bottom center, front facing +Z, under 5 MB.
  */
 export interface Asset {
+  /**
+   * <category>_<source>_<source id>, e.g. sofa_abo_B075X4QMX3; stable across rebuilds
+   */
   id: string;
+  /**
+   * Short generic name for in-world labels (no brand)
+   */
   name: string;
   category: string;
+  /**
+   * From the source listing when present; never invented
+   */
+  style?: string | null;
+  /**
+   * From the source listing when present; never invented
+   */
+  color?: string | null;
+  /**
+   * From the source listing when present; never invented
+   */
+  material?: string | null;
   tags: string[];
   /**
-   * Relative to the pack root
+   * Relative to the pack version folder
    */
   file: string;
+  /**
+   * Optional small catalog image for the chat panel, relative to the pack version folder
+   */
+  thumb?: string;
+  /**
+   * Measured from the normalized mesh, never copied from listing text
+   */
   size_m: {
     /**
      * Along local X
@@ -23,7 +48,10 @@ export interface Asset {
     d: number;
     h: number;
   };
-  placement: "wall" | "corner" | "free" | "on_surface";
+  /**
+   * Default placement; wall, corner, center and beside match propose_poses rules
+   */
+  placement: "wall" | "corner" | "center" | "beside" | "free" | "on_surface";
   clearance_m: {
     front?: number;
     back?: number;
@@ -34,8 +62,17 @@ export interface Asset {
    * full: taller than 1.2 m; half: 0.5 to 1.2 m; none: below 0.5 m
    */
   cover: "full" | "half" | "none";
-  license: string;
-  source: string;
+  source: {
+    dataset: "ABO" | "PolyHaven" | "KayKit" | "Kenney";
+    item_id?: string | null;
+    /**
+     * Full listing name; credits screen and chat panel only, never in-world signage
+     */
+    product_name?: string | null;
+    brand?: string | null;
+    license: string;
+    credit: string;
+  };
 }
 
 /**

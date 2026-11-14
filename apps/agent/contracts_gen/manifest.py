@@ -36,7 +36,7 @@ class House(BaseModel):
     audit: str
 
 
-class Vec3(RootModel[list[float]]):
+class Spawn(RootModel[list[float]]):
     root: Annotated[list[float], Field(max_length=3, min_length=3)]
 
 
@@ -49,5 +49,5 @@ class PackManifest(BaseModel):
     origin: Origin
     block: Block
     houses: list[House]
-    spawns: Annotated[list[Vec3], Field(description="Sidewalk spawn points in the block frame")]
+    spawns: Annotated[list[Spawn], Field(description="Sidewalk spawn points in the block frame")]
     furniture_catalog: str

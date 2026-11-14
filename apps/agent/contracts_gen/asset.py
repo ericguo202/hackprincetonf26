@@ -21,6 +21,8 @@ class SizeM(BaseModel):
 class Placement(Enum):
     wall = "wall"
     corner = "corner"
+    center = "center"
+    beside = "beside"
     free = "free"
     on_surface = "on_surface"
 
@@ -41,20 +43,70 @@ class Cover(Enum):
     none = "none"
 
 
+class Dataset(Enum):
+    ABO = "ABO"
+    PolyHaven = "PolyHaven"
+    KayKit = "KayKit"
+    Kenney = "Kenney"
+
+
+class Source(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    dataset: Dataset
+    item_id: str | None = None
+    product_name: Annotated[
+        str | None,
+        Field(description="Full listing name; credits screen and chat panel only, never in-world signage"),
+    ] = None
+    brand: str | None = None
+    license: Annotated[str, Field(min_length=1)]
+    credit: Annotated[str, Field(min_length=1)]
+
+
 class Asset(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: Annotated[str, Field(pattern="^[a-z0-9_]+_[0-9]{2}$")]
-    name: str
+    id: Annotated[
+        str,
+        Field(
+            description="<category>_<source>_<source id>, e.g. sofa_abo_B075X4QMX3; stable across rebuilds",
+            pattern="^[a-z0-9_]+_[a-z0-9]+_[A-Za-z0-9]+$",
+        ),
+    ]
+    name: Annotated[str, Field(description="Short generic name for in-world labels (no brand)")]
     category: str
+    style: Annotated[
+        str | None, Field(description="From the source listing when present; never invented")
+    ] = None
+    color: Annotated[
+        str | None, Field(description="From the source listing when present; never invented")
+    ] = None
+    material: Annotated[
+        str | None, Field(description="From the source listing when present; never invented")
+    ] = None
     tags: list[str]
-    file: Annotated[str, Field(description="Relative to the pack root", pattern="^furniture/.+\\.glb$")]
-    size_m: SizeM
-    placement: Placement
+    file: Annotated[
+        str, Field(description="Relative to the pack version folder", pattern="^furniture/.+\\.glb$")
+    ]
+    thumb: Annotated[
+        str | None,
+        Field(
+            description="Optional small catalog image for the chat panel, relative to the pack version folder",
+            pattern="^furniture/.+\\.(jpg|png|webp)$",
+        ),
+    ] = None
+    size_m: Annotated[
+        SizeM, Field(description="Measured from the normalized mesh, never copied from listing text")
+    ]
+    placement: Annotated[
+        Placement,
+        Field(description="Default placement; wall, corner, center and beside match propose_poses rules"),
+    ]
     clearance_m: ClearanceM
     cover: Annotated[
         Cover, Field(description="full: taller than 1.2 m; half: 0.5 to 1.2 m; none: below 0.5 m")
     ]
-    license: Annotated[str, Field(min_length=1)]
-    source: Annotated[str, Field(min_length=1)]
+    source: Source

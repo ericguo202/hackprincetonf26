@@ -1,13 +1,33 @@
 {
-  "id": "couch_01",
-  "name": "Couch",
-  "category": "couch",
-  "tags": ["living_room", "seating", "cover"],
-  "file": "furniture/couch_01.glb",
-  "size_m": { "w": 2.1, "d": 0.9, "h": 0.85 },
+  "id": "sofa_abo_B072C8Q9RF",
+  "name": "Sofa",
+  "category": "sofa",
+  "style": "Transitional",
+  "color": "Charcoal",
+  "material": "Wood",
+  "tags": [
+    "living_room",
+    "seating",
+    "movie_night",
+    "cover"
+  ],
+  "file": "furniture/sofa_abo_B072C8Q9RF.glb",
+  "size_m": {
+    "w": 2.312,
+    "d": 0.969,
+    "h": 0.792
+  },
   "placement": "wall",
-  "clearance_m": { "front": 0.75 },
+  "clearance_m": {
+    "front": 0.75
+  },
   "cover": "half",
-  "license": "CC0",
-  "source": "Kenney"
+  "source": {
+    "dataset": "ABO",
+    "item_id": "B072C8Q9RF",
+    "product_name": "Amazon Brand – Rivet Midtown Contemporary Upholstered Sofa Couch, 92.1\"W, Charcoal",
+    "brand": "Rivet",
+    "license": "CC BY 4.0",
+    "credit": "Amazon Berkeley Objects, Amazon.com"
+  }
 }

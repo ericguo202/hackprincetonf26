@@ -2,30 +2,46 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "asset.schema.json",
   "title": "Asset",
-  "description": "One entry of furniture/catalog.json. Asset .glb: Y up, meters, origin at bottom center, front facing +Z, under 5 MB.",
+  "description": "One entry of furniture/catalog.json (AGENTS.md section 9). Asset .glb: Y up, meters, origin at bottom center, front facing +Z, under 5 MB.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "id", "name", "category", "tags", "file", "size_m", "placement",
-    "clearance_m", "cover", "license", "source"
+    "clearance_m", "cover", "source"
   ],
   "properties": {
-    "id": { "type": "string", "pattern": "^[a-z0-9_]+_[0-9]{2}$" },
-    "name": { "type": "string" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+_[a-z0-9]+_[A-Za-z0-9]+$",
+      "description": "<category>_<source>_<source id>, e.g. sofa_abo_B075X4QMX3; stable across rebuilds"
+    },
+    "name": { "type": "string", "description": "Short generic name for in-world labels (no brand)" },
     "category": { "type": "string" },
+    "style": { "type": ["string", "null"], "description": "From the source listing when present; never invented" },
+    "color": { "type": ["string", "null"], "description": "From the source listing when present; never invented" },
+    "material": { "type": ["string", "null"], "description": "From the source listing when present; never invented" },
     "tags": { "type": "array", "items": { "type": "string" } },
-    "file": { "type": "string", "pattern": "^furniture/.+\\.glb$", "description": "Relative to the pack root" },
+    "file": { "type": "string", "pattern": "^furniture/.+\\.glb$", "description": "Relative to the pack version folder" },
+    "thumb": {
+      "type": "string",
+      "pattern": "^furniture/.+\\.(jpg|png|webp)$",
+      "description": "Optional small catalog image for the chat panel, relative to the pack version folder"
+    },
     "size_m": {
       "type": "object",
       "additionalProperties": false,
       "required": ["w", "d", "h"],
+      "description": "Measured from the normalized mesh, never copied from listing text",
       "properties": {
         "w": { "type": "number", "exclusiveMinimum": 0, "description": "Along local X" },
         "d": { "type": "number", "exclusiveMinimum": 0, "description": "Along local Z" },
         "h": { "type": "number", "exclusiveMinimum": 0 }
       }
     },
-    "placement": { "enum": ["wall", "corner", "free", "on_surface"] },
+    "placement": {
+      "enum": ["wall", "corner", "center", "beside", "free", "on_surface"],
+      "description": "Default placement; wall, corner, center and beside match propose_poses rules"
+    },
     "clearance_m": {
       "type": "object",
       "additionalProperties": false,
@@ -40,7 +56,21 @@
       "enum": ["full", "half", "none"],
       "description": "full: taller than 1.2 m; half: 0.5 to 1.2 m; none: below 0.5 m"
     },
-    "license": { "type": "string", "minLength": 1 },
-    "source": { "type": "string", "minLength": 1 }
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset", "license", "credit"],
+      "properties": {
+        "dataset": { "enum": ["ABO", "PolyHaven", "KayKit", "Kenney"] },
+        "item_id": { "type": ["string", "null"] },
+        "product_name": {
+          "type": ["string", "null"],
+          "description": "Full listing name; credits screen and chat panel only, never in-world signage"
+        },
+        "brand": { "type": ["string", "null"] },
+        "license": { "type": "string", "minLength": 1 },
+        "credit": { "type": "string", "minLength": 1 }
+      }
+    }
   }
 }

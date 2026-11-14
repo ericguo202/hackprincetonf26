@@ -5,12 +5,12 @@
 {"type": "agent.subagent", "data": {"name": "room-scout", "status": "finished", "summary": "hou_000123.r1 living room, 25.2 m2"}}
 {"type": "agent.todos", "data": {"todos": [{"content": "Find the living room the player is in", "status": "completed"}, {"content": "Pick movie-night furniture sized to the room", "status": "in_progress"}, {"content": "Lay out, validate, fix", "status": "pending"}, {"content": "Place it in the house", "status": "pending"}]}}
 {"type": "agent.subagent", "data": {"name": "asset-curator", "status": "started", "summary": "Movie-night living room, max 6.0 x 4.2 m"}}
-{"type": "agent.tool", "data": {"agent": "asset-curator", "tool": "search_assets", "status": "finished", "summary": "couch_01, tv_stand_01 match"}}
-{"type": "agent.subagent", "data": {"name": "asset-curator", "status": "finished", "summary": "2 items: couch_01, tv_stand_01"}}
+{"type": "agent.tool", "data": {"agent": "asset-curator", "tool": "search_assets", "status": "finished", "summary": "sofa_abo_B072C8Q9RF, tv_stand_abo_B07GFFPKBG match"}}
+{"type": "agent.subagent", "data": {"name": "asset-curator", "status": "finished", "summary": "2 items: sofa_abo_B072C8Q9RF, tv_stand_abo_B07GFFPKBG"}}
 {"type": "agent.todos", "data": {"todos": [{"content": "Find the living room the player is in", "status": "completed"}, {"content": "Pick movie-night furniture sized to the room", "status": "completed"}, {"content": "Lay out, validate, fix", "status": "in_progress"}, {"content": "Place it in the house", "status": "pending"}]}}
-{"type": "agent.subagent", "data": {"name": "layout-planner", "status": "started", "summary": "Place couch_01 and tv_stand_01 in hou_000123.r1"}}
-{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "propose_poses", "status": "finished", "summary": "couch_01: 5 poses against_wall"}}
-{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "propose_poses", "status": "finished", "summary": "tv_stand_01: 3 poses facing couch_01"}}
+{"type": "agent.subagent", "data": {"name": "layout-planner", "status": "started", "summary": "Place sofa_abo_B072C8Q9RF and tv_stand_abo_B07GFFPKBG in hou_000123.r1"}}
+{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "propose_poses", "status": "finished", "summary": "sofa_abo_B072C8Q9RF: 5 poses against_wall"}}
+{"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "propose_poses", "status": "finished", "summary": "tv_stand_abo_B07GFFPKBG: 3 poses facing sofa_abo_B072C8Q9RF"}}
 {"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "validate_layout", "status": "finished", "summary": "p_01: 0 conflicts"}}
 {"type": "agent.tool", "data": {"agent": "layout-planner", "tool": "commit_placement", "status": "finished", "summary": "p_01: 2 objects placed"}}
 {"type": "agent.subagent", "data": {"name": "layout-planner", "status": "finished", "summary": "p_01 placed, 2 objects, none dropped"}}
