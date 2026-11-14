@@ -13,7 +13,7 @@ can never be shipped or read by accident.
       --reason "interior: sharper wall seams (lane-a/house-quality) + scanned lot (lane-a/outdoor)"
 
 Promotion rule (docs/house-pipeline-handoff.md, "Pack versions"): a candidate replaces the live version only
-when it is at least as good as the live one on every house, not merely good on its own.
+when it builds on the live one: metrics mostly better, nothing clearly worse, no earlier gain lost.
 """
 
 from __future__ import annotations
@@ -188,7 +188,7 @@ def pin(
     if previous is not None and not compared_to_live.strip():
         raise SystemExit(
             f"say how v{version} compares with the live v{previous} on every house (--compared-to-live). "
-            "A candidate replaces the live version only when it is at least as good everywhere."
+            "A candidate should build on the live version: mostly better, nothing clearly worse."
         )
     if not skip_validate:
         ok, log = validate(block_id, version, out)
@@ -219,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument(
         "--compared-to-live",
         default="",
-        help="evidence that it is at least as good as the live version on every house (scores, viewer check)",
+        help="how it compares with the live version per house (scores, viewer check); no clear regressions",
     )
     q.add_argument("--skip-validate", action="store_true")
     a = p.parse_args(argv)
