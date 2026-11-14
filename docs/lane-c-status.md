@@ -2,7 +2,7 @@
 
 Lane C is the game client's world and player: `apps/web/src/world/` and
 `apps/web/src/player/` (AGENTS.md section 6). Written 2026-11-14 at main
-`1d8b011`. Read AGENTS.md first. Rules that matter most here: stay inside
+`1d8b011`; updated at the end of the second session the same day (section 9). Read AGENTS.md first. Rules that matter most here: stay inside
 those two folders (plus `apps/web/public/characters/`). Never edit
 `apps/web/src/store.ts` (Lane D) or anything in `contracts/` (all four lanes
 agree first). Cross-lane needs go in `HANDOFF.md`.
@@ -16,18 +16,18 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Pack loading | `world/pack.ts`, `usePack.ts`, `fixtures.ts` | Loads `manifest.json` from `VITE_PACK_BASE_URL` and validates it by hand against `manifest.schema.json` (a test checks the key lists against the schema file). It also loads the listings index, `rooms.json` and the furniture catalog. Falls back to `contracts/fixtures/` when the base URL is unset or the manifest is bad. A missing side file degrades to empty, with one warning each. |
 | Zones and doors | `world/pack.ts` (`stepZone`, `makeDoor`), `World.tsx` | `me.zone` is `"block"` or a `listing_id`, and positions are in that zone's frame. Walking within 0.9 m of a door point switches zone. It re-arms at 1.8 m, so there's no bounce. `me.roomId` comes from `roomAt()`. Only one zone's geometry is mounted at a time. |
 | Meshes | `world/Glb.tsx`, `gltf.ts`, `meshProbe.ts`, `collision.ts` | Every `.glb` gets a `HEAD` probe first. Missing (non-2xx, or Vite's `index.html`) means one warning and the placeholder; the loader never sees it, so nothing throws. `LoadBoundary` only catches files that exist but fail to parse. The meshopt decoder is three's own (`setMeshoptDecoder`). `collision.glb` becomes one trimesh. Render meshes never collide. |
-| Placeholders | `BlockScene.tsx`, `HouseScene.tsx`, `placeholder.ts` | Block: lawn, street, sidewalk, a massing box per house, a lit door with a trigger ring. House: floors by room label, walls with door gaps, an exit door. Every house zone has a fenced lawn yard, so an exterior door gap never drops the player into the void. |
+| Placeholders | `BlockScene.tsx`, `HouseScene.tsx`, `placeholder.ts` | Block: lawn, street, sidewalk, a massing box per house, a lit door with a trigger ring. House: floors by room label, walls with door gaps, an exit door. Every house zone has a fenced lawn yard, so an exterior door gap never drops the player into the void. Every room also gets a ceiling collider at `floor_y + height_m` (`HouseCeilings`, `ceilingTrimesh`), because `collision.glb` has no ceiling. |
 | Collision groups | `world/collisionGroups.ts` | `ZONE_COLLIDER` (collision mesh and its placeholders), `FURNITURE_COLLIDER`. Two query filters: `CAMERA_QUERY` (zone only) and `SHOT_QUERY` (zone and furniture). |
 | Frame order | `world/frameOrder.ts` | Physics −50, camera −10, blaster 0. Never use a positive `useFrame` priority: R3F stops rendering automatically. |
 | Player | `player/Player.tsx`, `movement.ts`, `animState.ts`, `playerControl.ts` | An ecctrl capsule (WASD or arrows, Shift to run, Space to jump), with `lockForward` while the camera is on. Writes `me.pos`, `yaw` and `anim` to the store at 20 Hz for Lane D's `move`. `playerControl` moves the physics body itself (`teleport`); writing `me.pos` does not. |
-| Camera | `player/CameraArm.tsx`, `armMath.ts` | Over-the-shoulder arm with collision, 3.0 m back and 0.4 m right, scroll range 0.6–3.5 m. Indoors it starts in first person. V toggles first person. Click to lock the pointer. The body hides below the larger of 1.6 m and r / tan(hFOV/4). It follows the interpolated body, which fixed an 8 cm per-frame jitter. |
+| Camera | `player/CameraArm.tsx`, `armMath.ts` | Eye at an adult 1.6 m (`headOffsetY` 0.65 above the body centre; the model is still 1.3 m). Over-the-shoulder arm with collision, 3.0 m back and 0.4 m right, scroll range 0.6–3.5 m. Indoors it starts in first person. V toggles first person. Click to lock the pointer. The body hides below the larger of 1.6 m and r / tan(hFOV/4). It follows the interpolated body, which fixed an 8 cm per-frame jitter. |
 | Blaster | `player/Blaster.tsx`, `blasterMath.ts`, `Crosshair.tsx`, `blasterHud.ts` | Hitscan: aim along the camera ray past the head, shoot from the head toward that aim point, 4 shots/s. Tracer, muzzle flash, impact puff. Crosshair and hit marker show only while the pointer is locked. Seams for Lane D: `getHitboxes` and `onFire` props on `<Player>`. |
 | Furniture | `world/FurnitureLayer.tsx`, `furniturePlan.ts`, `indoorSpawns.ts` | Renders `store.houses[zone]`. A missing mesh becomes a labelled box from `size_m`. Colliders are built from `size_m`. 0.45 s drop-in. On a plan change: remount (no ghost colliders), push-out of the real body, and indoor spawns recomputed. |
 | Labels | `world/WorldLabel.tsx`, `labelFade.ts` | Fixed screen size. Hidden below 1.5 m, gone by 10 m (door labels stay up to 40 m). |
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 155 tests in 11 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 159 tests in 11 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -53,6 +53,8 @@ check below was made by the human.
 - A re-furnish leaves no ghost colliders, and push-out moves the body. Without push-out, the body ends up on top of the new sectional.
 - The jitter numbers: an 8 cm swing at 60, 120 and 144 Hz, down to 0 cm.
 - Character scale (1.3 m), feet on the floor at rest and through the run cycle (foot lift), one tinted weapon, clip names matching the shipped file.
+- Doorways (section 9): 10 of 13 doors in 6915 pass the 0.6 m capsule; both bathrooms are unreachable.
+- Ceilings: the camera looking down clamps at 2.34 m under a 2.44 m ceiling (it was 3.54 m), and an 8 m/s launch stops at 2.47 m (it was 4.85 m).
 
 **Not verified anywhere yet:**
 - The character in the page: feet following ecctrl's `standPoint` in practice, the crossfades, first person hiding the model, and its facing while running.
@@ -104,6 +106,8 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 - **Interior looks washed out:** Lane A's HANDOFF suggests `material.toneMapped = false` on `interior.glb` meshes, since its textures are finished photos. Not done.
 - **Blocky walls up close:** walls look blocky within about 30 cm. The camera arm pulls in 0.15 m from walls, so this can show indoors.
 - **Character and collider don't line up:** the model is 1.3 m with feet on the floor, but ecctrl floats the 1.3 m capsule 0.3 m up, so the collider spans 0.3–1.6 m. Shot hitboxes for remote players should match the model, not the capsule: centre at feet + 0.65 m, which is 0.30 m below the body centre (`FOOT_BELOW_CENTRE_M` − 0.65).
+- **Both bathrooms are unreachable:** their doors are 0.56 and 0.58 m wide, narrower than the 0.6 m capsule. The widths look real (24-inch doors), so the fix is a smaller radius (0.25 m opens both). That's a Lane C decision and was deliberately not made yet. See section 9.
+- **Jump apex vs ceiling:** the 1.6 m eye sits exactly at the capsule top. A normal jump (4 m/s) peaks at about 2.40 m, which puts the first-person eye within the 0.1 m near plane of a 2.43 m ceiling, so the roof can clip at the top of a jump. Fixes: a lower `jumpVel` (3 m/s gives about a 0.46 m apex), or an eye a little below the capsule top. Not done.
 - **No respawn yet:** `indoorSpawns` computes indoor spawns, but nothing uses them yet. That's the foam-fight round loop, Lane D server and C client.
 - **Weapon choice:** the character's weapon is the pack's Pistol, tinted foam orange. Changing it is one constant: `CHARACTER.keepWeapon`.
 
@@ -126,7 +130,7 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 
 ## 7. Open HANDOFF items for Lane D
 
-None of these were addressed on main as of `1d8b011` (checked in `apps/game/src/rooms/NeighborhoodRoom.ts`).
+None of these were addressed on main as of the end of session 2 (checked in `apps/game/src/rooms/NeighborhoodRoom.ts`).
 
 1. **Zone changes are rejected by the server.** `move` drops any step over `MAX_STEP_M` (3 m), and `enter_zone` doesn't reset that. A zone change always jumps more than 3 m into the new zone's frame, so after one door every later move is dropped and the player looks frozen to others. The first spawn hits the same rule, being more than 3 m from the server's default (0, 0, 0). Fix: accept the next position after `enter_zone` and after joining.
 2. **Remote players:** interpolate from the rendered mesh transform, never from `body.translation()` or ecctrl's `currPos` (the 8 cm swing).
@@ -146,3 +150,72 @@ None of these were addressed on main as of `1d8b011` (checked in `apps/game/src/
 - **Browser console:** Vite forwards the browser console to its terminal output. That's useful when no browser automation is available.
 - **Case-insensitive filenames:** macOS treats `CameraArm.tsx` and `cameraArm.ts` as the same file. That's why the camera math is `armMath.ts`.
 - **Node checks:** for headless checks in Node, three's `GLTFLoader` needs a `ProgressEvent` stand-in (`globalThis.ProgressEvent ??= class { ... }`) to load an embedded `.gltf`.
+
+## 9. Session 2 (2026-11-14, afternoon): what changed
+
+Merged to main this session:
+1. **Character crash fix.** React StrictMode's dev unmount and remount, plus `mixer.uncacheRoot()`, left stale `AnimationAction`s that crashed on `play()` (`_cacheIndex`). The rig now keeps only clips, and `actionFor()` asks the mixer for an action each time. A regression test covers it.
+2. **Eye height 1.6 m:** `ARM.headOffsetY` went from 0.5 to 0.65. The model and capsule are unchanged at 1.3 m. A test pins `FOOT_BELOW_CENTRE_M + headOffsetY = 1.6`.
+3. **Doorway diagnosis.** Recorded in HANDOFF.md as lane-c -> lane-a. Nothing was changed.
+   - **Method:** a 0.6 m capsule driven headless through all 13 doors of 6915 (`hou_237901269`, the local v1 pack from `packs.zip`) against `collision.glb`.
+   - **Data matches:** collision holes match `rooms.json` widths to within 1–3 cm.
+   - **Pass:** 9 doors (0.69–0.84 m), plus both closets through their wider openings.
+   - **Blocked:**
+     - hall bathroom r10, 0.56 m;
+     - primary bathroom r9, 0.58 m;
+     - closet r2's second opening, 0.50 m. Its other opening is 0.74 m, so it may be one bifold traced as two; that's a question for Lane A.
+   - **Unreachable from the living room:** only the two bathrooms.
+   - **Judgment:** the widths look like real 24-inch bathroom doors, not a measurement error. The fix is a capsule radius decision; per the session brief the radius was not changed.
+   - **Caveat:** Lane A has rebuilt the house packs since (closed doors solid, carved openings). Re-run this on the rebuilt pack before deciding.
+4. **Ceiling colliders** per room (section 1, Placeholders row).
+
+### Deferred: 1.75 m character scale-up (specced, not done)
+
+1.3 m is child height next to a 0.85 m sofa. Recommended approach: make the model's full height 1.75 m, and shorten the capsule by the float gap so the collider spans 0.3–1.75 m. That also removes today's collider and model mismatch. Keep the radius at 0.3 m, or 0.25 m if the doorway decision lands that way.
+
+| What | Now | At 1.75 m | Where |
+| --- | --- | --- | --- |
+| Capsule half-height | 0.35 | 0.425 | `movement.ts` |
+| Capsule radius | 0.3 | 0.3 (or 0.25, see doorways) | `movement.ts` |
+| Float gap | 0.3 | 0.3 | unchanged |
+| Model height (`CHARACTER.heightM`) | 2·(h+r) = 1.3 | 2·(h+r) + float = 1.75 | `characterAsset.ts`, formula |
+| Model scale | 0.5916 | 0.7966 | derived at load |
+| Run foot lift | 5.0 cm | about 6.7 cm | measured at load |
+| Body centre / `FOOT_BELOW_CENTRE_M` | 0.95 | 1.025 | derived |
+| Eye (`headOffsetY`) | 0.65 → eye at 1.6 m | 0.575 → eye at 1.6 m | `armMath.ts` |
+| Hide threshold minimum (`hideBodyBelow`) | 1.6 | 2.15 | `armMath.ts` |
+| Hide threshold, FOV part | r / tan(hFOV/4) | unchanged unless the radius changes | — |
+| Arm back / max | 3.0 / 3.5 | keep, maybe max 4.0 | optional |
+| Muzzle offset (right / forward / up) | 0.22 / 0.45 / −0.3 | about 0.3 / 0.6 / −0.4 | `blasterMath.ts`, cosmetic |
+| Spawn drop height | 1.0 m | `FOOT_BELOW_CENTRE_M` + 0.1 | `World.tsx` |
+| Remote hitbox | centre 0.30 m below body centre, half-height 0.35 | centre 0.15 m below body centre, radius 0.3, half-height 0.575 | section 5, HANDOFF to Lane D |
+| Spawn clearance, door trigger | 0.6 / 0.9 / 1.2 m | unchanged (radius-based) | — |
+| `jumpVel` | 4.0 (about 0.8 m apex) | about 3.0, or the head goes through 2.43 m ceilings | `movement.ts` |
+
+**Tests that need new expectations:**
+1. `characterRig.test`: "1.3 m tall" becomes 1.75, and the `heightM` formula check gains `+ floatHeight`.
+2. `armMath.test`: "frames the whole capsule" (twice the capsule height is 2.9 m, but the 3.0 m arm shows 2.83 m). Restate it as 1.5× the model's height, or raise the default arm to 3.2 m.
+3. `armMath.test`: the "1.6 m minimum" literals become 2.15 and 2.14.
+4. `armMath.test`: "narrow view raises the threshold" needs a 30° view instead of 40°.
+
+The eye-height test keeps passing if `headOffsetY` is retuned to keep the eye at 1.6 m. Everything else derives from the constants.
+
+**Contract flag:** the asset schema's cover classes are absolute metres ("full" means taller than 1.2 m). At 1.75 m, "full" cover no longer hides a standing head. Changing that needs all four lanes.
+
+## 10. Where Lane C stands, and the next task
+
+**Stands:**
+- **Single player works end to end on main:**
+  - pack loading with fallbacks, zones and doors, collision and ceilings;
+  - the over-the-shoulder camera, with first person indoors at a 1.6 m eye;
+  - the foam blaster;
+  - furniture from plans, as boxes until real meshes are published;
+  - the animated Toon Shooter character.
+- **Remote players:** the seams for Lane D are in place (`<Character>`, `onFire`, `getHitboxes`, `FOOT_BELOW_CENTRE_M`). Multiplayer is blocked on Lane D's server items in section 7.
+- **Verification:** most physics is proven headless. The character in the live page, the label fade and the jitter fix still need a browser pass.
+
+**Single next task:** decide and apply the capsule radius, then re-verify the doorways on Lane A's rebuilt pack.
+1. Run `cd worldgen && uv run python -m worldgen.publish hou_navidad_01 --local`. Then set `/.env.local` to `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` and `VITE_START_ROOM=hou_236595179.r3` (the new hero house).
+2. Re-run the headless doorway drive on both houses. Rebuild it from the method in this section: a dynamic capsule from each door's larger room to 0.45 m past the door line, and step the world once before any ray query.
+3. If bathrooms are still under 0.6 m, set `MOVEMENT.capsuleRadius` to 0.25. Then update the hitbox radius and the two blaster tests that hard-code 0.3. The FOV part of the hide threshold follows automatically.
+4. Then browser-check the soldier, the doorways and first person, and do the 1.75 m scale-up above in the same pass, since it touches the same constants.
