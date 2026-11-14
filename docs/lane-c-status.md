@@ -2,7 +2,7 @@
 
 Lane C is the game client's world and player: `apps/web/src/world/` and
 `apps/web/src/player/` (AGENTS.md section 6). Written 2026-11-14 at main
-`1d8b011`; updated at the end of the second session the same day (section 9), and again for remote players (section 11). Read AGENTS.md first. Rules that matter most here: stay inside
+`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), and for the capsule radius (section 12). Read AGENTS.md first. Rules that matter most here: stay inside
 those two folders (plus `apps/web/public/characters/`). Never edit
 `apps/web/src/store.ts` (Lane D) or anything in `contracts/` (all four lanes
 agree first). Cross-lane needs go in `HANDOFF.md`.
@@ -54,7 +54,7 @@ check below was made by the human.
 - A re-furnish leaves no ghost colliders, and push-out moves the body. Without push-out, the body ends up on top of the new sectional.
 - The jitter numbers: an 8 cm swing at 60, 120 and 144 Hz, down to 0 cm.
 - Character scale (1.3 m), feet on the floor at rest and through the run cycle (foot lift), one tinted weapon, clip names matching the shipped file.
-- Doorways (section 9): 10 of 13 doors in 6915 pass the 0.6 m capsule; both bathrooms are unreachable.
+- Doorways (sections 9 and 12): with the 0.5 m capsule, all 13 doors in 6915 pass and every room is reachable (it was 10 of 13 at 0.6 m). 7014 has not been checked yet.
 - Ceilings: the camera looking down clamps at 2.34 m under a 2.44 m ceiling (it was 3.54 m), and an 8 m/s launch stops at 2.47 m (it was 4.85 m).
 
 **Not verified anywhere yet:**
@@ -108,7 +108,7 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 - **Interior looks washed out:** Lane A's HANDOFF suggests `material.toneMapped = false` on `interior.glb` meshes, since its textures are finished photos. Not done.
 - **Blocky walls up close:** walls look blocky within about 30 cm. The camera arm pulls in 0.15 m from walls, so this can show indoors.
 - **Character and collider don't line up:** the model is 1.3 m with feet on the floor, but ecctrl floats the 1.3 m capsule 0.3 m up, so the collider spans 0.3–1.6 m. Shot hitboxes for remote players should match the model, not the capsule: centre at feet + 0.65 m, which is 0.30 m below the body centre (`FOOT_BELOW_CENTRE_M` − 0.65).
-- **Both bathrooms are unreachable:** their doors are 0.56 and 0.58 m wide, narrower than the 0.6 m capsule. The widths look real (24-inch doors), so the fix is a smaller radius (0.25 m opens both). That's a Lane C decision and was deliberately not made yet. See section 9.
+- **7014's doors are unchecked:** the radius is now 0.25 m, so per Lane A's widths every bathroom door in both houses should fit, and 6915 is confirmed headless (section 12). 7014 hasn't been run: its pack isn't on this machine or any branch. Run `apps/web/scripts/door-check.ts` on it once Lane A's publish lands.
 - **Jump apex vs ceiling:** the 1.6 m eye sits exactly at the capsule top. A normal jump (4 m/s) peaks at about 2.40 m, which puts the first-person eye within the 0.1 m near plane of a 2.43 m ceiling, so the roof can clip at the top of a jump. Fixes: a lower `jumpVel` (3 m/s gives about a 0.46 m apex), or an eye a little below the capsule top. Not done.
 - **No respawn yet:** `indoorSpawns` computes indoor spawns, but nothing uses them yet. That's the foam-fight round loop, Lane D server and C client.
 - **Weapon choice:** the character holds the kit's `RocketLauncher`, tinted foam orange. Despite the name it's a chunky cartoon tube, the only prop in the kit that reads as a toy; the pistols and rifles are realistic. Changing it is one constant: `CHARACTER.keepWeapon`.
@@ -174,8 +174,8 @@ Merged to main this session:
 
 | What | Now | At 1.75 m | Where |
 | --- | --- | --- | --- |
-| Capsule half-height | 0.35 | 0.425 | `movement.ts` |
-| Capsule radius | 0.3 | 0.3 (or 0.25, see doorways) | `movement.ts` |
+| Capsule half-height | 0.40 | 0.475 | `movement.ts` |
+| Capsule radius | 0.25 (section 12) | 0.25 | `movement.ts` |
 | Float gap | 0.3 | 0.3 | unchanged |
 | Model height (`CHARACTER.heightM`) | 2·(h+r) = 1.3 | 2·(h+r) + float = 1.75 | `characterAsset.ts`, formula |
 | Model scale | 0.5916 | 0.7966 | derived at load |
@@ -187,7 +187,7 @@ Merged to main this session:
 | Arm back / max | 3.0 / 3.5 | keep, maybe max 4.0 | optional |
 | Muzzle offset (right / forward / up) | 0.22 / 0.45 / −0.3 | about 0.3 / 0.6 / −0.4 | `blasterMath.ts`, cosmetic |
 | Spawn drop height | 1.0 m | `FOOT_BELOW_CENTRE_M` + 0.1 | `World.tsx` |
-| Remote hitbox | centre 0.30 m below body centre, half-height 0.35 | centre 0.15 m below body centre, radius 0.3, half-height 0.575 | section 5, HANDOFF to Lane D |
+| Remote hitbox | centre 0.30 m below body centre, radius 0.25, half-height 0.40 | centre 0.15 m below body centre, radius 0.25, half-height 0.625 | section 5, HANDOFF to Lane D |
 | Spawn clearance, door trigger | 0.6 / 0.9 / 1.2 m | unchanged (radius-based) | — |
 | `jumpVel` | 4.0 (about 0.8 m apex) | about 3.0, or the head goes through 2.43 m ceilings | `movement.ts` |
 
@@ -213,11 +213,11 @@ The eye-height test keeps passing if `headOffsetY` is retuned to keep the eye at
 - **Remote players:** rendered, interpolated and shootable (section 11), proven with fake players (`VITE_DEV_REMOTES`). The networked fight needs Lane D's server items in section 7: accepting moves after a zone change, the `fire` handler, and passing their sender as `onFire`.
 - **Verification:** most physics is proven headless. The character in the live page, the label fade and the jitter fix still need a browser pass.
 
-**Single next task:** decide and apply the capsule radius, then re-verify the doorways on Lane A's rebuilt pack.
-1. Run `cd worldgen && uv run python -m worldgen.publish hou_navidad_01 --local`. Then set `/.env.local` to `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` and `VITE_START_ROOM=hou_236595179.r3` (the new hero house).
-2. Re-run the headless doorway drive on both houses. Rebuild it from the method in this section: a dynamic capsule from each door's larger room to 0.45 m past the door line, and step the world once before any ray query.
-3. If bathrooms are still under 0.6 m, set `MOVEMENT.capsuleRadius` to 0.25. Then update the hitbox radius and the two blaster tests that hard-code 0.3. The FOV part of the hide threshold follows automatically.
-4. Then browser-check the soldier, the doorways and first person, and do the 1.75 m scale-up above in the same pass, since it touches the same constants.
+**Single next task:** check 7014's doors once Lane A's committed publish lands, then do the browser pass. (Section 12 records that the radius decision is done.)
+1. After Lane A's publish is on main (HANDOFF 16:30, now OK'd by Lane C), set `/.env.local` to `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` and `VITE_START_ROOM=hou_236595179.r3` (the hero house). Delete the stale `apps/web/public/packs/hou_navidad_01/` from `packs.zip` first, so it never gets committed alongside.
+2. Run `node --experimental-strip-types apps/web/scripts/door-check.ts apps/web/public/packs/packs/hou_navidad_01/v1/houses/hou_236595179` from the repo root. It exits non-zero if a bathroom is unreachable. Re-run it on 6915 there too, since Lane A rebuilt that house.
+3. Browser pass with `VITE_DEV_REMOTES=1`: the soldier, the doorways, first person, shooting the fakes.
+4. The 1.75 m scale-up (section 9) is still deferred. Do it in the same pass if the team wants it, since it touches the same constants.
 
 ## 11. Session 3: remote players and the weapon look
 
@@ -230,7 +230,7 @@ The eye-height test keeps passing if `headOffsetY` is retuned to keep the eye at
   - A zone change restarts that player's buffer, so it never lerps across frames.
   - It holds the last patch rather than extrapolating.
   - `moving` (for `Run_Shoot`) means a speed over 0.5 m/s.
-- **Hitboxes:** built from the same interpolated samples that are drawn (the HANDOFF rule), and sized to the model: feet to feet + 1.3 m, radius 0.3. They are not sized to the floated capsule (0.3–1.6 m), so a dart at the knees hits and one just over the head misses.
+- **Hitboxes:** built from the same interpolated samples that are drawn (the HANDOFF rule), and sized to the model: feet to feet + 1.3 m, with the capsule radius (0.25 since section 12). They are not sized to the floated capsule (0.3–1.6 m), so a dart at the knees hits and one just over the head misses.
 - **Shooting:** `remoteHitboxes()` is passed as `<Player getHitboxes>`, so the blaster hits the nearest remote player, shows a red hit marker and puts `target_id` in the payload. The frame order is remote −20, before the blaster at 0.
 - **If the model is missing:** remotes fall back to an orange capsule (the local player's is blue).
 
@@ -243,4 +243,17 @@ The eye-height test keeps passing if `headOffsetY` is retuned to keep the eye at
 - melee and a second weapon slot, which are new scope;
 - switching to human characters: section 5 forbids retargeting, and that option is two packs combined.
 
-**Next task** (unchanged from section 10): decide the capsule radius and re-check the doorways on Lane A's rebuilt pack. For the scheduled networked fight, the remaining work is Lane D's (section 7, items 1 and 3).
+**Next task:** see section 10 (updated in section 12). For the scheduled networked fight, the remaining work is Lane D's (section 7, items 1 and 3).
+
+## 12. Session 3, later: capsule radius 0.25 m (bathrooms reachable)
+
+Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, and that the door widths are real. The narrowest bathroom door is 0.57 m: 7014's primary bathroom r11, and 6915's hall bathroom r10.
+
+- **The change:** `MOVEMENT.capsuleRadius` 0.3 → 0.25, so the capsule is 0.5 m wide. `capsuleHalfHeight` 0.35 → 0.40, so the capsule (and therefore the model, the 0.95 m foot offset and the 1.6 m eye) stays exactly 1.3 m. Tests pin all three.
+- **What follows automatically:** remote hitboxes (radius 0.25, half-height 0.40), the FOV part of the hide threshold (the 1.6 m minimum now applies down to about a 36° horizontal view), and the placeholder capsules.
+- **Tests updated:** the two blaster tests now read the radius instead of a literal 0.3. The narrow-view test went from 40° to 30°, because at radius 0.25 a 40° view no longer exceeds the minimum.
+- **6915 result:** all 13 doors pass, including the 0.56 m hall bathroom, the 0.58 m primary bathroom and closet r2's 0.50 m opening. Every room is reachable from the living room.
+- **7014:** not checked. Its pack isn't on this machine or any branch; `worldgen/out` doesn't exist here, and building it needs Lane A's pipeline. See section 10, step 2.
+- **The door check is now a committed tool:** `apps/web/scripts/door-check.ts <house dir>`. It resolves Rapier through `@react-three/rapier`, so no new dependency, and it exits non-zero if a bathroom is unreachable.
+
+**HANDOFF:** Lane C replied OK to Lane A's static-site hosting proposal (16:30), noting that the `.gitignore` line they'll remove is Lane C's and is fine to drop.
