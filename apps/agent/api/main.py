@@ -13,7 +13,8 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
 
 import settings
-from agent import game_api
+from agent import game_api, runner
+from agent.context import AgentContext
 from api.sessions import Session, sessions
 
 log = logging.getLogger("agent")
@@ -72,10 +73,23 @@ async def replay_fixture_transcript(s: Session) -> None:
 async def post_message(session_id: str, body: UserMessage) -> dict:
     s = _session(session_id)
     if settings.MOCK_AGENT:
-        asyncio.create_task(replay_fixture_transcript(s))
+        _spawn(replay_fixture_transcript(s))
+    elif not settings.MODEL:
+        await sessions.emit(s.session_id, {"type": "error", "data": {"message": "MODEL is not set"}})
     else:
-        await sessions.emit(s.session_id, {"type": "error", "data": {"message": "agent not wired yet"}})
+        ctx = AgentContext(session_id=s.session_id, player_id=s.player_id, block_id=s.block_id)
+        _spawn(runner.run_turn(ctx, body.text, lambda e: sessions.emit(s.session_id, e)))
     return {"accepted": True}
+
+
+_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> None:
+    """Keep a reference so the run is not garbage-collected mid-flight."""
+    task = asyncio.create_task(coro)
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
 
 
 @app.get("/sessions/{session_id}/stream", response_class=EventSourceResponse)
