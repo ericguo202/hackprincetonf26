@@ -193,6 +193,16 @@ describe("dev fake players (VITE_DEV_REMOTES)", () => {
     expect([...states].sort()).toEqual(["idle", "run", "shoot"]);
   });
 
+  it("two noodle hits eliminate (the blaster takes three)", () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const id = DEV_REMOTE_IDS[1];
+    const pose = fakePose(id, 0, [0, 0], 1);
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id, weapon: "noodle" }, 20);
+    expect(fakeAnim(id, 20.1, pose)).toBe("hit");
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id, weapon: "noodle" }, 21);
+    expect(fakeAnim(id, 21.1, pose)).toBe("eliminated");
+  });
+
   it("three hits eliminate, then respawn after 3 s; misses and other ids do nothing", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const id = DEV_REMOTE_IDS[0];

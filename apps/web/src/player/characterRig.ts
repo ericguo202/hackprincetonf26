@@ -14,9 +14,12 @@
 import {
   AnimationMixer,
   Box3,
+  CylinderGeometry,
+  Group,
   Mesh,
   MeshStandardMaterial,
   SkinnedMesh,
+  Vector3,
   type AnimationAction,
   type AnimationClip,
   type Material,
@@ -24,6 +27,7 @@ import {
 } from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
+import type { Weapon } from "../../../../contracts/game-state";
 import { CHARACTER } from "./characterAsset";
 import { CLIPS, CLIP_TRIM, MOVING_SHOOT, ONE_SHOT, type PackClip } from "./clips";
 
@@ -41,6 +45,8 @@ export type Rig = {
   /** Metres to raise the model while a clip plays, so its lowest foot meets the floor. */
   lift: Map<string, number>;
   scale: number;
+  /** The kit's blaster prop and the procedural pool noodle; setWeapon shows one. */
+  props: Record<Weapon, Object3D | null>;
 };
 
 type Measured = { scale: number; baseY: number; lift: Map<string, number> };
@@ -148,7 +154,54 @@ export function buildRig(source: Object3D, rawClips: AnimationClip[]): Rig {
   root.position.y = baseY;
 
   const mixer = new AnimationMixer(root);
-  return { root, mixer, clips: new Map(clips.map((c) => [c.name, c])), lift, scale };
+  const noodle = attachNoodle(root);
+  const rig: Rig = {
+    root,
+    mixer,
+    clips: new Map(clips.map((c) => [c.name, c])),
+    lift,
+    scale,
+    props: { blaster: root.getObjectByName(CHARACTER.keepWeapon) ?? null, noodle },
+  };
+  setWeapon(rig, "blaster");
+  return rig;
+}
+
+/** Show the held weapon's prop, hide the other. */
+export function setWeapon(rig: Rig, weapon: Weapon): void {
+  for (const [w, prop] of Object.entries(rig.props)) if (prop) prop.visible = w === weapon;
+}
+
+/**
+ * The pool noodle: a foam cylinder on the blaster's hand bone, with the
+ * blaster's local placement, running along the blaster's long axis (its
+ * local +X: the barrel reaches 3.78 forward of the grip, 2.52 behind). Sized
+ * in world metres after the rig is scaled. Hidden until selected.
+ */
+function attachNoodle(root: Object3D): Object3D | null {
+  const blaster = root.getObjectByName(CHARACTER.keepWeapon);
+  const hand = blaster?.parent;
+  if (!blaster || !hand) return null;
+  const n = CHARACTER.noodle;
+  const holder = new Group();
+  holder.name = n.name;
+  holder.position.copy(blaster.position);
+  holder.quaternion.copy(blaster.quaternion);
+  holder.scale.copy(blaster.scale);
+  hand.add(holder);
+  root.updateMatrixWorld(true);
+  // Local units per metre at this point in the hierarchy.
+  const k = 1 / holder.getWorldScale(new Vector3()).x;
+  const mesh = new Mesh(
+    new CylinderGeometry(n.radiusM * k, n.radiusM * k, n.lengthM * k, 10),
+    new MeshStandardMaterial({ color: n.color, roughness: 0.9 }),
+  );
+  mesh.rotation.z = -Math.PI / 2; // cylinder's +Y onto the blaster's +X
+  mesh.position.x = (n.lengthM / 2 - n.gripBackM) * k;
+  mesh.castShadow = true;
+  holder.add(mesh);
+  holder.visible = false;
+  return holder;
 }
 
 /** A live action for a clip: the mixer's cached one, or a fresh one after an uncache. */

@@ -15,38 +15,51 @@ import { Suspense, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { LoopOnce, LoopRepeat, type AnimationAction, type Group } from "three";
 
-import type { AnimState } from "../../../../contracts/game-state";
+import type { AnimState, Weapon } from "../../../../contracts/game-state";
 import { LoadBoundary } from "../world/Glb";
 import { usePackGLTF } from "../world/gltf";
 import { useMeshState } from "../world/meshProbe";
 import { CHARACTER } from "./characterAsset";
-import { actionFor, blendedLift, buildRig } from "./characterRig";
+import { actionFor, blendedLift, buildRig, setWeapon } from "./characterRig";
 import { CROSSFADE_S, clipFor } from "./clips";
 
 type Props = {
   animState: AnimState;
   /** Optional: true while the body is moving, so shoot uses the running variant. */
   moving?: boolean;
+  /** Which prop the character holds. Remote players: always the blaster for now (no wire field). */
+  weapon?: Weapon;
   url?: string;
   /** Rendered while the model is checked or loading, and if it is missing or broken. */
   fallback?: ReactNode;
 };
 
-export function Character({ animState, moving = false, url = CHARACTER.url, fallback = null }: Props) {
+export function Character({ animState, moving = false, weapon = "blaster", url = CHARACTER.url, fallback = null }: Props) {
   const mesh = useMeshState(url, url);
   if (mesh !== "ok") return <>{fallback}</>;
   return (
     <LoadBoundary url={url} label={url} fallback={fallback}>
       <Suspense fallback={fallback}>
-        <CharacterModel url={url} animState={animState} moving={moving} />
+        <CharacterModel url={url} animState={animState} moving={moving} weapon={weapon} />
       </Suspense>
     </LoadBoundary>
   );
 }
 
-function CharacterModel({ url, animState, moving }: { url: string; animState: AnimState; moving: boolean }) {
+function CharacterModel({
+  url,
+  animState,
+  moving,
+  weapon,
+}: {
+  url: string;
+  animState: AnimState;
+  moving: boolean;
+  weapon: Weapon;
+}) {
   const gltf = usePackGLTF(url);
   const rig = useMemo(() => buildRig(gltf.scene, gltf.animations), [gltf]);
+  useEffect(() => setWeapon(rig, weapon), [rig, weapon]);
   const liftGroup = useRef<Group>(null);
   const current = useRef<AnimationAction | null>(null);
 

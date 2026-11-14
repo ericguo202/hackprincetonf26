@@ -27,7 +27,6 @@ import {
   BLASTER,
   aimPoint,
   aimRay,
-  canFire,
   firePayload,
   headFrom,
   muzzleFrom,
@@ -40,6 +39,8 @@ import {
   type Ray,
 } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
+import { WEAPON_KEYS, canAttack, noodlePayload, noodleSwing } from "./weapons";
+import { useWeaponState } from "./weaponState";
 
 type Props = {
   ecctrl: RefObject<EcctrlHandle | null>;
@@ -69,6 +70,7 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
   const showMarker = useBlasterHud((s) => s.showMarker);
 
   const triggerHeld = useRef(false);
+  const setWeapon = useWeaponState((s) => s.setWeapon);
   const lastShotAt = useRef<number | null>(null);
 
   // Scratch objects, reused every frame.
@@ -100,17 +102,38 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     const release = () => {
       if (!locked()) triggerHeld.current = false;
     };
+    // Keys 1 and 2 pick the weapon (weapons.ts WEAPON_KEYS).
+    const onKey = (e: KeyboardEvent) => {
+      const w = WEAPON_KEYS[e.code];
+      const el = document.activeElement;
+      if (!w || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+      setWeapon(w);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("mouseup", onUp);
     document.addEventListener("pointerlockchange", release);
     window.addEventListener("blur", release);
+    window.addEventListener("keydown", onKey);
     return () => {
+      window.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("mouseup", onUp);
       document.removeEventListener("pointerlockchange", release);
       window.removeEventListener("blur", release);
     };
-  }, [canvas]);
+  }, [canvas, setWeapon]);
+
+  /**
+   * Pool noodle swing: an arc query from the head along the aim, players only
+   * (no walls or furniture), then the `fire` message with weapon "noodle".
+   */
+  function swing(camDir: V3, bodyCentre: V3, now: number) {
+    const head = headFrom(bodyCentre, ARM.headOffsetY);
+    const hit = noodleSwing(head, camDir, getHitboxes());
+    onFire(noodlePayload(head, camDir, hit));
+    onShot?.(now); // the swing uses the `shoot` anim state
+    if (hit) showMarker("player");
+  }
 
   /** First zone-or-furniture hit along a ray, between minT and maxT, ignoring my own body. */
   function castWorld(ray: Ray, minT: number, maxT: number, exclude: EcctrlHandle["body"]): number | null {
@@ -180,12 +203,15 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
 
     if (handle && triggerHeld.current) {
       const now = state.clock.elapsedTime;
-      if (canFire(lastShotAt.current, now)) {
+      const weapon = useWeaponState.getState().weapon;
+      if (canAttack(weapon, lastShotAt.current, now)) {
         lastShotAt.current = now;
         const cam = state.camera;
         cam.getWorldDirection(tmpDir.current);
         const centre = body.current ? body.current.getWorldPosition(tmpBody.current) : handle.currPos;
-        fire(
+        if (weapon === "noodle") {
+          swing([tmpDir.current.x, tmpDir.current.y, tmpDir.current.z], [centre.x, centre.y, centre.z], now);
+        } else fire(
           [cam.position.x, cam.position.y, cam.position.z],
           [tmpDir.current.x, tmpDir.current.y, tmpDir.current.z],
           [centre.x, centre.y, centre.z],
