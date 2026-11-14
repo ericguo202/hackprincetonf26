@@ -1,6 +1,6 @@
 """Step 6c: normalize the selected ABO .glb files and write the furniture library (AGENTS.md 7.6, 9).
 
-    uv run python -m worldgen.normalize [--version 1] [--force] [--jobs 6]
+    uv run python -m worldgen.normalize --version N [--force] [--jobs 6]   (never a version a live pack uses)
     uv run python -m worldgen.normalize --preview   # orientation contact sheets
 
 Input:  out/abo_selection.json (from `worldgen.sources.abo select`) and out/raw/abo/<3dmodel_id>.glb.
@@ -383,13 +383,22 @@ def preview(selection: list[dict], orient: dict, dest: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--version", type=int, default=1, help="furniture library version (out/furniture/v<N>)")
+    p.add_argument(
+        "--version",
+        type=int,
+        required=True,
+        help="furniture library version (out/furniture/v<N>); never one a live pack manifest uses",
+    )
     p.add_argument("--selection", type=Path, default=SELECTION)
     p.add_argument("--force", action="store_true", help="redo assets that already have output")
     p.add_argument("--jobs", type=int, default=6)
     p.add_argument("--only", nargs="*", help="asset ids or categories to process")
     p.add_argument("--preview", action="store_true", help="write orientation contact sheets and exit")
     a = p.parse_args(argv)
+    if not a.preview:
+        from worldgen import versions
+
+        versions.refuse_live_furniture(a.version)
 
     selection = json.loads(a.selection.read_text(encoding="utf-8"))
     orient = (yaml.safe_load(ORIENTATION.read_text(encoding="utf-8")) or {}) if ORIENTATION.exists() else {}

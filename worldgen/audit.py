@@ -1,6 +1,6 @@
 """Step 7: deterministic contradiction checks per listing -> houses/<listing_id>/audit.json.
 
-uv run python -m worldgen.audit --block hou_navidad_01              # every house in the newest pack version
+uv run python -m worldgen.audit --block hou_navidad_01              # every house in the LIVE pack version
 uv run python -m worldgen.audit --block hou_navidad_01 --version 1  # a given version
 uv run python -m worldgen.audit --listing hou_231395941             # metadata only, prints findings
 
@@ -324,12 +324,11 @@ def vexcel_extras(lat: float | None, lon: float | None, cache_dir: Path = VEXCEL
 # ---------------------------------------------------------------- pack mode
 
 
-def newest_version(out: Path, block_id: str) -> int:
-    root = out / "packs" / block_id
-    versions = [int(p.name[1:]) for p in root.glob("v*") if p.is_dir() and p.name[1:].isdigit()]
-    if not versions:
-        raise SystemExit(f"no packs/{block_id}/v<N> under {out}")
-    return max(versions)
+def default_version(block_id: str) -> int:
+    """The live pack version (worldgen/blocks/<block>.json); never "the newest folder"."""
+    from worldgen import versions
+
+    return versions.live_version(block_id)
 
 
 def _validator():
@@ -443,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument(
         "--listing", help="metadata only: audit one listing from cached Matterport detail and print"
     )
-    p.add_argument("--version", type=int, help="--block: pack version (default: newest)")
+    p.add_argument("--version", type=int, help="--block: pack version (default: the live one)")
     p.add_argument("--model", help="--listing: Matterport model id (default: from the listing)")
     p.add_argument("--json", action="store_true", help="--listing: print the audit JSON")
     args = p.parse_args(argv)
@@ -454,7 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             _print(doc, f"{source}, Matterport {model_id}")
         return 0
-    version = args.version or newest_version(OUT, args.block)
+    version = args.version or default_version(args.block)
     for doc, source in audit_pack(args.block, version):
         _print(doc, source)
     print(f"wrote audit.json for each house in packs/{args.block}/v{version}")

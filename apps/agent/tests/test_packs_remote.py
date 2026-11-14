@@ -30,11 +30,28 @@ def _fake_get(calls, status=200, body=CATALOG):
     return get
 
 
-def test_local_pack_wins_and_picks_newest_version(tmp_path, monkeypatch):
-    for v, items in ((1, []), (2, CATALOG)):
+def _pin(tmp_path, monkeypatch, live, furniture):
+    """Block config pinning `live`; its manifest names furniture/v<furniture>. Plus a newer decoy."""
+    blocks = tmp_path / "blocks"
+    blocks.mkdir()
+    (blocks / "hou_navidad_01.json").write_text(json.dumps({"live_pack_version": live}), encoding="utf-8")
+    monkeypatch.setattr(settings, "BLOCKS_DIR", blocks)
+    for v in (live, live + 50):  # a newer test build must never be picked
+        m = tmp_path / f"packs/hou_navidad_01/v{v}/manifest.json"
+        m.parent.mkdir(parents=True)
+        m.write_text(
+            json.dumps({"furniture_catalog": f"furniture/v{furniture if v == live else 9}/catalog.json"})
+        )
+
+
+def test_local_pack_wins_and_uses_the_pinned_live_version(tmp_path, monkeypatch):
+    for v, items in ((1, []), (2, CATALOG), (9, [])):
         f = tmp_path / f"furniture/v{v}/catalog.json"
         f.parent.mkdir(parents=True)
         f.write_text(json.dumps(items), encoding="utf-8")
+    _pin(tmp_path, monkeypatch, live=1, furniture=2)
+    assert packs.pack_version("hou_navidad_01") == 1
+    assert packs.furniture_version() == 2
     calls = []
     monkeypatch.setattr(settings, "PACK_BASE_URL", "https://packs.example")
     monkeypatch.setattr(httpx, "get", _fake_get(calls))
@@ -60,3 +77,10 @@ def test_missing_everywhere_is_a_clear_error(monkeypatch):
     monkeypatch.setattr(httpx, "get", _fake_get([], status=403))
     with pytest.raises(packs.PackFileMissing, match="403"):
         packs.catalog()
+
+
+def test_no_pin_and_no_env_is_a_clear_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "BLOCKS_DIR", tmp_path / "nowhere")
+    (tmp_path / "packs/hou_navidad_01/v7").mkdir(parents=True)  # a folder alone is never enough
+    with pytest.raises(packs.PackVersionUnknown, match="PACK_VERSION"):
+        packs.pack_version("hou_navidad_01")

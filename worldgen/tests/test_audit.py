@@ -209,8 +209,6 @@ def test_audit_pack_writes_valid_files(tmp_path):
     (hdir / "graph.json").write_text(json.dumps(GRAPH))
     (tmp_path / "listings").mkdir()
     (tmp_path / "listings" / "index.json").write_text(json.dumps([listing(beds=2, lat=None, lon=None)]))
-    (tmp_path / "packs" / "blk" / "v1").mkdir()
-    assert audit.newest_version(tmp_path, "blk") == 3
     [(doc, source)] = audit.audit_pack("blk", 3, tmp_path)
     assert source == "index"
     written = json.loads((hdir / "audit.json").read_text())

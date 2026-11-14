@@ -337,17 +337,16 @@ def block_for(lat: float, lon: float, blocks: Iterable[dict]) -> str | None:
 
 
 def house_dir(out: Path, block_id: str, lid: str) -> Path | None:
-    """houses/<listing_id>/ in the newest pack version of the block that has the house's rooms.json."""
-    versions = sorted(
-        (p for p in (out / "packs" / block_id).glob("v*") if p.is_dir() and p.name[1:].isdigit()),
-        key=lambda p: int(p.name[1:]),
-        reverse=True,
-    )
-    for v in versions:
-        h = v / "houses" / lid
-        if (h / "rooms.json").is_file():
-            return h
-    return None
+    """houses/<listing_id>/ in the block's LIVE pack version (worldgen/blocks/<block>.json), if it has rooms.
+
+    Never "the newest folder": test builds in other versions must not change has_interior or world."""
+    from worldgen import versions
+
+    live = versions.live_version_or_none(block_id)
+    if live is None:
+        return None
+    h = versions.pack_dir(block_id, live, out) / "houses" / lid
+    return h if (h / "rooms.json").is_file() else None
 
 
 # ---------------------------------------------------------------------------------------------------------
