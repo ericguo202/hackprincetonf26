@@ -70,6 +70,11 @@ SUMMARIES: dict[str, Callable[[Any], str]] = {
     ),
     "save_picks": lambda r: f"{r['items']} picks saved to {r['path']}",
     "start_plan": lambda r: f"new plan {r['plan_id']}",
+    "place_picks": lambda r: (
+        f"layout {r['layout_number']}: placed {len(r['placed'])}, dropped {len(r['dropped'])}"
+        + (f", swapped {len([s for s in r['swapped'] if 'to' in s])}" if r["swapped"] else "")
+        + f", {r['status']}"
+    ),
     "propose_poses": lambda r: f"{r['asset_id']}: {len(r['poses'])} poses {r['rule']}",
     "place_asset": lambda r: f"placed {r['placed']} ({len(r['plan']['objects'])} pieces)",
     "remove_asset": lambda r: f"removed {r['removed']}",
@@ -144,7 +149,9 @@ class EventMapper:
 
     def _updates(self, ns: tuple, data: dict) -> list[Event]:
         out: list[Event] = []
-        for update in data.values():
+        # A node's update is a dict, or a list of dicts when a tool wrote several files (one per write).
+        updates = [u for v in data.values() for u in (v if isinstance(v, list) else [v])]
+        for update in updates:
             if not isinstance(update, dict):
                 continue
             if not ns and update.get("todos") is not None:
@@ -205,4 +212,4 @@ class EventMapper:
             self.todos = [{**t, "status": "completed"} for t in self.todos]
             out.append({"type": "agent.todos", "data": {"todos": self.todos}})
         self.sent_text, self.last_text_id = False, None
-        return out + [{"type": "agent.message", "data": {"text": "", "final": True}}]
+        return [{"type": "agent.message", "data": {"text": "", "final": True}}, *out]  # bubble closes first

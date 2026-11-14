@@ -10,6 +10,7 @@ thread) as a Placement plan (contracts/placement_plan.schema.json):
   /plans/<room_id>.json          the draft plan; only the tools below write it (PLAN_PERMISSIONS)
   /plans/<room_id>.poses.json    last propose_poses result per asset, so place_asset can take a pose_id
   /plans/<room_id>.picks.json    save_picks: the asset-curator's choices, read by the layout planner
+  /plans/<room_id>.history.json  place_picks: earlier layouts (anchor pose, assets), so regenerate differs
   /search/results.json           search_listings: ranked matches with evidence, read by the auditors
 
 The model may read every file. Built-in write_file/edit_file are denied on /plans/** so coordinates are
@@ -35,6 +36,7 @@ from data import packs
 from layout import DEFAULT_RULE, RULES, room_geometry
 from layout import propose_poses as _propose
 from layout import validate_layout as _validate
+from layout.auto import auto_place
 from layout.validate import object_conflicts
 
 PLAN_PERMISSIONS = [FilesystemPermission(operations=["write"], paths=["/plans/**"], mode="deny")]
@@ -91,6 +93,10 @@ def poses_path(room_id: str) -> str:
 
 def picks_path(room_id: str) -> str:
     return f"/plans/{room_id}.picks.json"
+
+
+def history_path(room_id: str) -> str:
+    return f"/plans/{room_id}.history.json"
 
 
 SEARCH_PATH = "/search/results.json"
@@ -395,15 +401,25 @@ def _house_data(listing_id: str) -> tuple[dict | None, list[dict] | None]:
 class Pick(BaseModel):
     asset_id: str
     count: int = Field(default=1, ge=1, le=4)
-    role: str = Field(description="The piece's job, e.g. 'main seating, faces the TV'")
+    role: str = Field(description="Why it is there, 12 words or fewer; shown in the world as its reason")
     priority: int = Field(ge=1, le=3, description="1 = must have, 3 = nice to have")
+    rule: Literal["against_wall", "corner", "center", "facing", "beside"] | None = Field(
+        default=None, description="Placement rule from the skill; default: the asset's own placement"
+    )
+    relative_to: str | None = Field(
+        default=None, description="asset_id of another pick this one faces, sits beside or in front of"
+    )
+    alternates: list[str] = Field(
+        default_factory=list, max_length=2, description="Runner-up asset_ids from the same search"
+    )
 
 
 @tool(parse_docstring=True)
 def save_picks(room_id: str, items: list[Pick]) -> str:
     """Save the chosen furniture for a room to /plans/<room_id>.picks.json, where the layout planner reads it.
 
-    Checks every asset_id is in the catalog and that each piece can fit the room. Replaces earlier picks.
+    Checks every asset_id (and alternate) is in the catalog and can fit the room, and that relative_to names
+    another pick. Replaces earlier picks and starts a fresh regenerate history for the room.
 
     Args:
         room_id: Room the picks are for.
@@ -417,22 +433,33 @@ def save_picks(room_id: str, items: list[Pick]) -> str:
         longest_wall = max((s.length for s in geo.walls), default=0.0)
         minx, minz, maxx, maxz = geo.poly.bounds
         longest_side = max(maxx - minx, maxz - minz)
-        saved = []
-        for raw in items:
-            p = raw if isinstance(raw, Pick) else Pick.model_validate(raw)
-            a = asset(p.asset_id)
+
+        def check_fits(asset_id: str) -> dict:
+            a = asset(asset_id)
             w, d = a["size_m"]["w"], a["size_m"]["d"]
             on_wall = a.get("placement") in ("wall", "corner")
             limit, what = (longest_wall, "longest free wall") if on_wall else (longest_side, "room")
             if (w if on_wall else max(w, d)) > limit:
                 raise ToolError(
-                    f"{p.asset_id} is {w:.2f} m wide; the {what} is {limit:.2f} m. Pick a smaller one."
+                    f"{asset_id} is {w:.2f} m wide; the {what} is {limit:.2f} m. Pick a smaller one."
                 )
+            return a
+
+        picks = [raw if isinstance(raw, Pick) else Pick.model_validate(raw) for raw in items]
+        ids = {p.asset_id for p in picks}
+        saved = []
+        for p in picks:
+            a = check_fits(p.asset_id)
+            for alt in p.alternates:
+                check_fits(alt)
+            if p.relative_to and p.relative_to not in ids:
+                raise ToolError(f"{p.asset_id}: relative_to {p.relative_to} is not one of the picks")
             saved.append(
                 {**p.model_dump(), "name": a["name"], "category": a["category"], "size_m": a["size_m"]}
             )
         out = {"room_id": room_id, "items": saved}
         FILES.write_json(picks_path(room_id), out)
+        FILES.write_json(history_path(room_id), [])
         return {"path": picks_path(room_id), "items": len(saved)}
 
     return _run(run)
@@ -482,6 +509,76 @@ def start_plan(room_id: str, runtime: ToolRuntime[AgentContext]) -> str:
         save_plan(plan)
         FILES.write_json(poses_path(room_id), {})
         return {"plan_id": plan["plan_id"], "path": plan_path(room_id)}
+
+    return _run(run)
+
+
+@tool(parse_docstring=True)
+def place_picks(
+    room_id: str,
+    runtime: ToolRuntime[AgentContext],
+    new_layout: bool = False,
+    new_furniture: bool = False,
+) -> str:
+    """Lay out every piece in /plans/<room_id>.picks.json in one pass, as a new plan (replaces the old one).
+
+    Each piece takes the best valid pose for its rule and relative_to, in priority order. Returns each
+    placed piece with up to 3 alternative pose_ids (use place_asset with instance_id to switch one), and the
+    pieces dropped because no pose fits, with the reason. Regenerate: new_layout puts the anchor piece (e.g.
+    the TV stand) somewhere clearly different from earlier layouts; new_furniture swaps in the curator's
+    alternates not used before. Both may be set.
+
+    Args:
+        room_id: Room with saved picks.
+        new_layout: Regenerate: a different arrangement from the earlier layouts.
+        new_furniture: Regenerate: different furniture (the picks' unused alternates).
+    """
+
+    def run() -> dict:
+        picks = FILES.read_json(picks_path(room_id))
+        if not picks or not picks.get("items"):
+            raise ToolError(f"no picks for {room_id}; the asset-curator saves them with save_picks")
+        history = FILES.read_json(history_path(room_id)) or []
+        room = load_room(room_id)
+        result = auto_place(
+            room_geometry(room),
+            picks["items"],
+            asset,
+            avoid=[h["anchor"] for h in history if h.get("anchor")] if new_layout else None,
+            used={a for h in history for a in h.get("assets", [])} if new_furniture else None,
+            swap=new_furniture,
+            reason=short_reason,
+        )
+        plan = {
+            "plan_id": f"p_{uuid.uuid4().hex[:8]}",
+            "listing_id": listing_of(room_id),
+            "room_id": room_id,
+            "status": "draft",
+            "objects": result["objects"],
+            "conflicts": [],
+        }
+        if plan["objects"]:
+            plan = _validate(plan, room, asset)
+        save_plan(plan)
+        FILES.write_json(poses_path(room_id), result["poses"])
+        history.append(
+            {
+                "plan_id": plan["plan_id"],
+                "anchor": result["anchor"],
+                "assets": sorted({o["asset_id"] for o in plan["objects"]}),
+            }
+        )
+        FILES.write_json(history_path(room_id), history)
+        return {
+            "plan_id": plan["plan_id"],
+            "status": plan["status"],
+            "layout_number": len(history),
+            "placed": result["placed"],
+            "dropped": result["dropped"],
+            "swapped": result["swapped"],
+            "notes": result["notes"],
+            "conflicts": plan["conflicts"],
+        }
 
     return _run(run)
 
@@ -697,6 +794,7 @@ AUDITOR_TOOLS = [get_listing, get_house_graph, get_rooms, get_audit]
 ROOM_SCOUT_TOOLS = [get_rooms, get_house_graph, get_room_geometry]
 CURATOR_TOOLS = [search_assets, save_picks]
 LAYOUT_TOOLS = [
+    place_picks,
     get_room_geometry,
     start_plan,
     propose_poses,

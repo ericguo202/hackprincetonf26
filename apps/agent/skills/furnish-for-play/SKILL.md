@@ -42,3 +42,12 @@ pieces clear: the tools enforce this, and players need routes to run.
 | 7 | `play_equipment` or `canopy_tent` | 3 | `corner` | none |
 
 Keep tall `full` cover pieces off the playroom unless they stand against a wall.
+
+## Regenerate ("try another layout", "different furniture")
+
+- The curator saves one or two `alternates` per piece (runner-ups from the same search), and `rule` and
+  `relative_to` (the asset_id of the piece it faces or sits beside) from the table above.
+- Another layout: `place_picks(new_layout=true)` moves the first piece placed (the anchor) somewhere
+  clearly different from every earlier layout; the pieces placed relative to it follow.
+- Different furniture: `place_picks(new_furniture=true)` swaps in the alternates not used before.
+- No detail ("regenerate", "I don't like it"): both. If the room has no clearly different spot left, say so.

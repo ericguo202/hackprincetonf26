@@ -35,3 +35,12 @@ Small room (under 15 m2): skip priority 3 pieces and the armchair.
 - No poses: read the `note`. Try the next rule in the table, a different `relative_to`, or ask the curator
   for a smaller piece (in an edit, search is not available to the planner: drop it and say so).
 - After 3 validate-and-fix rounds, drop the lowest-priority piece in a conflict and report it in `dropped`.
+
+## Regenerate ("try another layout", "different furniture")
+
+- The curator saves one or two `alternates` per piece (runner-ups from the same search), and `rule` and
+  `relative_to` (the asset_id of the piece it faces or sits beside) from the table above.
+- Another layout: `place_picks(new_layout=true)` moves the first piece placed (the anchor) somewhere
+  clearly different from every earlier layout; the pieces placed relative to it follow.
+- Different furniture: `place_picks(new_furniture=true)` swaps in the alternates not used before.
+- No detail ("regenerate", "I don't like it"): both. If the room has no clearly different spot left, say so.
