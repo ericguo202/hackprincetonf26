@@ -497,6 +497,36 @@ def main(argv: list[str] | None = None) -> int:
         r["rank"] = i
     write_jsonl(OUT / "scores.jsonl", rows)
 
+    # Every fetched model gets an interior score or a skip reason (definition of done).
+    home_of = {}
+    for h in homes:
+        for mid in h["matterport_model_ids"]:
+            home_of.setdefault(mid, h)
+    chosen = {r["model_id"]: r["property_id"] for r in rows if r["model_id"]}
+    mrows = []
+    for mid, m in models.items():
+        h = home_of.get(mid)
+        skip = None
+        if not m.get("ok"):
+            skip = m.get("skip_reason") or "no model data"
+        elif m.get("group") == "commercial_splat":
+            skip = "commercial property splat (apartment unit/amenity), not a home listing"
+        elif not m.get("is_real_home"):
+            skip = "not a real home: " + "; ".join(m.get("not_home_reasons") or [])
+        elif mid not in chosen:
+            skip = "home has a better or own-media model (see scores.jsonl:model_choice)"
+        mrows.append(
+            {
+                "model_id": mid,
+                "property_id": h["property_id"] if h else None,
+                "group": m.get("group"),
+                "interior": interior(m, h)["total"] if (m.get("ok") and h) else None,
+                "used_for_home": mid in chosen,
+                "skip_reason": skip,
+            }
+        )
+    write_jsonl(OUT / "model_scores.jsonl", mrows)
+
     sp = [r for r in rows if r["splat"]]
     ratios = sorted(
         models[r["model_id"]]["area_living_m2"] / r["area_m2"]
