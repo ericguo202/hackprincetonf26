@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 
-import type { Listing } from "../contracts.gen";
+import type { Listing, Room } from "../contracts.gen";
 import { GlbOrPlaceholder } from "./Glb";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { rotationY } from "./geometry";
@@ -24,7 +24,7 @@ import {
   type Door,
   type LoadedPack,
 } from "./pack";
-import { houseBoxLocal } from "./placeholder";
+import { houseBoxLocal, houseBoxesLocal } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
 
 const PALETTE = {
@@ -67,14 +67,35 @@ export function BlockScene({ pack }: { pack: LoadedPack }) {
   );
 }
 
+type Box = { center: [number, number, number]; size: [number, number, number] };
+
 /**
- * House massing box in its own frame. With rooms: their bounds. Without:
- * 8 m wide and 10 m deep behind the door, oriented by the door's outward
- * normal (7014's door is on its east wall, so +Z is not its front).
+ * House massing in its own frame, as boxes. With rooms: one box per room,
+ * NOT one box over all of them. A front door is often recessed (6915's is on
+ * the living room's west wall, about a metre in from the bedrooms; Lane A
+ * calls 7014's entry recessed too): a single bounding box covers the door
+ * point and nobody on the block can reach the 0.9 m trigger. Headless on
+ * 6915: one box stopped the walk 1.21 m short; per-room boxes walk in, out
+ * and back in (docs/lane-c-status.md section 15).
  */
-function houseBox(pack: LoadedPack, d: Door) {
+function houseBoxes(pack: LoadedPack, d: Door): Box[] {
+  const rooms = pack.roomsByHouse[d.listing_id] ?? [];
+  if (rooms.length) return houseBoxesLocal(d.local, rooms);
+  return [defaultHouseBox(d, rooms)];
+}
+
+/** The whole footprint as one box, for the lot under the house. */
+function houseBox(pack: LoadedPack, d: Door): Box {
   const rooms = pack.roomsByHouse[d.listing_id] ?? [];
   if (rooms.length) return houseBoxLocal(d.local, rooms);
+  return defaultHouseBox(d, rooms);
+}
+
+/**
+ * Without rooms: 8 m wide and 10 m deep behind the door, oriented by the
+ * door's outward normal (7014's door is on its east wall, so +Z is not its front).
+ */
+function defaultHouseBox(d: Door, rooms: Room[]): Box {
   const [ox, oz] = doorOutward(d.local, rooms);
   const depth = 10;
   const width = 8;
@@ -139,16 +160,20 @@ function PlaceholderBlockRender({ pack, layout }: { pack: LoadedPack; layout: Bl
               <planeGeometry args={[box.size[0] + 6, box.size[2] + 6]} />
               <meshStandardMaterial color={PALETTE.lot} />
             </mesh>
-            {/* Walls */}
-            <mesh position={box.center} castShadow receiveShadow>
-              <boxGeometry args={box.size} />
-              <meshStandardMaterial color={PALETTE.house} />
-            </mesh>
-            {/* Flat roof cap, so the box reads as a building rather than a crate */}
-            <mesh position={[box.center[0], box.size[1] + 0.1, box.center[2]]} castShadow>
-              <boxGeometry args={[box.size[0] + 0.4, 0.2, box.size[2] + 0.4]} />
-              <meshStandardMaterial color={PALETTE.roof} />
-            </mesh>
+            {houseBoxes(pack, d).map((b, i) => (
+              <group key={i}>
+                {/* Walls */}
+                <mesh position={b.center} castShadow receiveShadow>
+                  <boxGeometry args={b.size} />
+                  <meshStandardMaterial color={PALETTE.house} />
+                </mesh>
+                {/* Flat roof cap, so the boxes read as a building rather than crates */}
+                <mesh position={[b.center[0], b.size[1] + 0.1, b.center[2]]} castShadow>
+                  <boxGeometry args={[b.size[0] + 0.2, 0.2, b.size[2] + 0.2]} />
+                  <meshStandardMaterial color={PALETTE.roof} />
+                </mesh>
+              </group>
+            ))}
           </group>
         );
       })}
@@ -163,23 +188,24 @@ function PlaceholderBlockCollision({ pack, layout }: { pack: LoadedPack; layout:
       <RigidBody type="fixed" colliders={false}>
         <CuboidCollider collisionGroups={ZONE_COLLIDER} args={[g.w / 2, 0.05, g.d / 2]} position={[g.cx, -0.05, g.cz]} />
       </RigidBody>
-      {pack.doors.map((d) => {
-        const box = houseBox(pack, d);
-        return (
-          <RigidBody
-            key={d.listing_id}
-            type="fixed"
-            colliders={false}
-            position={d.world.position}
-            rotation={[0, rotationY(d.world.heading_deg), 0]}
-          >
-            <CuboidCollider collisionGroups={ZONE_COLLIDER}
-              args={[box.size[0] / 2, box.size[1] / 2, box.size[2] / 2]}
-              position={box.center}
+      {pack.doors.map((d) => (
+        <RigidBody
+          key={d.listing_id}
+          type="fixed"
+          colliders={false}
+          position={d.world.position}
+          rotation={[0, rotationY(d.world.heading_deg), 0]}
+        >
+          {houseBoxes(pack, d).map((b, i) => (
+            <CuboidCollider
+              key={i}
+              collisionGroups={ZONE_COLLIDER}
+              args={[b.size[0] / 2, b.size[1] / 2, b.size[2] / 2]}
+              position={b.center}
             />
-          </RigidBody>
-        );
-      })}
+          ))}
+        </RigidBody>
+      ))}
     </>
   );
 }

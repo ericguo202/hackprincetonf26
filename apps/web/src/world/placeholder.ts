@@ -120,3 +120,23 @@ export function ceilingTrimesh(room: Room): { vertices: Float32Array; indices: U
   room.polygon.forEach(([x, z], i) => vertices.set([x, y, z], i * 3));
   return { vertices, indices: new Uint32Array(tris.flat()) };
 }
+
+/**
+ * A house's massing as one box per room (house frame), for the block
+ * placeholder. Not one box over all rooms: that covers a recessed front door
+ * and makes the door trigger unreachable from the block.
+ */
+export function houseBoxesLocal(
+  doorLocal: [number, number, number],
+  rooms: Room[],
+  height = 3.2,
+): { center: [number, number, number]; size: [number, number, number] }[] {
+  return rooms.map((r) => houseBoxLocal(doorLocal, [r], height));
+}
+
+/** How far a point (XZ) is inside a box, 0 when outside or on its face. */
+export function depthInsideBox(p: Point2, box: { center: [number, number, number]; size: [number, number, number] }): number {
+  const dx = box.size[0] / 2 - Math.abs(p[0] - box.center[0]);
+  const dz = box.size[2] / 2 - Math.abs(p[1] - box.center[2]);
+  return Math.max(0, Math.min(dx, dz));
+}

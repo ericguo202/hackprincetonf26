@@ -6,7 +6,9 @@ import { BoxGeometry, Group, Mesh } from "three";
 
 import type { Room } from "../contracts.gen";
 import { extractTrimesh } from "./collision";
-import { ceilingTrimesh, houseBoxLocal, segmentBox, wallSegments } from "./placeholder";
+import { ceilingTrimesh, depthInsideBox, houseBoxLocal, houseBoxesLocal, segmentBox, wallSegments } from "./placeholder";
+import { DOOR_RADIUS_M } from "./pack";
+import { MOVEMENT } from "../player/movement";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const room = JSON.parse(
@@ -127,5 +129,28 @@ describe("ceilingTrimesh", () => {
     const t = ceilingTrimesh(r4);
     expect(t.indices.length).toBe((r4.polygon.length - 2) * 3);
     expect(triArea(t.vertices, t.indices)).toBeCloseTo(32.27, 1); // the polygon's own area
+  });
+});
+
+describe("block massing keeps a recessed front door reachable", () => {
+  // Like 6915: the living room's west wall (x = -3.19, the door) is set back
+  // about a metre from the bedrooms beside it (x = -4.18).
+  const living: Room = { ...room, id: "h.r4", polygon: [[-3.19, -3.85], [5.2, -3.85], [5.2, 0.83], [-3.19, 0.83]] };
+  const bedroom: Room = { ...room, id: "h.r6", polygon: [[-4.18, 0.51], [-0.49, 0.51], [-0.49, 3.98], [-4.18, 3.98]] };
+  const doorLocal: [number, number, number] = [-3.191, 0, -0.125];
+  // Reachable when the capsule can stand within the trigger radius: the door
+  // may be at most (radius - capsule radius) inside the massing.
+  const reach = DOOR_RADIUS_M - MOVEMENT.capsuleRadius;
+  const deepest = (boxes: ReturnType<typeof houseBoxesLocal>) =>
+    Math.max(...boxes.map((b) => depthInsideBox([doorLocal[0], doorLocal[2]], b)));
+
+  it("one box over all rooms buries the door out of reach (the bug the walk-in hit)", () => {
+    expect(deepest([houseBoxLocal(doorLocal, [living, bedroom])])).toBeGreaterThan(reach);
+  });
+
+  it("one box per room leaves the door on a wall face", () => {
+    const boxes = houseBoxesLocal(doorLocal, [living, bedroom]);
+    expect(boxes).toHaveLength(2);
+    expect(deepest(boxes)).toBeLessThanOrEqual(reach);
   });
 });
