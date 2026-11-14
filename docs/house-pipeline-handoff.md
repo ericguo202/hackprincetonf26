@@ -10,11 +10,11 @@ The goal of this work: given any Matterport model of a home, produce a house pac
 
 | What | Where |
 |---|---|
-| Branch | `lane-a/hero-house`, pushed to origin, rebased on `main` at `da4bb49`. Not merged into `main` yet. |
-| Worktree used | `/Users/pfu/hp-hero` (the main checkout is `/Users/pfu/hackprincetonf26`). `.env` in the worktree is a symlink to the main checkout's `.env` (gitignored). |
-| Pipeline code | `worldgen/build_house.py` (orchestration, rooms, doors, graph, collision), `worldgen/rebake.py` (clean shell, carving, fixtures, texture baking, glb export), `worldgen/panos.py` (panorama sampling, ray-caster, multi-view shading), `worldgen/house_mesh.py` (OBJ reading, collision.glb, gltf-transform compression, the older interior writers), `worldgen/sources/matterport.py` (the only Matterport client: read-only, cached), `worldgen/pack.py` (manifest), `worldgen/publish.py` (`--local` only). |
+| Branch | Merged into `main` (2026-11-14, after contracts v2.3.0). The `lane-a/hero-house` branch and its `/Users/pfu/hp-hero` worktree were deleted after the merge; start new house work on a fresh `lane-a/<topic>` branch from `main`. |
+| Checkout and data | Main checkout `/Users/pfu/hackprincetonf26`. All gitignored outputs below now live in its `worldgen/out/` (moved from the old worktree). New worktrees symlink `worldgen/out` and `.env` to the main checkout's, so every worktree shares one data folder. |
+| Pipeline code | `worldgen/build_house.py` (orchestration, rooms, doors, graph, collision), `worldgen/rebake.py` (clean shell, carving, fixtures, texture baking, glb export), `worldgen/panos.py` (panorama sampling, ray-caster, multi-view shading), `worldgen/house_mesh.py` (OBJ reading, collision.glb, gltf-transform compression, the older interior writers), `worldgen/sources/matterport.py` (the only Matterport client: read-only, cached), `worldgen/pack.py` (manifest; `furniture_catalog` is the shared library `furniture/v1/catalog.json`, contracts v2.3.0), `worldgen/publish.py` (`--local` only; also copies the furniture library). |
 | Per-house config | `worldgen/blocks/hou_navidad_01.json` (listing id to Matterport model, which interior method to use, hero role). `worldgen/overrides/<model_id>.json` (hand room splits). |
-| Tests | `worldgen/tests/test_build_house.py`, `worldgen/tests/test_rebake.py` (40 tests total with the older ones). |
+| Tests | `worldgen/tests/test_build_house.py`, `worldgen/tests/test_rebake.py`, `worldgen/tests/test_pack.py` (manifest). |
 | Preview and scoring tools | `worldgen/scripts/preview/` (see section 6). Not part of the package; run with `uv run python scripts/preview/<name>.py` from `worldgen/`. |
 | Outputs (gitignored) | `worldgen/out/packs/hou_navidad_01/v1/houses/<listing_id>/{interior.glb, collision.glb, rooms.json, graph.json}` and `manifest.json`. Downloads in `worldgen/out/raw/<model_id>/` (MatterPak zip and OBJ, skybox faces, defurnished OBJ for 6915), caches in `worldgen/out/cache/` (Matterport JSON, uncompressed glbs). About 1.1 GB for the two houses. |
 | Notes for other lanes | `HANDOFF.md` entries dated 2026-11-14 16:30 to 23:40. |

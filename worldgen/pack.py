@@ -8,6 +8,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 BLOCKS = HERE / "blocks"
 
+# Shared furniture library the pack uses (contracts v2.3.0): relative to the published root, not the pack.
+FURNITURE_VERSION = 1
+FURNITURE_CATALOG = f"furniture/v{FURNITURE_VERSION}/catalog.json"
+
 
 def load_block(block_id: str) -> dict:
     """worldgen/blocks/<block_id>.json: block centre and the houses on it (listing id -> Matterport model)."""
@@ -46,8 +50,9 @@ def update_manifest(
             "block": {"render": "block/render.glb", "collision": "block/collision.glb"},
             "houses": [],
             "spawns": [],
-            "furniture_catalog": "furniture/catalog.json",
         }
+    # Always (re)set: manifests written before v2.3.0 said furniture/catalog.json inside the pack.
+    manifest["furniture_catalog"] = FURNITURE_CATALOG
     if listing_id:
         houses = [h for h in manifest["houses"] if h["listing_id"] != listing_id]
         manifest["houses"] = sorted([*houses, house_entry(listing_id)], key=lambda h: h["listing_id"])
