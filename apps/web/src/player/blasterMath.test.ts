@@ -137,7 +137,7 @@ describe("hitboxes (Lane D seam)", () => {
   };
 
   it("hits the capsule's front surface", () => {
-    expect(rayCapsule({ origin: [0, 0.655, 0], dir: [0, 0, -1] }, p2)).toBeCloseTo(10 - 0.3, 9);
+    expect(rayCapsule({ origin: [0, 0.655, 0], dir: [0, 0, -1] }, p2)).toBeCloseTo(10 - MOVEMENT.capsuleRadius, 9);
   });
 
   it("hits the rounded top", () => {
@@ -148,7 +148,7 @@ describe("hitboxes (Lane D seam)", () => {
   });
 
   it("misses beside, above and behind", () => {
-    expect(rayCapsule({ origin: [0.31, 0.655, 0], dir: [0, 0, -1] }, p2)).toBeNull();
+    expect(rayCapsule({ origin: [MOVEMENT.capsuleRadius + 0.01, 0.655, 0], dir: [0, 0, -1] }, p2)).toBeNull();
     expect(rayCapsule({ origin: [0, 2, 0], dir: [0, 0, -1] }, p2)).toBeNull();
     expect(rayCapsule({ origin: [0, 0.655, 0], dir: [0, 0, 1] }, p2)).toBeNull();
   });

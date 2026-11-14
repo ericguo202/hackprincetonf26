@@ -135,9 +135,10 @@ describe("first person", () => {
     }
   });
 
-  it("raises the threshold above the floor on a very narrow view (40 deg horizontal)", () => {
-    expect(hideThreshold(deg(40))).toBeCloseTo(0.3 / Math.tan(deg(40) / 4), 9);
-    expect(hideThreshold(deg(40))).toBeGreaterThan(1.6);
+  it("raises the threshold above the floor on a very narrow view (30 deg horizontal)", () => {
+    const r = MOVEMENT.capsuleRadius;
+    expect(hideThreshold(deg(30))).toBeCloseTo(r / Math.tan(deg(30) / 4), 9);
+    expect(hideThreshold(deg(30))).toBeGreaterThan(1.6);
   });
 
   it("a wall close behind you reads as first person", () => {

@@ -130,7 +130,7 @@ describe("hitboxes match the model, not the floating capsule", () => {
     expect(box.radius).toBe(MOVEMENT.capsuleRadius);
   });
 
-  it("a dart at the knees hits (the floated capsule starts 0.3 m up and would miss)", () => {
+  it("a dart at the knees hits (the floated capsule starts floatHeight up and would miss)", () => {
     const knees: Ray = { origin: [2, 0.2, 5], dir: [0, 0, -1] };
     expect(nearestHitbox(knees, [box], 0, 40)?.id).toBe("p2");
     expect(0.2).toBeLessThan(MOVEMENT.floatHeight); // below the capsule's bottom
