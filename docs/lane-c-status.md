@@ -2,7 +2,7 @@
 
 Lane C is the game client's world and player: `apps/web/src/world/` and
 `apps/web/src/player/` (AGENTS.md section 6). Written 2026-11-14 at main
-`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), for the capsule radius (section 12), and for crouch and contracts v2.4.0 (section 13). Read AGENTS.md first. Rules that matter most here: stay inside
+`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), for the capsule radius (section 12), for crouch and contracts v2.4.0 (section 13), and for the production pack path (section 14). Read AGENTS.md first. Rules that matter most here: stay inside
 those two folders (plus `apps/web/public/characters/`). Never edit
 `apps/web/src/store.ts` (Lane D) or anything in `contracts/` (all four lanes
 agree first). Cross-lane needs go in `HANDOFF.md`.
@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 193 tests in 13 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 199 tests in 13 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -295,3 +295,33 @@ Also not handled: standing up under something low. The capsule regrows into it.
 - **What the tests guarantee:** crouching never makes you easier to hit, nothing aimed above the crouched head lands, and the sofa stops low shots in both postures.
 
 **Next task:** unchanged (section 10): run the 7014 door check once Lane A's publish lands, then the browser pass, which now has to include crouch.
+
+## 14. Production pack path (Gate 2 prep)
+
+**Proven locally, not yet on Render.**
+- **Build:** `tsc -b && vite build`, as Render runs it, with `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1`.
+- **Packs:** 6915, laid out the way Lane A will publish (`dist/packs/packs/hou_navidad_01/v1/...`, `dist/packs/listings/index.json`).
+- **Host:** a plain static server, not Vite, run in two modes:
+  - Render's `render.yaml` rewrite, `/*` → `/index.html`, where a missing file answers 200 with HTML;
+  - plain 404.
+- **Loaded in both modes:** the manifest, the listings index, `rooms.json` (10 rooms), the door, the derived spawn, `collision.glb` (2 meshes, 1,544 triangles), and `interior.glb`'s meshopt geometry (26 meshes, 40,433 triangles).
+- **Fallbacks:** the missing furniture catalog and missing block meshes each fell back with one warning.
+- **Not tested:**
+  - **Interior textures:** WebP decoding needs a browser.
+  - **The furniture catalog:** no library exists yet; Lane A hasn't published.
+  - **The listings index:** a one-house stand-in built from Lane A's 16:46 numbers, in the scratch tree only.
+
+**Missing-file handling** (`meshProbe.classifyHead`): 200 + HTML (Render's rewrite, Vite) and 404/403 mean missing. 405/501 (a host that rejects `HEAD`) mean unknown, so the loader tries instead of hiding a real mesh. `fetchJson` already treats non-2xx and HTML answers as missing.
+
+**Dev switches never ship.** `world/devFlags.ts` gates `VITE_DEV_PLAN` and `VITE_START_ROOM` on `import.meta.env.DEV`, the same way `VITE_DEV_REMOTES` already was.
+- **Before:** a production build with them set shipped the dev plan, plan B, the dev catalog and the start room ID.
+- **Now:** building with all three set gives no trace of any of them in `dist/assets/*.js`.
+- **Re-check after changes:** `VITE_DEV_PLAN=1 VITE_START_ROOM=x.r1 VITE_DEV_REMOTES=1 ./node_modules/.bin/vite build --outDir /tmp/x`, then grep the JS for `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM` and `__laneC`. All should be absent.
+- **Effect:** deployed players start on the block, at the spawn derived near the hero's door (section 12), and walk in through the door once the listings index is published.
+
+**What Lane D needs** (HANDOFF, this session):
+- set `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v1` on the web service (it's baked in at build time);
+- keep the rewrite;
+- set none of the dev switches;
+- `buildFilter` already covers Lane A's committed publish;
+- a static deploy doesn't restart the game service.
