@@ -39,9 +39,11 @@ PACK_DIR = REPO_ROOT / os.getenv("PACK_DIR", "worldgen/out")  # relative paths a
 # {PACK_BASE_URL}/packs/<block_id>/v<N>/..., {PACK_BASE_URL}/furniture/v<N>/catalog.json.
 # Used for any file not found under PACK_DIR.
 PACK_BASE_URL = os.getenv("PACK_BASE_URL", "").rstrip("/")
-# Versions to read. Over HTTP there is no folder listing, so set both when PACK_BASE_URL is used;
-# locally each defaults to the newest v<N> folder in PACK_DIR. Packs and the furniture library
-# are versioned separately (the library is shared by every block).
+BLOCKS_DIR = REPO_ROOT / "worldgen" / "blocks"  # committed block configs holding live_pack_version
+# Versions to read. Set PACK_VERSION on Render. When it is unset, the pack version is the block's LIVE
+# version pinned in git (worldgen/blocks/<block>.json `live_pack_version`, see worldgen/versions.py), never
+# "the newest folder", so a test build in worldgen/out can't be read by accident. FURNITURE_VERSION, when
+# unset, comes from that pack's manifest (`furniture_catalog`). The library is shared by every block.
 PACK_VERSION = int(os.environ["PACK_VERSION"]) if os.getenv("PACK_VERSION") else None
 FURNITURE_VERSION = int(os.environ["FURNITURE_VERSION"]) if os.getenv("FURNITURE_VERSION") else None
 # The block the game runs (one block for the hackathon).

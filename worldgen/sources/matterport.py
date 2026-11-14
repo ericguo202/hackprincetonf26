@@ -80,6 +80,41 @@ query ModelDetail($id: ID!) {
 }
 """
 
+# Geo anchor of a model: `rotation` is "the rotation from an East-North-Up (x, y, z) to the model coordinate
+# system around the translation point"; `translation` is "the translation in model coordinates from
+# (latitude, longitude, altitude) to the (0, 0, 0) point in the model mesh" (schema descriptions).
+# The probes ask Matterport itself where model points (0,0,0), (10,0,0) and (0,10,0) are on the globe, so the
+# sign convention can be checked against the API instead of assumed (worldgen/costar.py house_world).
+GEO_ANCHOR = """
+query Geo($id: ID!) {
+  model(id: $id) {
+    id
+    geocoordinates {
+      latitude longitude altitude source
+      rotation { x y z w }
+      translation { x y z }
+      origin: geoLocationOf(modelLocation: {x: 0, y: 0, z: 0}) { lat long }
+      x10: geoLocationOf(modelLocation: {x: 10, y: 0, z: 0}) { lat long }
+      y10: geoLocationOf(modelLocation: {x: 0, y: 10, z: 0}) { lat long }
+    }
+  }
+}
+"""
+
+
+def fetch_geo_anchor(model_id: str, cache_dir: Path, refresh: bool = False) -> dict:
+    """The model's `geocoordinates` with rotation, translation and three geoLocationOf probes, cached as
+    cache_dir/<model_id>.geo.json."""
+    path = cache_dir / f"{model_id}.geo.json"
+    if path.exists() and not refresh:
+        return json.loads(path.read_text(encoding="utf-8"))
+    load_env()
+    geo = MatterportClient().query(GEO_ANCHOR, {"id": model_id})["data"]["model"]["geocoordinates"]
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(geo, indent=1), encoding="utf-8")
+    return geo
+
+
 _MESH_URLS = 'query M($id: ID!) { model(id: $id) { assets { meshes(formats: "obj") { filename url } } } }'
 
 

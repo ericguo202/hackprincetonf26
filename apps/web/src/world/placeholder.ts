@@ -3,6 +3,8 @@
 // from the same numbers here, but stay separate components, so the "collide
 // against collision, never render" rule holds even for stand-ins.
 
+import { ShapeUtils, Vector2 } from "three";
+
 import type { Point2, Room } from "../contracts.gen";
 
 export type WallSegment = { a: Point2; b: Point2 };
@@ -102,4 +104,19 @@ export function houseBoxLocal(
     center: [(minX + maxX) / 2, height / 2, (minZ + maxZ) / 2],
     size: [maxX - minX, height, maxZ - minZ],
   };
+}
+
+/**
+ * A room's ceiling as a flat trimesh at floor_y + height_m, triangulated from
+ * its polygon (rooms are often not rectangles). Lane A's collision.glb has
+ * walls, floor and fixtures but no ceiling, so without this a jump or the
+ * camera arm passes through the roof.
+ */
+export function ceilingTrimesh(room: Room): { vertices: Float32Array; indices: Uint32Array } {
+  const y = room.floor_y + room.height_m;
+  const contour = room.polygon.map(([x, z]) => new Vector2(x, z));
+  const tris = ShapeUtils.triangulateShape(contour, []);
+  const vertices = new Float32Array(room.polygon.length * 3);
+  room.polygon.forEach(([x, z], i) => vertices.set([x, y, z], i * 3));
+  return { vertices, indices: new Uint32Array(tris.flat()) };
 }

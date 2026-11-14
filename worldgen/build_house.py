@@ -1,6 +1,6 @@
 """Step 4-5: Matterport model -> houses/<listing_id>/{interior.glb, collision.glb, rooms.json, graph.json}.
 
-uv run python -m worldgen.build_house --block hou_navidad_01 --listing hou_237901269
+uv run python -m worldgen.build_house --block hou_navidad_01 --listing hou_237901269 --version N  (not live)
 
 Inputs: the model's room vectors (`boundary.edges`, Property Intelligence) and its defurnished OBJ, both read
 through worldgen/sources/matterport.py and cached under out/cache and out/raw. Hand fixes for a model live in
@@ -717,7 +717,12 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--block", required=True, help="block id; worldgen/blocks/<block>.json lists its houses")
     p.add_argument("--listing", required=True)
-    p.add_argument("--version", type=int, default=1)
+    p.add_argument(
+        "--version",
+        type=int,
+        required=True,
+        help="pack version to write; never the live one (worldgen/blocks/<block>.json, worldgen/versions.py)",
+    )
     p.add_argument("--out", type=Path, default=HERE / "out")
     p.add_argument("--refresh", action="store_true", help="re-fetch the Matterport model detail")
     p.add_argument("--bake-res", type=float, default=256.0, help="texels per metre on walls/floors")
@@ -728,6 +733,9 @@ def main(argv: list[str] | None = None) -> int:
         help="max texture edge in interior.glb (1024 halves GPU memory)",
     )
     args = p.parse_args(argv)
+    from worldgen import versions
+
+    versions.refuse_live(args.block, args.version, "build a house")
     print(
         json.dumps(
             build(

@@ -6,7 +6,7 @@ import { BoxGeometry, Group, Mesh } from "three";
 
 import type { Room } from "../contracts.gen";
 import { extractTrimesh } from "./collision";
-import { houseBoxLocal, segmentBox, wallSegments } from "./placeholder";
+import { ceilingTrimesh, houseBoxLocal, segmentBox, wallSegments } from "./placeholder";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const room = JSON.parse(
@@ -95,5 +95,37 @@ describe("extractTrimesh", () => {
     root.add(new Mesh(new BoxGeometry(1, 1, 1)));
     const xs = Array.from(extractTrimesh(root).vertices).filter((_, i) => i % 3 === 0);
     expect(Math.max(...xs)).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe("ceilingTrimesh", () => {
+  const triArea = (v: Float32Array, i: Uint32Array) => {
+    let a = 0;
+    for (let k = 0; k < i.length; k += 3) {
+      const [p, q, r] = [i[k], i[k + 1], i[k + 2]].map((n) => [v[n * 3], v[n * 3 + 2]]);
+      a += Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1])) / 2;
+    }
+    return a;
+  };
+
+  it("covers the room exactly, at floor_y + height_m", () => {
+    const t = ceilingTrimesh(room);
+    expect(triArea(t.vertices, t.indices)).toBeCloseTo(25.2, 4); // 6 x 4.2 (Float32 vertices)
+    for (let k = 1; k < t.vertices.length; k += 3) expect(t.vertices[k]).toBeCloseTo(room.floor_y + room.height_m, 5);
+  });
+
+  it("triangulates a non-convex room (the hero living room's 11-point outline)", () => {
+    const r4: Room = {
+      ...room,
+      floor_y: 0.005,
+      height_m: 2.43,
+      polygon: [
+        [-0.497, 0.512], [-0.496, 0.826], [0.56, 0.823], [1.278, 0.821], [3.701, 0.814],
+        [5.2, -0.693], [5.191, -3.85], [-0.809, -3.85], [-0.806, -2.975], [-3.192, -0.575], [-3.189, 0.519],
+      ],
+    };
+    const t = ceilingTrimesh(r4);
+    expect(t.indices.length).toBe((r4.polygon.length - 2) * 3);
+    expect(triArea(t.vertices, t.indices)).toBeCloseTo(32.27, 1); // the polygon's own area
   });
 });

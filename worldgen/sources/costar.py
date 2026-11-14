@@ -17,6 +17,14 @@ def iter_residential_listings(kit: Path) -> Iterator[dict]:
                 yield json.loads(line)
 
 
+def iter_residential_listing_features(kit: Path) -> Iterator[dict]:
+    """Raw records of data/residential-listing-features.jsonl (one per listing id; 221 listings have none)."""
+    with open(kit / "data" / "residential-listing-features.jsonl", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                yield json.loads(line)
+
+
 def matterport_csv(kit: Path) -> dict[int, list[str]]:
     """ListingId -> Matterport model ids, in residential-listings.csv row order.
 

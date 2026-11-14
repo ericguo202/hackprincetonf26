@@ -56,28 +56,34 @@ def clear_cache() -> None:
         f.cache_clear()
 
 
-def _newest_local(folder: Path) -> int:
-    """Highest v<N> folder under PACK_DIR/folder; 1 when there is none (e.g. on Render)."""
-    versions = [
-        int(m.group(1))
-        for p in (settings.PACK_DIR / folder).glob("v*")
-        if (m := re.fullmatch(r"v(\d+)", p.name))
-    ]
-    return max(versions, default=1)
+class PackVersionUnknown(RuntimeError):
+    """Neither PACK_VERSION nor a pinned live_pack_version says which pack to read."""
 
 
 def pack_version(block_id: str) -> int:
-    """PACK_VERSION if set; else the newest local v<N>; else 1."""
+    """PACK_VERSION if set; else the live version pinned in worldgen/blocks/<block>.json. Never guesses."""
     if settings.PACK_VERSION is not None:
         return settings.PACK_VERSION
-    return _newest_local(Path("packs") / block_id)
+    cfg = settings.BLOCKS_DIR / f"{block_id}.json"
+    live = _read(cfg).get("live_pack_version") if cfg.is_file() else None
+    if not isinstance(live, int):
+        raise PackVersionUnknown(
+            f"set PACK_VERSION, or pin a live version in {cfg} (uv run python -m worldgen.versions pin ...)"
+        )
+    return live
 
 
 def furniture_version() -> int:
-    """FURNITURE_VERSION if set; else the newest local furniture/v<N>; else 1."""
+    """FURNITURE_VERSION if set; else the version the live pack manifest names (furniture/v<N>/...)."""
     if settings.FURNITURE_VERSION is not None:
         return settings.FURNITURE_VERSION
-    return _newest_local(Path("furniture"))
+    manifest = _read_pack(f"{pack_root(settings.BLOCK_ID)}/manifest.json")
+    m = re.fullmatch(r"furniture/v(\d+)/catalog\.json", str(manifest.get("furniture_catalog", "")))
+    if not m:
+        raise PackVersionUnknown(
+            f"{pack_root(settings.BLOCK_ID)}/manifest.json names no furniture/v<N>/catalog.json"
+        )
+    return int(m.group(1))
 
 
 def pack_root(block_id: str) -> str:

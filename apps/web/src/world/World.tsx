@@ -31,6 +31,10 @@ import {
 } from "./pack";
 import { usePack } from "./usePack";
 import { DevPlan, DevProbe } from "./DevPlan";
+import { DevRemotes } from "./DevRemotes";
+import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
+import { RemotePlayers } from "./RemotePlayers";
+import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, DEV_PLAN_ON, withDevCatalog } from "./devFurniture";
 import { FIXTURE_RAW } from "./fixtures";
 import type { Asset, PlacementPlan } from "../contracts.gen";
@@ -136,7 +140,16 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}
-      <Player key={epoch} spawn={spawn} zone={zone} />
+      <RemotePlayers zone={zone} />
+      {DEV_REMOTES_ON ? <DevRemotes pack={pack} zone={zone} /> : null}
+      {/* getHitboxes: remote players as drawn this frame. onFire: Lane D sends `fire`; in dev-remotes mode, the stand-in. */}
+      <Player
+        key={epoch}
+        spawn={spawn}
+        zone={zone}
+        getHitboxes={remoteHitboxes}
+        onFire={DEV_REMOTES_ON ? devFire : undefined}
+      />
     </>
   );
 }
