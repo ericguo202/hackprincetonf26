@@ -14,6 +14,10 @@ Run from worldgen/ (uses worldgen.panos.Raycaster, i.e. embree):
   Besides the mean it prints p95_err (95th-percentile pixel error) and bad_fraction (pixels off by more than
   60): small ugly artefacts (shards, smears) move these long before they move the mean.
 
+  OUTDOOR=1 scores the outdoor panos instead (needs the exterior: out/cache/glb/<id>_exterior.glb, or a
+  pack built with it). <glb> may be several files joined by commas (interior,exterior).
+  Indoor/outdoor = inside/outside the union of the model's room polygons (the pipeline's own rule).
+
 Purple (40, 0, 60) = the ray hit nothing (a hole). NO_CEILING=1 skips ceiling nodes.
 CAVEAT: the bake used these same panoramas, so the score at pano positions is optimistic. It still catches
 regressions in geometry, carving, alignment and holes. For an unbiased number, bake with some panos held out
@@ -24,10 +28,9 @@ from PIL import Image
 from worldgen.panos import Raycaster, quat_matrix
 
 def load(glb):
-    sc = trimesh.load(glb)
-    tris, uvs, tid, texs = [], [], [], []
     import os
-    for name, g in sc.geometry.items():
+    tris, uvs, tid, texs = [], [], [], []
+    for name, g in [kv for path in glb.split(",") for kv in trimesh.load(path).geometry.items()]:
         if os.environ.get('NO_CEILING') and name.startswith('ceiling'): continue
         img = g.visual.material.baseColorTexture
         arr = np.asarray(img.convert("RGBA"))
@@ -71,17 +74,20 @@ def score(glb, model_json, sky, only=None, size=192):
     tris, uvs, tid, texs = load(glb)
     scene = (tris, uvs, tid, texs, Raycaster(tris))
     m = json.load(open(model_json))
-    # indoor = inside the union of room polygons (rooms.json next to interior.glb in the pack is house-local;
-    # here we use the footprint of the glb itself: a pano is indoor if a ray straight up hits geometry)
+    # indoor = inside the union of the model's kept room polygons (the pipeline's own rule); OUTDOOR=1 scores
+    # the others. (A "ray straight up hits geometry" test broke once the scanned lot added roofs and trees.)
+    import os
+    from worldgen.build_house import read_rooms
+    footprint = unary_union([r.poly for r in read_rooms(m) if r.keep]).buffer(0.1)
+    want_out = bool(os.environ.get("OUTDOOR"))
     errs, holes, used, pix = [], [], 0, []
     only = set(only.split(",")) if only else None
     for p in m["panoLocations"]:
         if only and p["label"] not in only:
             continue
         R = quat_matrix(p["rotation"]); pos = np.array([p["position"][k] for k in "xyz"])
-        t, prim = scene[4].cast(yup(pos)[None], np.array([[0.0, 1.0, 0.0]]))
-        if prim[0] < 0 or t[0] > 6:
-            continue  # outdoors: nothing overhead
+        if footprint.contains(Point(pos[0], pos[1])) == want_out:
+            continue
         used += 1
         f, r, u = R @ [1, 0, 0], R @ [0, -1, 0], R @ [0, 0, 1]
         for L, Rt, U, fi in ((f, r, u, 1), (r, -f, u, 2), (-f, -r, u, 3), (-r, f, u, 4)):
@@ -92,7 +98,7 @@ def score(glb, model_json, sky, only=None, size=192):
             errs.append(np.abs(img[~hole] - real[~hole]).mean() if (~hole).any() else 255.0)
             pix.append(np.abs(img[~hole] - real[~hole]).mean(-1))
     pix = np.concatenate(pix) if pix else np.zeros(1)
-    print(json.dumps({"indoor_panos": used, "mean_abs_err": round(float(np.mean(errs)), 2),
+    print(json.dumps({("outdoor_panos" if want_out else "indoor_panos"): used, "mean_abs_err": round(float(np.mean(errs)), 2),
                       "p95_err": round(float(np.quantile(pix, 0.95)), 1),
                       "bad_fraction": round(float((pix > 60).mean()), 4),
                       "hole_fraction": round(float(np.mean(holes)), 4)}))

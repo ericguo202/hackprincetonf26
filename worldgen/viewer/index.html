@@ -72,6 +72,8 @@
     <h2>Layers</h2>
     <label><input type="checkbox" id="l-interior" checked /> interior</label>
     <label><input type="checkbox" id="l-ceilings" /> ceilings</label>
+    <label><input type="checkbox" id="l-roof" /> roof</label>
+    <label><input type="checkbox" id="l-backdrop" /> backdrop (street, sky)</label>
     <label><input type="checkbox" id="l-collision" /> collision (wire)</label>
     <label><input type="checkbox" id="l-rooms" checked /> rooms</label>
     <label><input type="checkbox" id="l-doors" checked /> doors / windows</label>
@@ -89,7 +91,8 @@
       <label>height <input id="cap-h" type="number" step="0.05" min="0.5" value="1.7" /></label>
     </div>
     <div class="row"><select id="spawn" style="flex:1"></select><button id="spawn-btn">Spawn</button></div>
-    <div class="note">Or double-click any floor point to spawn there. Capsule sizes are guesses, not the game's controller.</div>
+    <div class="note">Or double-click any floor or yard point to spawn there. Capsule sizes are guesses, not the game's controller.
+      Roof, backdrop and ceilings turn on in walk mode and off in orbit mode.</div>
 
     <h2>Furniture test</h2>
     <select id="asset"></select>

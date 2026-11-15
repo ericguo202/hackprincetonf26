@@ -65,7 +65,7 @@ walker.onFall = () => spawnAt($("spawn").value);
 
 const state = {
   pack: null, listingId: null, manifest: null, rooms: [], openings: [], doorMeshes: [],
-  interior: null, collision: null, ceilings: [], collider: null,
+  interior: null, collision: null, ceilings: [], roofs: [], backdrop: [], collider: null,
   mode: "orbit", placing: null, drag: null, camDist: 2.5, pitch: -0.25, spawned: false,
 };
 
@@ -161,7 +161,7 @@ function clearHouse() {
     g.clear();
   }
   furniture.clear();
-  Object.assign(state, { rooms: [], openings: [], doorMeshes: [], interior: null, collision: null, ceilings: [], collider: null, spawned: false });
+  Object.assign(state, { rooms: [], openings: [], doorMeshes: [], interior: null, collision: null, ceilings: [], roofs: [], backdrop: [], collider: null, spawned: false });
   walker.collider = null;
 }
 
@@ -188,7 +188,13 @@ async function loadHouse(listingId) {
   if (interior) {
     layers.interior.add(interior);
     state.interior = interior;
-    interior.traverse((o) => { if (/^ceiling/i.test(o.name)) state.ceilings.push(o); });
+    interior.traverse((o) => {
+      if (/^ceiling/i.test(o.name)) state.ceilings.push(o);
+      // Outdoor nodes from worldgen/exterior.py (the scanned lot): the roof and the 45 m backdrop dome
+      // would hide the house from an orbit camera, so they get their own toggles.
+      if (/^roof/i.test(o.name)) state.roofs.push(o);
+      if (/^backdrop/i.test(o.name)) state.backdrop.push(o);
+    });
   }
   if (collision) {
     collision.traverse((o) => {
@@ -293,11 +299,13 @@ function refreshLayers() {
   layers.rooms.visible = on("l-rooms");
   layers.doors.visible = on("l-doors");
   for (const c of state.ceilings) c.visible = on("l-ceilings");
+  for (const c of state.roofs) c.visible = on("l-roof");
+  for (const c of state.backdrop) c.visible = on("l-backdrop");
   layers.labels.traverse((o) => {
     if (o.isCSS2DObject) o.visible = on("l-labels") && (o.userData.doorLabel ? on("l-doors") : on("l-rooms"));
   });
 }
-for (const id of ["l-interior", "l-collision", "l-rooms", "l-doors", "l-ceilings", "l-labels"]) $(id).addEventListener("change", refreshLayers);
+for (const id of ["l-interior", "l-collision", "l-rooms", "l-doors", "l-ceilings", "l-roof", "l-backdrop", "l-labels"]) $(id).addEventListener("change", refreshLayers);
 
 function frameHouse() {
   const box = new THREE.Box3().setFromObject(state.collision ?? state.interior ?? layers.rooms);
@@ -329,9 +337,42 @@ function fillSpawnList() {
   for (const r of [...state.rooms].sort((a, b) => order(a) - order(b) || b.area_m2 - a.area_m2)) {
     sel.add(new Option(`${r.label} ${r.id.split(".").pop()} (${r.area_m2} m²)`, r.id));
   }
+  state.yardSpawns = yardSpawns();
+  state.yardSpawns.forEach((p, i) => sel.add(new Option(`yard: outside ${p.label} door (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`, `yard:${i}`)));
+}
+
+/** 1.5 m outside each outside door (opening with no room behind), kept only where the collision mesh has
+ * scanned yard ground (a `ground` node, from worldgen/exterior.py) within a metre of the floor. */
+function yardSpawns() {
+  const grounds = [];
+  state.collision?.traverse((o) => { if (o.isMesh && /ground/i.test(o.name)) grounds.push(o); });
+  if (!grounds.length) return [];
+  const out = [];
+  const down = new THREE.Raycaster();
+  for (const room of state.rooms) {
+    const [cx, cz] = labelPoint(room.polygon);
+    for (const o of room.openings ?? []) {
+      if (o.type !== "door" || o.to_room) continue;
+      const mx = (o.a[0] + o.b[0]) / 2, mz = (o.a[1] + o.b[1]) / 2;
+      let nx = -(o.b[1] - o.a[1]), nz = o.b[0] - o.a[0];
+      const len = Math.hypot(nx, nz) || 1;
+      nx /= len; nz /= len;
+      if (nx * (mx - cx) + nz * (mz - cz) < 0) { nx = -nx; nz = -nz; } // away from the room
+      const x = mx + nx * 1.5, z = mz + nz * 1.5;
+      down.set(new THREE.Vector3(x, (room.floor_y ?? 0) + 1.5, z), new THREE.Vector3(0, -1, 0));
+      const hit = down.intersectObjects(grounds, false)[0];
+      const dup = out.some((q) => Math.hypot(q.x - x, q.z - z) < 0.5); // a door shared by split rooms
+      if (hit && !dup && hit.point.y > (room.floor_y ?? 0) - 1.0) out.push({ x, y: hit.point.y, z, label: room.label.replace(/_/g, " ") });
+    }
+  }
+  return out;
 }
 
 function spawnAt(roomId) {
+  if (String(roomId).startsWith("yard:")) {
+    const p = state.yardSpawns?.[Number(roomId.slice(5))];
+    if (p) { walker.spawn(p.x, p.y, p.z); state.spawned = true; return; }
+  }
   const room = state.rooms.find((r) => r.id === roomId) ?? state.rooms[0];
   if (room) {
     const [x, z] = labelPoint(room.polygon);
@@ -349,13 +390,13 @@ function setMode(mode) {
   if (mode === "walk") {
     if (!state.spawned) spawnAt($("spawn").value);
     orbit.enabled = false;
-    $("l-ceilings").checked = true;
+    for (const id of ["l-ceilings", "l-roof", "l-backdrop"]) $(id).checked = true;
     cancelPlacing();
   } else {
     if (document.pointerLockElement) document.exitPointerLock();
     orbit.enabled = true;
     orbit.target.copy(walker.position);
-    $("l-ceilings").checked = false;
+    for (const id of ["l-ceilings", "l-roof", "l-backdrop"]) $(id).checked = false;
   }
   refreshLayers();
 }
@@ -459,7 +500,7 @@ function floorHit(e) {
   const hit = pick(e, fills)[0];
   if (hit) return { point: hit.point, y: hit.object.userData.room.floor_y ?? 0 };
   const floors = [];
-  state.collision?.traverse((o) => { if (o.isMesh && /floor/i.test(o.name)) floors.push(o); });
+  state.collision?.traverse((o) => { if (o.isMesh && /floor|ground/i.test(o.name)) floors.push(o); });
   const h2 = pick(e, floors)[0];
   if (h2) return { point: h2.point, y: h2.point.y };
   const p = new THREE.Vector3();
