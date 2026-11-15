@@ -628,9 +628,9 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   | Blaster kick | 6 cm back and 0.12 rad nose up, easing out over 0.12 s |
   | Noodle swing | a 0.22 m, 0.6 rad sweep to the left and back over 0.28 s |
 - **Restyled (block-game style)**, replacing the placement and motion above:
-  - **Placement:** the held item sits in the lower-right corner, 0.36 m right, 0.31 m down, 0.55 m forward. It's at 60% scale (\`FP_SCALE\`) and held at a fixed angle: 20° inward, 15° up, a slight roll (Euler YXZ). There's no hand or arm.
+  - **Placement:** the held item sits in the lower-right corner, 0.36 m right, 0.31 m down, 0.55 m forward. It's at 60% scale (`FP_SCALE`) and held at a fixed angle: 20° inward, 15° up, a slight roll (Euler YXZ). There's no hand or arm.
   - **Why not 0.32 / 0.30 and 25°:** at those, the blaster's tip reached 0.05 NDC into the centre third.
-  - **Noodle:** 0.6 of its length (\`FP_NOODLE_LENGTH\`), turned to point up and forward (\`FP_NOODLE_DIR\`), and the jiggle still applies. The aim pose had held it pointing up-right, off the screen edge.
+  - **Noodle:** 0.6 of its length (`FP_NOODLE_LENGTH`), turned to point up and forward (`FP_NOODLE_DIR`), and the jiggle still applies. The aim pose had held it pointing up-right, off the screen edge.
   - **Screen coverage:** checked by a test that projects every prop vertex through the 50° camera at 16:9 and 16:10, at rest, at the kick or swipe peak, and while walking. Nothing enters the centre-third box; over 90% is in the lower-right quarter.
     - The noodle tip lands near NDC (0.48, -0.04), pointing at the centre.
     - The item's back end runs off the lower-right edge, as a held item does: about 2/3 of the blaster's vertices are on screen.
@@ -638,7 +638,7 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
     - **Walk bob:** up to 8 mm side to side and 12 mm up and down at run speed, from the camera's horizontal speed, and zero when still.
     - **Kick:** 3.5 cm and 0.07 rad over 0.08 s.
     - **Noodle swing:** a diagonal swipe down-left and back over 0.2 s, rolling and tipping down.
-  - **Overlays:** the crosshair, hit marker and door prompt are DOM elements over the canvas (\`World.tsx\` renders them after \`<Canvas>\`), so the view model can't cover them. The item also stays out of the centre third.
+  - **Overlays:** the crosshair, hit marker and door prompt are DOM elements over the canvas (`World.tsx` renders them after `<Canvas>`), so the view model can't cover them. The item also stays out of the centre third.
 - **Known:** dart tracers still start from the third-person muzzle point (`muzzleFrom`), which is near the head, not from the view model's barrel.
 - **Tests (`fpWeaponMath.test.ts`, 22 after the restyle; the screen-coverage cases are below):**
   - Visibility: first person vs third person, explore mode, eliminated.
