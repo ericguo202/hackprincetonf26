@@ -10,7 +10,7 @@ import {
   doorPromptText,
   nearestDoorInRange,
 } from "../world/doorInteract";
-import { useDoorState } from "../world/doorState";
+import { doorsFor, useDoorState } from "../world/doorState";
 import { isTextEntry } from "./hotbar";
 
 const promptWrap: React.CSSProperties = {
@@ -35,7 +35,7 @@ const promptWrap: React.CSSProperties = {
 export function DoorPrompt() {
   const zone = useStore((s) => s.me.zone);
   const pos = useStore((s) => s.me.pos);
-  const activeDoors = useDoorState((s) => s.activeDoors);
+  const activeDoors = useDoorState((s) => doorsFor(s, zone));
   const openDoors = useDoorState((s) => s.openDoors);
 
   const isIndoor = zone !== "block";
@@ -56,7 +56,7 @@ export function DoorPrompt() {
 
       const currentPos = useStore.getState().me.pos;
       const currentXZ: [number, number] = [currentPos[0], currentPos[2]];
-      const doors = useDoorState.getState().activeDoors;
+      const doors = doorsFor(useDoorState.getState(), currentZone);
       const target = nearestDoorInRange(currentXZ, doors);
       if (!target) return;
 

@@ -15,7 +15,7 @@ import { ZONE_COLLIDER } from "./collisionGroups";
 import { extractWallBoxes, splitClosedDoors } from "./doorSplit";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { HouseDoors } from "./HouseDoors";
-import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, type Door, type LoadedPack } from "./pack";
+import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, warnOnce, type Door, type LoadedPack } from "./pack";
 import { ceilingTrimesh, segmentBox, wallSegments } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
 
@@ -61,7 +61,13 @@ export function HouseScene({ pack, listingId }: Props) {
   const split = useMemo(() => {
     if (!collisionScene || !listingId) return null;
     const boxes = extractWallBoxes(collisionScene);
-    return splitClosedDoors(boxes, rooms, doorLocal);
+    if (boxes.length === 0) {
+      warnOnce(
+        `walls:${listingId}`,
+        `[pack] ${listingId}: collision.glb has no "walls" mesh; interior doors stay closed`,
+      );
+    }
+    return { ...splitClosedDoors(boxes, rooms, doorLocal), wallBoxes: boxes.length };
   }, [collisionScene, listingId, rooms, doorLocal]);
 
   if (!house) return null;
@@ -104,7 +110,7 @@ export function HouseScene({ pack, listingId }: Props) {
           })}
         </RigidBody>
       ) : null}
-      {split ? <HouseDoors doors={split.doors} /> : null}
+      {split ? <HouseDoors listingId={listingId} doors={split.doors} wallBoxes={split.wallBoxes} /> : null}
       <HouseGround rooms={rooms} door={door} />
       <HouseCeilings rooms={rooms} />
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}

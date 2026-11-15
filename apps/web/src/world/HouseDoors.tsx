@@ -12,16 +12,20 @@ import type { OpenedDoor } from "./doorSplit";
 import { useDoorState } from "./doorState";
 
 type Props = {
+  listingId: string;
   doors: readonly OpenedDoor[];
+  /** Boxes found in collision.glb's walls node, for the dev probe. */
+  wallBoxes: number;
 };
 
-export function HouseDoors({ doors }: Props) {
+export function HouseDoors({ listingId, doors, wallBoxes }: Props) {
+  // Register this house's doors. A new split (a reloaded collision scene)
+  // replaces them in place and keeps the open flags.
   useEffect(() => {
-    useDoorState.getState().setActiveDoors([...doors]);
-    return () => {
-      useDoorState.getState().setActiveDoors([]);
-    };
-  }, [doors]);
+    useDoorState.getState().setDoors(listingId, doors, { collision: "glb", wallBoxes });
+  }, [listingId, doors, wallBoxes]);
+  // Only unmounting (leaving the house) forgets them, and only for this listing.
+  useEffect(() => () => useDoorState.getState().clearDoors(listingId), [listingId]);
 
   return (
     <group>
