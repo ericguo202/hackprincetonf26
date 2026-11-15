@@ -16,6 +16,7 @@ import { ZONE_COLLIDER } from "./collisionGroups";
 import { extractWallBoxes, splitClosedDoors } from "./doorSplit";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { HouseDoors } from "./HouseDoors";
+import { showPlaceholderGround } from "./houseGround";
 import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, warnOnce, type Door, type LoadedPack } from "./pack";
 import { ceilingTrimesh, segmentBox, wallSegments } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
@@ -112,7 +113,8 @@ export function HouseScene({ pack, listingId }: Props) {
         </RigidBody>
       ) : null}
       {split ? <HouseDoors listingId={listingId} doors={split.doors} wallBoxes={split.wallBoxes} /> : null}
-      <HouseGround rooms={rooms} door={door} />
+      {/* v6+ houses bring their scanned yard (collision `ground` node): no slab, no fence. */}
+      {showPlaceholderGround(collisionScene) ? <HouseGround rooms={rooms} door={door} /> : null}
       <HouseCeilings rooms={rooms} />
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}
       <LoadBoundary url={`furniture:${listingId}`} label="furniture" fallback={null}>
