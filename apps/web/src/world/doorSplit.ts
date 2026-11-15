@@ -142,6 +142,26 @@ function normalizeBox(b: unknown): WallBox {
 }
 
 /**
+ * Openable interior door leaves (HouseDoors, the E toggle and its hint). Off:
+ * collision.glb's walls are used as the pack ships them (doors closed in the
+ * scan stay solid, like a closed leaf; the pack's own openings stay open), and
+ * no doors register, so no leaf, no collider, no "E  Open door". Set true to
+ * bring them back. The front door (E to enter/leave) does not depend on this.
+ */
+export const INTERIOR_DOOR_LEAVES = false;
+
+/** splitClosedDoors when INTERIOR_DOOR_LEAVES is on; otherwise the walls as-is and no doors. */
+export function houseWalls(
+  wallBoxes: readonly (WallBox | MinMaxBox)[],
+  rooms: readonly Room[],
+  frontDoor?: FrontDoorRef,
+  leaves: boolean = INTERIOR_DOOR_LEAVES,
+): SplitResult {
+  if (leaves) return splitClosedDoors(wallBoxes, rooms, frontDoor);
+  return { boxes: wallBoxes.map(normalizeBox), doors: [] };
+}
+
+/**
  * Pure function: for each closed door in rooms except the front door,
  * replace the box that spans it with:
  * - solid pieces between and outside the openings

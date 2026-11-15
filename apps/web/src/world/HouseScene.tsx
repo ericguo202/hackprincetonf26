@@ -13,7 +13,7 @@ import { FurnitureLayer } from "./FurnitureLayer";
 import { BuildController } from "./BuildController";
 import { disableToneMapping } from "./interiorMaterials";
 import { ZONE_COLLIDER } from "./collisionGroups";
-import { extractWallBoxes, splitClosedDoors } from "./doorSplit";
+import { extractWallBoxes, houseWalls } from "./doorSplit";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { HouseDoors } from "./HouseDoors";
 import { showPlaceholderGround, useScannedLots } from "./houseGround";
@@ -75,7 +75,7 @@ export function HouseScene({ pack, listingId }: Props) {
         `[pack] ${listingId}: collision.glb has no "walls" mesh; interior doors stay closed`,
       );
     }
-    return { ...splitClosedDoors(boxes, rooms, doorLocal), wallBoxes: boxes.length };
+    return { ...houseWalls(boxes, rooms, doorLocal), wallBoxes: boxes.length };
   }, [collisionScene, listingId, rooms, doorLocal]);
 
   if (!house) return null;
