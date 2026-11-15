@@ -94,6 +94,14 @@ SUMMARIES: dict[str, Callable[[Any], str]] = {
 }
 
 
+def strip_say(audit: dict) -> dict:
+    """get_audit's result without the model-only `say` sentences: the event keeps audit.schema.json."""
+    return {
+        **audit,
+        "findings": [{k: v for k, v in f.items() if k != "say"} for f in audit.get("findings", [])],
+    }
+
+
 def summarize(tool: str, content: Any) -> tuple[str, str]:
     """(status, summary) for one tool result."""
     r = _json(content)
@@ -206,7 +214,7 @@ class EventMapper:
                 matches = [{k: x[k] for k in ("listing_id", "score", "evidence")} for x in r["matches"]]
                 out.append({"type": "listings.results", "data": {"matches": matches}})
             elif tool == "get_audit":
-                out.append({"type": "audit.findings", "data": r})
+                out.append({"type": "audit.findings", "data": strip_say(r)})
         return out
 
     def finish(self, completed: bool = True) -> list[Event]:

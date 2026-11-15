@@ -30,7 +30,7 @@ from langchain.tools import ToolRuntime, tool
 from pydantic import BaseModel, Field
 
 import settings
-from agent import game_api, search
+from agent import game_api, plain, search
 from agent.context import AgentContext
 from data import packs
 from layout import DEFAULT_RULE, RULES, room_geometry
@@ -268,10 +268,12 @@ def get_house_graph(listing_id: str) -> str:
 def get_audit(listing_id: str) -> str:
     """Get the data audit of a house: contradictions between the listing, the scan and the aerial data.
 
+    Each warn or conflict finding carries `say`, a plain sentence in square feet to quote to the buyer.
+
     Args:
         listing_id: Listing id.
     """
-    return _run(lambda: packs.get_audit(listing_id))
+    return _run(lambda: plain.with_sentences(packs.get_audit(listing_id), packs.get_listing(listing_id)))
 
 
 @tool(parse_docstring=True)

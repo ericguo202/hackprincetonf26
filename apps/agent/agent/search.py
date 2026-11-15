@@ -31,7 +31,11 @@ def _graph_distance_to_small_bedroom(graph: dict) -> tuple[int | None, str]:
         lengths = nx.single_source_shortest_path_length(g, p)
         for b in small:
             if b in lengths and (best is None or lengths[b] < best[0]):
-                best = (lengths[b], f"{b} ({nodes[b]['area_m2']} m2) is {lengths[b]} from {p}")
+                area = nodes[b]["area_m2"]
+                best = (
+                    lengths[b],
+                    f"{b} ({area} m2, {round(area * 10.7639)} sq ft) is {lengths[b]} from {p}",
+                )
     if best is None:
         why = "no primary bedroom" if not primaries else f"no bedroom under {SMALL_BEDROOM_M2:g} m2 reachable"
         return None, why

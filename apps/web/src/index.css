@@ -36,13 +36,24 @@ body { background: #10141a; color: #e8eaed; font-family: system-ui, sans-serif; 
 .listing-card {
   margin: 8px 0; padding: 8px; background: rgba(255,255,255,0.04); border-radius: 6px;
 }
-.listing-card h3 { margin: 0 0 6px; font-size: 13px; display: flex; justify-content: space-between; }
+.listing-card h3 { margin: 0 0 6px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+.listing-card .match-label { font-weight: 500; color: #8fd19e; white-space: nowrap; }
 .listing-card ul { list-style: none; margin: 0; padding: 0; }
-.listing-card li[data-ok="true"] { color: #8fd19e; }
-.listing-card li[data-ok="false"] { color: #e8a0a0; }
-.finding { margin: 6px 0 0; font-size: 12px; }
-.finding.warn { color: #e0c070; }
-.finding.conflict { color: #e8a0a0; }
+.listing-card li { display: flex; gap: 6px; font-size: 12px; line-height: 1.5; }
+.listing-card .mark { width: 1em; flex: none; text-align: center; font-weight: 700; }
+.listing-card li[data-mark="yes"] .mark { color: #8fd19e; }
+.listing-card li[data-mark="partial"] .mark { color: #e0c070; }
+.listing-card li[data-mark="no"] .mark { color: #e8a0a0; }
+.listing-card li[data-mark="unknown"] { color: #a7aebb; }
+.worth-checking { margin-top: 8px; padding: 6px 8px; border-left: 2px solid #e0c070; background: rgba(224,192,112,0.08); }
+.worth-title { margin: 0 0 2px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #e0c070; }
+.finding { margin: 2px 0 0; font-size: 12px; }
+.finding.warn { color: #f0dca8; }
+.finding.conflict { color: #f2b8b8; }
+.raw-data { margin-top: 6px; font-size: 11px; color: #8b93a1; }
+.raw-data summary { cursor: pointer; }
+.raw-data li { display: block; font-size: 11px; word-break: break-word; }
+.raw-data p { margin: 4px 0; }
 
 .suggest { display: flex; flex-direction: column; gap: 6px; }
 .suggest-label {

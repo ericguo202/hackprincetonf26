@@ -11,7 +11,7 @@
         "subagents": ["listing-auditor"],
         "committed": false,
         "focus": "hou_236595179",
-        "answer_mentions": ["7014"],
+        "answer_mentions": ["7014", "6915", "sq ft", "smaller|larger"],
         "max_seconds": 180
       }
     }

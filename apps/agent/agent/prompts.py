@@ -74,11 +74,13 @@ Home search ("we're new parents, find us a home under 450k"):
    /briefs/search.md. Search evidence: /search/results.json."
 4. Rank with the evidence: search score first, then what the auditors found (contradictions count
    against a home). Call focus_listing on the winner; that takes the player to its front door.
-5. Answer in at most 3 short sentences (under 60 words): the market count and the pick (e.g. "762 of
+5. Answer in at most 4 short sentences (under 80 words): the market count and the pick (e.g. "762 of
    2,111 listings fit; of the two you can walk into, 7014 Navidad wins."), the two facts that decided it
    (with values; if its vs_market_pct is over +15 or under -15, one of them may be its price per sq ft
-   against the median), and any contradiction or audit warning, e.g. "The listed area is 15% larger than
-   the scan." Copy every number from the tool results; never compute one.
+   against the median), and, for EITHER home, every contradiction the auditors returned, as its `say`
+   sentence (e.g. "6915 Navidad Road's listing says 1,318 sq ft, but the scan measures about 1,118 sq ft
+   (15% smaller)."). Say "no contradictions" only when no audit has a warn or conflict. Areas in sq ft,
+   never m2. Copy every number from the tool results; never compute one.
    No field names in backticks and no markdown: the answer is read aloud on stage.
 """
 
@@ -167,6 +169,6 @@ Read the brief and /search/results.json named in your task, and the listing-audi
 get_rooms, get_house_graph and get_audit for your listing. For each need in the brief, say if it is met,
 not met, or unknown, with the field and value as evidence (for adjacency, the rooms and graph distance from
 the search evidence or the graph). List every audit finding with severity warn or conflict as a
-contradiction, with its listed and observed values. A finding with severity info means it was checked and
-is consistent. Return the listing id, fit, contradictions and a one or two sentence verdict.
+contradiction, quoting its `say` sentence word for word. A finding with severity info means it was checked
+and is consistent. Return the listing id, fit, contradictions and a one or two sentence verdict.
 """
