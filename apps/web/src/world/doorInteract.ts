@@ -6,6 +6,7 @@
 
 import type { Point2 } from "../contracts.gen";
 import type { OpenedDoor } from "./doorSplit";
+import { frontDoorInRange, type Door, type Vec3 } from "./pack";
 
 export const DOOR_INTERACT_RADIUS_M = 1.5;
 export const DOOR_CLOSE_CLEARANCE_M = 0.4;
@@ -67,4 +68,48 @@ export function canCloseDoor(
  */
 export function doorPromptText(isOpen: boolean): string {
   return isOpen ? "E  Close door" : "E  Open door";
+}
+
+/** What E does here: toggle an interior door, go through the front door, or nothing. */
+export type DoorAction = "interior" | "front" | null;
+
+/**
+ * Interior door vs front door, both already in their own range (distances in
+ * metres, null when out of range). The nearer wins; the interior door wins a tie.
+ */
+export function pickDoorAction(interiorDist: number | null, frontDist: number | null): DoorAction {
+  if (interiorDist === null) return frontDist === null ? null : "front";
+  if (frontDist === null) return "interior";
+  return interiorDist <= frontDist ? "interior" : "front";
+}
+
+/** "E  Enter <address>" on the block (the listing id if it has no address), "E  Leave house" inside. */
+export function frontDoorPromptText(zone: string, listingId: string, address?: string | null): string {
+  if (zone !== "block") return "E  Leave house";
+  const name = address?.trim() ? address.trim() : listingId;
+  return `E  Enter ${name}`;
+}
+
+export type DoorTarget =
+  | { kind: "interior"; door: OpenedDoor; dist: number }
+  | { kind: "front"; door: Door; dist: number }
+  | null;
+
+/**
+ * The door E acts on at `pos` (body centre, current zone's frame): the nearest
+ * interior door within DOOR_INTERACT_RADIUS_M (indoors only) or the front door
+ * within FRONT_DOOR_KEY_M, by pickDoorAction.
+ */
+export function doorTargetAt(
+  zone: string,
+  pos: Vec3,
+  interiorDoors: readonly OpenedDoor[],
+  frontDoors: Door[],
+): DoorTarget {
+  const interior = zone === "block" ? null : nearestDoorInRange([pos[0], pos[2]], interiorDoors);
+  const front = frontDoorInRange(zone, pos, frontDoors);
+  const action = pickDoorAction(interior?.distance ?? null, front?.dist ?? null);
+  if (action === "interior" && interior) return { kind: "interior", door: interior.door, dist: interior.distance };
+  if (action === "front" && front) return { kind: "front", door: front.door, dist: front.dist };
+  return null;
 }

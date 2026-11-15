@@ -3,7 +3,7 @@
 //
 // WASD / arrows to move, Shift to run, Space to jump. Drag to orbit the
 // camera, wheel to zoom. Walk into a lit door to go inside; walk back to it
-// to leave.
+// to leave. E within 2 m of a front door does the same (player/DoorPrompt).
 //
 // Zones (AGENTS.md section 8): me.zone is "block" or a listing_id, and me.pos
 // is in that zone's own frame. Only one zone's geometry is mounted at a time.
@@ -25,6 +25,7 @@ import { HouseScene } from "./HouseScene";
 import {
   blockSpawn,
   devStart,
+  pressFrontDoor,
   roomIdAt,
   stepZone,
   type LoadedPack,
@@ -32,6 +33,7 @@ import {
   type ZoneState,
 } from "./pack";
 import { usePack } from "./usePack";
+import { useFrontDoors } from "./frontDoorState";
 import { bodyCentreAt } from "./landing";
 import { SUN_DIR_BLOCK, sunPosition } from "./sun";
 import { SunLight } from "./SunLight";
@@ -139,6 +141,22 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
     },
     [pack, setMe],
   );
+
+  // E at a front door (player/DoorPrompt): the same switch as walking in, from
+  // the same zone state, so the trigger stays disarmed after it and can't bounce.
+  useEffect(() => {
+    const addresses: Record<string, string> = {};
+    for (const l of pack.listings) if (l.address) addresses[l.id] = l.address;
+    const press = () => {
+      const { state, change } = pressFrontDoor(zoneState.current, useStore.getState().me.pos, pack.doors);
+      if (!change) return false;
+      zoneState.current = state;
+      goTo(change.zone, change.spawn);
+      return true;
+    };
+    useFrontDoors.getState().set(pack.doors, addresses, press);
+    return () => useFrontDoors.getState().set([], {}, null);
+  }, [pack, goTo]);
 
   // Door trigger and room tracking, on every position the Player writes (20 Hz).
   useEffect(

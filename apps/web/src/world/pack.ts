@@ -277,6 +277,8 @@ export const DOOR_STEP_M = 1.2;
 export const DOOR_RADIUS_M = 0.9;
 /** After a zone change the door re-arms once you are this far from it. */
 export const DOOR_REARM_M = 1.8;
+/** Press E within this of a front door point (XZ) to go through it. */
+export const FRONT_DOOR_KEY_M = 2.0;
 
 export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 
@@ -432,12 +434,7 @@ export function stepZone(
       const armed = !near || near.dist > DOOR_REARM_M;
       return { state: { zone: "block", armed }, change: null };
     }
-    if (near && near.dist <= DOOR_RADIUS_M) {
-      return {
-        state: { zone: near.door.listing_id, armed: false },
-        change: { zone: near.door.listing_id, spawn: near.door.enterTo },
-      };
-    }
+    if (near && near.dist <= DOOR_RADIUS_M) return crossDoor(state, near.door);
     return { state, change: null };
   }
 
@@ -450,13 +447,58 @@ export function stepZone(
   if (!state.armed) {
     return { state: { zone: state.zone, armed: dist > DOOR_REARM_M }, change: null };
   }
-  if (dist <= DOOR_RADIUS_M) {
+  if (dist <= DOOR_RADIUS_M) return crossDoor(state, door);
+  return { state, change: null };
+}
+
+/**
+ * Go through `door` from the zone in `state`: from the block into its house at
+ * enterTo, from the house out to the block at exitTo. The trigger is disarmed,
+ * so it re-arms only once you walk DOOR_REARM_M clear of the door you came
+ * through. The one zone switch shared by the walk-in trigger and the E key.
+ */
+export function crossDoor(state: ZoneState, door: Door): { state: ZoneState; change: ZoneChange } {
+  if (state.zone === "block") {
     return {
-      state: { zone: "block", armed: false },
-      change: { zone: "block", spawn: door.exitTo },
+      state: { zone: door.listing_id, armed: false },
+      change: { zone: door.listing_id, spawn: door.enterTo },
     };
   }
-  return { state, change: null };
+  return {
+    state: { zone: "block", armed: false },
+    change: { zone: "block", spawn: door.exitTo },
+  };
+}
+
+/**
+ * The front door E would use: on the block, the nearest door point within
+ * `max` (XZ); in a house, that house's own door within `max` of door.local.
+ */
+export function frontDoorInRange(
+  zone: string,
+  pos: Vec3,
+  doors: Door[],
+  max = FRONT_DOOR_KEY_M,
+): { door: Door; dist: number } | null {
+  if (zone === "block") {
+    const near = nearestDoor(pos, doors, (d) => d.block);
+    return near && near.dist <= max ? near : null;
+  }
+  const door = doors.find((d) => d.listing_id === zone);
+  if (!door) return null;
+  const dist = distXZ(pos, door.local);
+  return dist <= max ? { door, dist } : null;
+}
+
+/** E at a front door: the same switch as walking into it (crossDoor), armed or not. */
+export function pressFrontDoor(
+  state: ZoneState,
+  pos: Vec3,
+  doors: Door[],
+  max = FRONT_DOOR_KEY_M,
+): { state: ZoneState; change: ZoneChange | null } {
+  const near = frontDoorInRange(state.zone, pos, doors, max);
+  return near ? crossDoor(state, near.door) : { state, change: null };
 }
 
 function nearestDoor(

@@ -512,3 +512,23 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
 - **Tests (`remoteFx.test.ts`, 14):** in my zone, another zone, no remotes, 1.4 m vs 1.6 m, 3D distance, several remotes. Once per id: mount marks all seen, new ids once in order, the same events in a new array aren't replayed, an 8-entry rolling cap over 30 events plays each exactly once with the set bounded, a burst between frames. Dir normalization and the swoosh yaw.
 - **Known env-dependent test (already on main):** `foamMode.test.ts` "the override is ignored unless the dev toggle is on" fails when `/.env.local` sets `VITE_SOLO=1`, because Vitest loads it. All 327 tests pass with that file moved aside.
 - **Not seen in a browser:** the remote tracer and puff, the swoosh's orientation and look, and the match tolerance on a running shooter. The body is drawn 100 ms behind, and the head is 0.65 m above the body centre, so a shooter at 6 m/s is about 0.9 m off, still inside 1.5 m.
+
+## 25. E at front doors
+
+**Not seen in a browser.** It's checked by unit tests and the production-build grep only. The Chrome extension wasn't connected, and the dev server compiles and serves every changed module.
+
+- **What it does:** E is a shortcut for the existing zone switch, and walking into a door works exactly as before.
+  - On the block, within 2.0 m (XZ, `FRONT_DOOR_KEY_M`) of any `pack.doors[].block`, the prompt reads "E  Enter <address>": the address comes from the listings index, falling back to the listing id.
+  - Indoors, within 2.0 m of that house's `door.local`, it reads "E  Leave house".
+- **One code path (`world/pack.ts`):** `crossDoor(state, door)` is the only zone switch. It goes to enterTo from the block and to exitTo from the house, and it disarms the trigger. `stepZone` (walk-in) and `pressFrontDoor` (E) both call it, so E lands exactly where walking in does and can't bounce: the trigger re-arms only after you walk 1.8 m clear. E works while the trigger is disarmed (a key press is deliberate, and `e.repeat` is ignored). `frontDoorInRange` picks the door.
+- **Wiring:** World's `Zones` publishes `pack.doors`, the addresses and a `press()` closure (over its `zoneState` ref and `goTo`) to `world/frontDoorState.ts`, a small zustand store, because `DoorPrompt` is a DOM sibling of the canvas. It is cleared on unmount.
+- **Precedence (`doorInteract.ts`):** `doorTargetAt` / `pickDoorAction`. An interior door (1.5 m) and a front door (2.0 m) can both be in range: the nearer wins, and the interior door wins a tie. Interior doors never count on the block. E is ignored while typing (`isTextEntry`). `player/DoorPrompt.tsx` keeps its overlay style and handles both kinds.
+- **Tests (`world/frontDoor.test.ts`, real v3 listings index, rooms.json and 7014's collision.glb):**
+  - E 1.5 m from 7014's block door enters at enterTo in r3. The walk-in trigger alone doesn't fire there.
+  - E at the door gives the same result as walking in, both ways.
+  - E 1.9 m inside goes out to exitTo. At 2.1 m nothing happens, outside or inside.
+  - 40 steps standing at the landing don't bounce.
+  - Only the current house's door counts.
+  - The prompt text, including the id fallback.
+  - Precedence: the pure table; a real interior door away from the front door; a synthetic interior door beside the front door (nearer, farther, tie). 7014's nearest real interior door is 2.7 m from its front door, so the two never compete there.
+- **Not seen in a browser:** the prompt on the block, entering and leaving with E, and the overlap with an interior door.
