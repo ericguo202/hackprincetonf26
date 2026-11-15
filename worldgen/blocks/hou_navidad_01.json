@@ -7,7 +7,7 @@
   },
   "radius_m": 200,
   "live_pack_version_note": "The one pack version everything uses (publish, audit, costar, the agent). Change it only with `python -m worldgen.versions pin`, never by hand; builders refuse to write into it.",
-  "live_pack_version": 1,
+  "live_pack_version": 2,
   "pack_history": [
     {
       "version": 1,
@@ -15,6 +15,13 @@
       "date": "2026-11-14 11:59",
       "reason": "first panorama-textured build of 7014 (hero) and 6915",
       "compared_to_live": "first version"
+    },
+    {
+      "version": 2,
+      "previous": 1,
+      "date": "2026-11-14 22:17",
+      "reason": "adds the combined block (procedural near zone with ortho-fitted roads, curbs, sidewalks, driveways and walks; Vexcel 3D Cities far zone), sidewalk spawns, hero listed first, furniture v2 (adds 3 TVs); houses copied unchanged from v1",
+      "compared_to_live": "houses byte-identical to v1 (interior, collision, rooms, graph); audit findings identical; v1 had no block (placeholder), v2 adds block/render.glb 15.3 MB + collision 14k tris; furniture v2 = v1's 144 items unchanged + 3 TVs; contracts/validate.py 0 errors"
     }
   ],
   "houses": [
