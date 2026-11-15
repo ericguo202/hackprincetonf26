@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { Sky } from "@react-three/drei";
 
 import { useStore } from "../store";
 import { Crosshair } from "../player/Crosshair";
@@ -41,6 +40,7 @@ import { usePack } from "./usePack";
 import { useFrontDoors } from "./frontDoorState";
 import { bodyCentreAt } from "./landing";
 import { skyFor } from "./sun";
+import { BlockSky } from "./BlockSky";
 import { SunLight } from "./SunLight";
 import { DevPlan, DevProbe } from "./DevPlan";
 import { DevModeToggle } from "./DevModeToggle";
@@ -219,7 +219,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
   return (
     <>
       {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
-      {sky ? <Sky {...sky} /> : null}
+      {sky ? <BlockSky /> : null}
       <SunLight headingDeg={inHouse ? (pack.doors.find((d) => d.listing_id === zone)?.world.heading_deg ?? 0) : 0} />
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}
