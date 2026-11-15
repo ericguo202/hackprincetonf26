@@ -12,8 +12,8 @@ import { SPAWN_DROP_M, bodyCentreAt } from "./landing";
 import { blockToHouse, deriveSpawn, makeDoor, parseListings, stepZone, DOOR_RADIUS_M, type Vec3 } from "./pack";
 
 const PACKS = join(dirname(fileURLToPath(import.meta.url)), "../../public/packs");
-// Pack v3 (HANDOFF 2026-11-14 23:30) carries v2's houses byte-for-byte; only the furniture library changed.
-const V2 = join(PACKS, "packs/hou_navidad_01/v3");
+// Pack v5 (v3 + furniture v4) carries v2's houses byte-for-byte; only the furniture library changed.
+const V2 = join(PACKS, "packs/hou_navidad_01/v5");
 const json = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const parsed = parseListings(json(join(PACKS, "listings/index.json")));
 if (!parsed.ok) throw new Error("v2 listings index did not parse");

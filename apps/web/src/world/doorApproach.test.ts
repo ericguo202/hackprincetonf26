@@ -11,7 +11,7 @@ import { houseToBlock, makeDoor, parseListings } from "./pack";
 import { doorApproach } from "./doorApproach";
 
 const PACKS = join(dirname(fileURLToPath(import.meta.url)), "../../public/packs");
-const V3 = join(PACKS, "packs/hou_navidad_01/v3");
+const V3 = join(PACKS, "packs/hou_navidad_01/v5");
 const json = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const parsed = parseListings(json(join(PACKS, "listings/index.json")));
 if (!parsed.ok) throw new Error("v3 listings index did not parse");

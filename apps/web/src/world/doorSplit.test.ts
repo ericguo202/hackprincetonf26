@@ -8,7 +8,7 @@ import type { Listing, Room } from "../contracts.gen";
 import { extractWallBoxes, splitClosedDoors, type SplitResult, type WallBox } from "./doorSplit";
 
 const PACKS = join(dirname(fileURLToPath(import.meta.url)), "../../public/packs");
-const HOUSES = join(PACKS, "packs/hou_navidad_01/v3/houses");
+const HOUSES = join(PACKS, "packs/hou_navidad_01/v5/houses"); // v5 = v3's houses
 const LISTINGS = join(PACKS, "listings/index.json");
 
 describe("doorSplit with real 7014 collision.glb and rooms.json", () => {
