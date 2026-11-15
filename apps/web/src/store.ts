@@ -25,7 +25,8 @@ export type HouseFurniture = { plan_id: string; objects: PlacedObject[] };
 export type Todo = { content: string; status: "pending" | "in_progress" | "completed" };
 export type SubagentActivity = { name: string; status: "started" | "finished"; summary: string };
 export type ToolLine = { agent: string; tool: string; status: string; summary: string };
-export type ChatMessage = { role: "user" | "agent"; text: string; final: boolean };
+/** trace: LangSmith link of the agent turn that wrote this reply (GET /sessions/{id}/trace). */
+export type ChatMessage = { role: "user" | "agent"; text: string; final: boolean; trace?: string };
 export type ListingMatch = {
   listing_id: string;
   score: number;

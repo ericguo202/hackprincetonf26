@@ -1,0 +1,22 @@
+{
+  "id": "furnish_movie_night",
+  "description": "Demo 0:45. Living room for movie nights in the hero house",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Furnish the living room for a family that watches movies together",
+      "expect": {
+        "planned": true,
+        "subagents": ["room-scout", "asset-curator", "layout-planner"],
+        "tools": ["get_room_geometry", "search_assets", "place_picks", "commit_placement"],
+        "committed": true,
+        "room_label": "living_room",
+        "categories_all": ["tv_stand"],
+        "categories_any": ["sofa", "sectional", "loveseat"],
+        "min_objects": 3,
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}

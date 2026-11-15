@@ -1,0 +1,21 @@
+{
+  "id": "edit_move_couch",
+  "description": "An edit changes the existing plan instead of starting over",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Furnish the living room for movie nights",
+      "expect": { "committed": true, "room_label": "living_room", "valid": true }
+    },
+    {
+      "prompt": "Move the couch to the other wall",
+      "expect": {
+        "committed": true,
+        "categories_any": ["sofa", "sectional", "loveseat"],
+        "replaces_previous": true,
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}

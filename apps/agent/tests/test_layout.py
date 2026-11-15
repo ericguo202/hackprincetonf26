@@ -307,6 +307,36 @@ def test_center_follows_main_walls_of_off_axis_room():
         assert abs(off) < 0.6, p
 
 
+BENCH = {  # only the two 6 m walls fit it
+    "id": "bench",
+    "name": "Long bench",
+    "category": "bench",
+    "size_m": {"w": 4.5, "d": 0.5, "h": 0.5},
+    "placement": "wall",
+    "clearance_m": {"front": 0.5},
+}
+
+
+def test_blocked_poses_name_their_blockers(room, plan):
+    out = propose_poses(room_geometry(room), BENCH, "against_wall", None, placed(plan, "o1", "o2"))
+    assert out["poses"] == [] and "blocked_by" in out["note"]
+    assert 1 <= len(out["blocked"]) <= 3
+    assert [p["pose_id"] for p in out["blocked"]] == [f"b{i + 1}" for i in range(len(out["blocked"]))]
+    for p in out["blocked"]:
+        assert p["blocked_by"] in (["o1"], ["o2"])
+        rest = {**plan, "objects": [o for o in plan["objects"] if o["instance_id"] not in p["blocked_by"]]}
+        trial = {**rest, "objects": [*rest["objects"], obj("o9", "bench", p["x"], p["z"], p["rot_deg"])]}
+        assert validate_layout(trial, room, {**ASSETS, "bench": BENCH})["conflicts"] == [], p
+
+
+def test_blocked_never_moves_the_relative_to_piece(room, plan):
+    # The sofa facing the TV with the sofa's own spot taken by a bench: never offers to move the TV.
+    plan["objects"].append(obj("o3", "bench", 3.0, 0.27))
+    pl = [(o, {**ASSETS, "bench": BENCH}[o["asset_id"]]) for o in plan["objects"] if o["instance_id"] != "o1"]
+    out = propose_poses(room_geometry(room), ASSETS["sofa_abo_B072C8Q9RF"], "facing", "o2", pl)
+    assert all("o2" not in p["blocked_by"] for p in out.get("blocked", []))
+
+
 def test_nothing_fits_says_why(room):
     out = propose_poses(room_geometry(room), ASSETS["huge"], "against_wall")
     assert out["poses"] == [] and "no free wall segment fits 7.00 m" in out["note"]

@@ -1,0 +1,19 @@
+{
+  "id": "home_search_infant",
+  "description": "Demo 0:25. New parents under 450k: parallel auditors, 7014 wins on the nursery next to the primary",
+  "zone": "block",
+  "turns": [
+    {
+      "prompt": "We're new parents with an infant. Find us a home to buy under 450k.",
+      "expect": {
+        "planned": true,
+        "tools": ["search_listings"],
+        "subagents": ["listing-auditor"],
+        "committed": false,
+        "focus": "hou_236595179",
+        "answer_mentions": ["7014"],
+        "max_seconds": 180
+      }
+    }
+  ]
+}

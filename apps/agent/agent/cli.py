@@ -60,7 +60,9 @@ def main() -> None:
     async def run() -> None:
         for prompt in args.prompts:
             print(f"\n> {prompt}")
-            await runner.run_turn(ctx, prompt, emit)
+            url = await runner.run_turn(ctx, prompt, emit)
+            if url:
+                print(f"[trace] {url}", flush=True)
 
     asyncio.run(run())
 
