@@ -596,3 +596,14 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - `variantFor` is stable (FNV-1a reference values pinned) and spreads ids across all three looks.
   - Per variant: the file is self-contained and under 3 MB; it has the 17 clips; RocketLauncher and the 14 weapon nodes are on the hand bone.
   - Per variant: the rig is 1.3 m tall with feet at 0; only the tinted blaster is kept; the noodle points world-up and is 1.2 m long; the jiggle stays finite.
+
+## 28. Open items (03:40)
+
+1. **Closed-door openings don't match the photo.** For doors that were closed in the scan, the `rooms.json` opening (a, b) is shifted along the wall from where the door appears in the `interior.glb` photo, often by about a door's width. On 7014: r3's doors to r9 and r2, the r7 and r8 outside doors, and the closets. Lane C opens doors at the `rooms.json` a/b, so the leaf and the texture cut appear next to the painted door. Asked Lane A (HANDOFF, lane-c -> lane-a) to fix those openings in the new map/pack, or bake the closed-door photo as a cut-out. `lane-c/door-cutout` (the texture hole at a/b) is ready and correct once a/b match the photo; don't merge it before then.
+2. **Door leaves are plain grey boxes** (`HouseDoors.tsx`: an off-white `#f0ede6` box, no frame or handle).
+3. **Weapon props are invisible in first person** (V toggles first person, and the body and its held prop are hidden there).
+4. **Outside doors open onto the placeholder yard.** An opened r3/r7/r8 outside door on 7014 shows the house zone's stand-in ground and sky, not the block.
+5. **When Lane A publishes a new pack:**
+   - Re-run `scripts/door-check.ts`, the `doorSplit` tests and the `frontDoor` tests on it.
+   - Re-check the 4.2 m block door marker (`DOOR_MARKER_M`) and the 7.0 m fallback landing (`DOOR_EXIT_M`) against the new `block/collision.glb`. The `frontDoor.test.ts` clearance test does this once pointed at the new pack.
+   - Only then switch `VITE_PACK_BASE_URL`.
