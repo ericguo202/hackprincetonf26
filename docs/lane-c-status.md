@@ -493,3 +493,22 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - Darts against the door collider.
   - Door state after leaving and re-entering the house.
   - Multiplayer: door state is local to each client, not shared through the game server.
+
+## 24. Other players' shots from store.fx
+
+**Not seen in a browser.** It's checked by unit tests and the production-build grep only. In SOLO nothing writes `store.fx`, and the `VITE_DEV_REMOTES` fakes don't emit fx, so it needs two real clients on the game server to see it.
+
+- **Source:** Lane D's `net/broadcasts.ts` keeps the latest 8 `fx` broadcasts in `store.fx` (`{id, kind, origin, dir, at}`, ids monotonic, newest last). The server sends `{kind: weapon, origin, dir}` to everyone but the shooter, in every zone, with no shooter id or zone (`NeighborhoodRoom.ts:159`).
+- **`world/remoteFx.ts` (pure):**
+  - `fxInMyZone(fx, bodies)`: keep an event only if its origin is within `FX_MATCH_M` (1.5 m, in 3D) of a remote body centre drawn in my zone this frame. A shot from another zone is in another frame, so it matches nobody and is dropped.
+  - `seenIds` / `takeUnseen`: each id plays once. Ids already in the list on mount are marked seen, so a reload or remount never replays old shots. The seen set is trimmed to ids still in the list.
+  - `unitDir`, `swooshYaw`.
+- **Bodies:** `RemotePlayers` now also publishes the interpolated body centres of every remote in my zone (alive or not) via `remoteTargets.setRemoteBodies` / `remoteBodies()`, from the same samples it draws and builds hitboxes from.
+- **`world/RemoteShots.tsx`** (mounted next to `RemotePlayers` in `World.tsx` Zones; `REMOTE_FX_PRIORITY` 0, after remotes at −20). It's named `RemoteShots`, not `RemoteFx`, because macOS's case-insensitive filenames would make `RemoteFx.tsx` collide with `remoteFx.ts`.
+  - **blaster:** a Rapier ray from the origin along dir, `SHOT_QUERY` (zone + furniture), 40 m (`BLASTER.rangeM`). Tracer to the hit point (or 40 m), plus an impact puff on a hit. Pools: 8 tracers, 4 puffs. No muzzle flash.
+  - **noodle:** one pooled flat ring segment, 60° wide, 1.1–1.5 m from the head at head height, centred on dir. It fades over 0.25 s and grows a little. No physics.
+  - No mode gating: fx only arrives in foam mode.
+- **Shared effects: `player/shotFx.tsx`.** `useTracerPool(n)` and `usePuffPool(n)` were pulled out of `Blaster.tsx`, which now uses them (12 tracers, 1 puff, same as before). The tracer streak, speed, puff timing and look are unchanged.
+- **Tests (`remoteFx.test.ts`, 14):** in my zone, another zone, no remotes, 1.4 m vs 1.6 m, 3D distance, several remotes. Once per id: mount marks all seen, new ids once in order, the same events in a new array aren't replayed, an 8-entry rolling cap over 30 events plays each exactly once with the set bounded, a burst between frames. Dir normalization and the swoosh yaw.
+- **Known env-dependent test (already on main):** `foamMode.test.ts` "the override is ignored unless the dev toggle is on" fails when `/.env.local` sets `VITE_SOLO=1`, because Vitest loads it. All 327 tests pass with that file moved aside.
+- **Not seen in a browser:** the remote tracer and puff, the swoosh's orientation and look, and the match tolerance on a running shooter. The body is drawn 100 ms behind, and the head is 0.65 m above the body centre, so a shooter at 6 m/s is about 0.9 m off, still inside 1.5 m.

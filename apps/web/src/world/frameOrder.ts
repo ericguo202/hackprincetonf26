@@ -21,3 +21,6 @@ export const SUN_PRIORITY = -5;
 
 /** Blaster: aims along the camera, so it runs after the camera arm has placed it this frame. */
 export const SHOT_PRIORITY = 0;
+
+/** Other players' shots (store.fx): after REMOTE_PRIORITY has published the drawn bodies they are matched to. */
+export const REMOTE_FX_PRIORITY = 0;

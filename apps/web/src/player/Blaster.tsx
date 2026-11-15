@@ -18,7 +18,7 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from "react"
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRapier } from "@react-three/rapier";
 import type { EcctrlHandle } from "ecctrl";
-import { Mesh, Object3D, PointLight, Quaternion, Vector3 } from "three";
+import { Mesh, Object3D, PointLight, Vector3 } from "three";
 
 import { SHOT_QUERY } from "../world/collisionGroups";
 import { SHOT_PRIORITY } from "../world/frameOrder";
@@ -40,6 +40,7 @@ import {
   type Ray,
 } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
+import { usePuffPool, useTracerPool } from "./shotFx";
 import { canAttack, noodlePayload, noodleSwing } from "./weapons";
 import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
@@ -57,13 +58,7 @@ type Props = {
 };
 
 const TRACERS = 12;
-const STREAK_M = 0.7;
 const FLASH_S = 0.05;
-const PUFF_S = 0.18;
-const FOAM = "#ff8a1f";
-const UP = new Vector3(0, 1, 0);
-
-type Tracer = { active: boolean; from: V3; dir: V3; total: number; travelled: number };
 
 const noHitboxes = () => [];
 const noFire = () => {};
@@ -80,20 +75,14 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
   // Scratch objects, reused every frame.
   const tmpBody = useRef(new Vector3());
   const tmpDir = useRef(new Vector3());
-  const tmpQuat = useRef(new Quaternion());
   const rapierRay = useRef<InstanceType<typeof rapier.Ray> | null>(null);
 
   // Effect pools: meshes are mounted once and moved imperatively.
-  const tracers = useRef<Tracer[]>(
-    Array.from({ length: TRACERS }, () => ({ active: false, from: [0, 0, 0], dir: [0, 0, 1], total: 0, travelled: 0 })),
-  );
-  const nextTracer = useRef(0);
-  const tracerMeshes = useRef<(Mesh | null)[]>([]);
+  const tracers = useTracerPool(TRACERS);
+  const puffs = usePuffPool(1);
   const flashMesh = useRef<Mesh | null>(null);
   const flashLight = useRef<PointLight | null>(null);
   const flashLeft = useRef(0);
-  const puffMesh = useRef<Mesh | null>(null);
-  const puffLeft = useRef(0);
 
   useEffect(() => {
     const locked = () => document.pointerLockElement === canvas;
@@ -182,28 +171,14 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     const yaw = Math.atan2(-camDir[0], -camDir[2]);
     const pitch = Math.asin(Math.max(-1, Math.min(1, camDir[1])));
     const muzzle = muzzleFrom(head, yaw, pitch);
-    spawnTracer(muzzle, end);
+    tracers.spawn(muzzle, end);
     flashLeft.current = FLASH_S;
     if (flashMesh.current) flashMesh.current.position.set(...muzzle);
     if (flashLight.current) flashLight.current.position.set(...muzzle);
     if (hit.kind !== "miss") {
       showMarker(hit.kind);
-      puffLeft.current = PUFF_S;
-      if (puffMesh.current) puffMesh.current.position.set(...end);
+      puffs.spawn(end);
     }
-  }
-
-  function spawnTracer(from: V3, to: V3) {
-    const v: V3 = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
-    const total = Math.hypot(...v);
-    if (total < 1e-3) return;
-    const t = tracers.current[nextTracer.current];
-    nextTracer.current = (nextTracer.current + 1) % TRACERS;
-    t.active = true;
-    t.from = from;
-    t.dir = [v[0] / total, v[1] / total, v[2] / total];
-    t.total = total;
-    t.travelled = 0;
   }
 
   useFrame((state, dt) => {
@@ -237,66 +212,23 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     }
 
     // Tracers: a short streak flying from the muzzle to the hit point.
-    tracers.current.forEach((t, i) => {
-      const mesh = tracerMeshes.current[i];
-      if (!mesh) return;
-      if (!t.active) {
-        mesh.visible = false;
-        return;
-      }
-      t.travelled += BLASTER.tracerSpeed * step;
-      const head = Math.min(t.travelled, t.total);
-      const tail = Math.max(0, t.travelled - STREAK_M);
-      if (tail >= t.total) {
-        t.active = false;
-        mesh.visible = false;
-        return;
-      }
-      const segLen = Math.max(0.01, head - tail);
-      const mid = pointAt(t.from, t.dir, (head + tail) / 2);
-      mesh.visible = true;
-      mesh.position.set(...mid);
-      tmpDir.current.set(...t.dir);
-      mesh.quaternion.copy(tmpQuat.current.setFromUnitVectors(UP, tmpDir.current));
-      mesh.scale.set(1, segLen, 1);
-    });
+    tracers.step(step);
+    puffs.step(step);
 
     flashLeft.current = Math.max(0, flashLeft.current - step);
     if (flashMesh.current) flashMesh.current.visible = flashLeft.current > 0;
     if (flashLight.current) flashLight.current.intensity = flashLeft.current > 0 ? 3 : 0;
-
-    puffLeft.current = Math.max(0, puffLeft.current - step);
-    if (puffMesh.current) {
-      const k = puffLeft.current / PUFF_S;
-      puffMesh.current.visible = k > 0;
-      puffMesh.current.scale.setScalar(0.05 + (1 - k) * 0.12);
-    }
   }, SHOT_PRIORITY);
 
   return (
     <>
-      {Array.from({ length: TRACERS }, (_, i) => (
-        <mesh
-          key={i}
-          visible={false}
-          ref={(m) => {
-            tracerMeshes.current[i] = m;
-          }}
-        >
-          {/* Unit-length along +Y; scaled to the streak length each frame. */}
-          <cylinderGeometry args={[0.012, 0.012, 1, 6]} />
-          <meshBasicMaterial color={FOAM} toneMapped={false} />
-        </mesh>
-      ))}
+      {tracers.elements}
       <mesh ref={flashMesh} visible={false}>
         <sphereGeometry args={[0.06, 10, 8]} />
         <meshBasicMaterial color="#ffe0a0" toneMapped={false} />
       </mesh>
       <pointLight ref={flashLight} color="#ffb347" intensity={0} distance={3} />
-      <mesh ref={puffMesh} visible={false}>
-        <sphereGeometry args={[1, 10, 8]} />
-        <meshBasicMaterial color={FOAM} transparent opacity={0.7} toneMapped={false} />
-      </mesh>
+      {puffs.elements}
     </>
   );
 }

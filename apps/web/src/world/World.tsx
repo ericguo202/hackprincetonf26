@@ -40,6 +40,7 @@ import { DevModeToggle } from "./DevModeToggle";
 import { DevRemotes } from "./DevRemotes";
 import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
 import { RemotePlayers } from "./RemotePlayers";
+import { RemoteShots } from "./RemoteShots";
 import { RespawnWatcher } from "./RespawnWatcher";
 import { type FocusState, focusArrival, stepFocus } from "./focusTeleport";
 import { sendFire } from "../net/game";
@@ -189,6 +190,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       {import.meta.env.DEV ? <DevProbe /> : null}
       {DEV_MODE_TOGGLE_ON ? <DevModeToggle /> : null}
       <RemotePlayers zone={zone} />
+      <RemoteShots />
       <RespawnWatcher zone={zone} blockSpawn={blockSpawn} />
       {DEV_REMOTES_ON ? <DevRemotes pack={pack} zone={zone} /> : null}
       {/* getHitboxes: remote players as drawn this frame. onFire: Lane D sends `fire`; in dev-remotes mode, the stand-in. */}

@@ -27,7 +27,7 @@ import {
   sampleDelayed,
   type Snapshot,
 } from "./remoteInterp";
-import { setRemoteHitboxes } from "./remoteTargets";
+import { setRemoteBodies, setRemoteHitboxes } from "./remoteTargets";
 
 type Buffers = MutableRefObject<Map<string, Snapshot[]>>;
 
@@ -63,18 +63,23 @@ export function RemotePlayers({ zone }: { zone: string }) {
     return () => {
       unsub();
       setRemoteHitboxes([]);
+      setRemoteBodies([]);
     };
   }, []);
 
-  // Hitboxes from the same delayed samples the avatars are drawn at.
+  // Hitboxes (and body centres, for store.fx) from the same delayed samples the avatars are drawn at.
   useFrame(() => {
     const t = nowS();
     const boxes = [];
+    const bodies = [];
     for (const id of ids) {
       const s = sampleDelayed(buffers.current.get(id) ?? [], t);
-      if (s && s.alive && s.zone === zone) boxes.push(hitboxFromBody(id, s.pos, s.anim));
+      if (!s || s.zone !== zone) continue;
+      bodies.push(s.pos);
+      if (s.alive) boxes.push(hitboxFromBody(id, s.pos, s.anim));
     }
     setRemoteHitboxes(boxes);
+    setRemoteBodies(bodies);
   }, REMOTE_PRIORITY);
 
   return (
