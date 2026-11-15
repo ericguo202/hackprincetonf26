@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 221 tests in 14 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 236 tests in 16 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -362,3 +362,26 @@ Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, 
 - **One-shot replay restored:** `if (prev === next && !plan.once) return`, now in `characterRig.crossfadeTo` and tested on the real rig. A repeated one-shot (hit, jump, death, Duck) restarts from frame 0. A repeated loop carries on.
   - **Shoot is a loop:** `Idle_Shoot` (or `Run_Shoot`) loops, so rapid blaster fire is one continuous clip, and this line never governed it.
   - **The crossfade effect only re-runs when its inputs change:** `animState`, `moving` or the rig. So a state that repeats without changing (`hit` → `hit`) doesn't re-trigger at all. A per-event replay would need a counter prop.
+
+## 18. Furniture keyed on content, not array identity
+
+(Numbered 18 because the unmerged branch `lane-c/visual-fixes` adds a section 17.)
+
+**The bug:** `net/game.ts` (Lane D) writes `houses: j.houses` from Colyseus `toJSON()` on every state patch. So `store.houses[zone].objects` is a new array about 20 times a second per connected player, even when the furniture hasn't changed (Lane B's 18:12 HANDOFF line to Lane D). FurnitureLayer memoized `objects` and `rects` on array identity, and its layout effect ran on `[planId, zone, rects]`. So footprints, `houseSpawns` + `setSpawns`, and the local player's push-out/teleport all re-ran on every patch. In multiplayer that would teleport a player standing next to furniture in small jumps, and churn indoor spawns.
+
+**Fixed on the Lane C side**, so it holds whatever Lane D does:
+- **`world/furnitureKey.ts`:** `furnitureKey(house)` builds a content key from `plan_id` plus each object, sorted by `instance_id`, as `instance_id|asset_id|x|y|z|rot_deg`. Positions are rounded to 1 mm and rotation to 0.1°, so float noise isn't a change.
+- **`world/useFurniturePlan.ts`:**
+  - `useStableFurniture(house)` keeps the objects array from the first render with a given key, and only replaces it when the key changes.
+  - `useFurnitureLayout` is FurnitureLayer's former layout effect (spawns, then push-out moving the real body), now keyed on the content key and zone.
+- **FurnitureLayer:** uses both hooks. It remounts its furniture group on the content key instead of `plan_id`, so any change tears down the old RigidBodies with no ghost colliders, including a re-furnish that reuses a `plan_id`. An identical patch never remounts.
+- **Constraint:** the effect also depends on `rooms` by identity. `HouseScene` memoizes `rooms` per house, so that holds today; passing a fresh array there would bring the per-patch re-runs back.
+
+**Tests:**
+- `furnitureKey.test.ts`: same content in a new array, reordered, or below-noise float changes give the same key. A moved, rotated, swapped, added or removed object, or the same `plan_id` with different objects, gives a different key.
+- `useFurniturePlan.test.tsx`: renders the hooks with react-dom, with a fake local player inside the fixture sofa.
+  - **50 identical-content new arrays:** push-out and `setSpawns` run once, the player is pushed out once, and the objects array keeps one identity.
+  - **A real change (the sofa moved, same `plan_id`):** they run exactly once more, and the remount key changes.
+- The existing re-furnish and push-out tests still pass.
+
+**Not seen in a browser with two players.** It's verified by unit tests only; the ~20 Hz patch stream from a real game server was simulated, not observed.

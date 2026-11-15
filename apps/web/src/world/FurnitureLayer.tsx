@@ -17,23 +17,23 @@
 // local player is pushed out of anything that landed on them (the physics
 // body itself, via playerControl), and indoor spawns are recomputed.
 
-import { Suspense, useLayoutEffect, useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group } from "three";
 
 import { useStore, type PlacedObject } from "../store";
 import type { Asset, Room } from "../contracts.gen";
-import { localPlayer } from "../player/playerControl";
-import { pushOut, rotationY } from "./geometry";
+import { rotationY } from "./geometry";
 import { usePackGLTF } from "./gltf";
 import { FURNITURE_COLLIDER } from "./collisionGroups";
 import { LoadBoundary } from "./Glb";
 import { useMeshState } from "./meshProbe";
 import { WorldLabel } from "./WorldLabel";
-import { footprints, houseSpawns } from "./furniturePlan";
+import { footprints } from "./furniturePlan";
+import { useFurnitureLayout, useStableFurniture } from "./useFurniturePlan";
 import { useIndoorSpawns } from "./indoorSpawns";
-import { roomIdAt, warnOnce } from "./pack";
+import { warnOnce } from "./pack";
 
 type Props = {
   /** asset_id -> Asset, from the pack's furniture catalog. */
@@ -162,53 +162,31 @@ export function FurnitureLayer({ catalog, rooms, packBaseUrl, showLabels = true 
   const house = useStore((s) => (s.me.zone === "block" ? undefined : s.houses[s.me.zone]));
   const setSpawns = useIndoorSpawns((s) => s.set);
 
-  // Memoized so `rects` below only rebuilds when the plan does, not every render.
-  const objects = useMemo(() => house?.objects ?? [], [house?.objects]);
-  const planId = house?.plan_id ?? "none";
+  // Keyed on the furniture's content, not array identity: net/game.ts writes a
+  // new objects array on every state patch (~20 Hz per player), even when
+  // nothing changed (useFurniturePlan.ts, furnitureKey.ts).
+  const { key: contentKey, objects } = useStableFurniture(house);
   const rects = useMemo(() => footprints(objects, catalog), [objects, catalog]);
-
-  // On every plan change, before the next physics step (layout effect, so the
-  // new colliders never get a step to shove the player around):
-  //   1. push the local player out of anything that landed on them, moving
-  //      the physics body, not just the store
-  //   2. recompute indoor spawns from the new free floor
-  // Deterministic, so every client agrees without the server deciding.
-  useLayoutEffect(() => {
-    if (zone === "block") return;
-    setSpawns(zone, houseSpawns(rooms, rects));
-
-    const player = localPlayer();
-    if (!player || rects.length === 0) return;
-    const [x, y, z] = player.getPos();
-    const roomId = roomIdAt([x, y, z], rooms);
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) return;
-
-    const moved = pushOut([x, z], room, rects);
-    if (moved === null) {
-      // Nowhere free in this room: the nearest door is always walkable.
-      const door = room.openings.find((o) => o.type === "door");
-      if (door) player.teleport([(door.a[0] + door.b[0]) / 2, y, (door.a[1] + door.b[1]) / 2]);
-      return;
-    }
-    if (moved[0] !== x || moved[1] !== z) {
-      player.teleport([moved[0], y, moved[1]]);
-      setMe({ roomId: room.id });
-    }
-    // Plan changes only, not every step the player takes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planId, zone, rects]);
+  useFurnitureLayout({
+    zone,
+    rooms,
+    rects,
+    furnitureKey: contentKey,
+    setSpawns,
+    onPushedInto: (roomId) => setMe({ roomId }),
+  });
 
   if (zone === "block" || objects.length === 0) return null;
   if (packBaseUrl === null) {
     warnOnce("furniture-nomesh", "[furniture] no pack base URL: every piece renders as a labelled box");
   }
 
-  // key={planId} tears down every RigidBody on a re-furnish. Mutating
-  // positions in place leaves stale colliders, which shows up as darts
-  // stopping in mid-air where the old couch used to be.
+  // key={contentKey} tears down every RigidBody whenever the furniture changes,
+  // including a re-furnish that reuses a plan_id, and never on an identical
+  // patch. Mutating positions in place leaves stale colliders, which shows up
+  // as darts stopping in mid-air where the old couch used to be.
   return (
-    <group key={planId}>
+    <group key={contentKey}>
       {objects.map((o, i) => {
         const asset = catalog[o.asset_id];
         if (!asset) {
@@ -217,7 +195,7 @@ export function FurnitureLayer({ catalog, rooms, packBaseUrl, showLabels = true 
         }
         return (
           <FurniturePiece
-            key={`${planId}-${o.instance_id}`}
+            key={o.instance_id}
             obj={o}
             asset={asset}
             url={packBaseUrl === null ? null : `${packBaseUrl}/${asset.file}`}
