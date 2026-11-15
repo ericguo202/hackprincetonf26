@@ -852,7 +852,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-exterior", action="store_true", help="interior only (no yard, facades, backdrop)")
     p.add_argument(
         "--backdrop",
-        choices=("far", "panels", "photo"),
+        choices=("far", "panels", "sweeps", "photo"),
         help="with a drone splat: far = geometry behind the fences (default), panels = picture walls just "
         "outside the lot (an experiment), photo = the photo disk and dome alone",
     )

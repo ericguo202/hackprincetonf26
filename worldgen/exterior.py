@@ -1638,7 +1638,8 @@ def add_exterior(
     `backdrop`, with a splat: "far" = geometry behind the fences and the photo disk and dome beyond (3.13);
     "panels" = an experiment, upright walls just outside the lot with a picture of what lies beyond
     (farfield.wall_panels, nodes `backdrop_wall_N`), a dome that is only sky, no far geometry and no far
-    trees; "photo" = the disk and dome alone, as without a splat."""
+    trees; "photo" = the disk and dome alone, as without a splat. "sweeps" (works without a splat) = another
+    experiment, one set of picture walls per scan position (farfield.sweep_walls)."""
     outline = outline if outline is not None else house_footprint(scan, rooms)
     floor_z = min(r.floor_z for r in rooms)
     top = max(rb.room_top(r) for r in rooms)
@@ -1718,7 +1719,8 @@ def add_exterior(
     centre = np.mean(out_panos.positions[:, :2], axis=0)
     centre = np.asarray(filled(g.lot.union(walls)).centroid.coords[0]) * 0.5 + centre * 0.5
     far_field = splat is not None and "backdrop" in bake and backdrop in ("far", "panels")
-    if not far_field:  # with a splat the backdrop is built further down, around the far field
+    by_sweep = backdrop == "sweeps" and "backdrop" in bake
+    if not far_field and not by_sweep:  # else the backdrop is built further down
         patches += backdrop_patches(g, centre, backdrop_radius, walls, floor_z)
     if "facade" not in bake:
         planes, frames = [], []
@@ -1838,6 +1840,57 @@ def add_exterior(
             g, centre, backdrop_radius, walls, floor_z, sky=(heaven, skyline), skip=far.covered
         )
         report["far_field"] = {**far.report, "sky": sky_report}
+    if by_sweep:
+        # The experiment of 3.13 item 10: one set of picture walls per scan position (farfield.sweep_walls,
+        # nodes `backdrop_s<k>_<page>` with the position in the node's extras as "sweep", house-local Y-up),
+        # the photo ground only up to the walls, and a dome that is sky alone.
+        blockers = np.concatenate([scan.tris, *([lid] if roof is not None else [])])
+        skyline = None
+        if splat is not None:
+            roofed = walls if roof is None else filled(walls.union(roof.region))
+            surface = fa.build(
+                splat, unary_union([g.lot, walls]), roofed, tuple(walls.centroid.coords[0]), np.ones(3)
+            )
+            skyline = surface.skyline
+        sight = Raycaster(blockers if skyline is None else np.concatenate([blockers, skyline]))
+        heaven, sky_report = fa.sky(out_panos, sight, _sky)
+        ring, sets = fa.sweep_walls(
+            out_panos,
+            filled(g.lot.union(walls)),
+            g.edge_z,
+            Raycaster(blockers),
+            lambda rgb: _sky(rgb),
+            None if skyline is None else Raycaster(skyline),
+        )
+        megapixels = 0.0
+        for k, (pos, planes_k) in enumerate(sets):
+            where = [round(float(c), 3) for c in (pos[0], pos[2], -pos[1])]
+            for pi, page in enumerate(rb.pack(planes_k)):
+                parts = [m for m in (rb.plane_mesh(p) for p in planes_k if p.page == pi) if m is not None]
+                if not parts:
+                    continue
+                m = trimesh.util.concatenate(parts)
+                used = max(p.rect[1] + p.rect[3] for p in planes_k if p.page == pi)
+                rows = next(r for r in (rb.PAGE // 4, rb.PAGE // 2, 3 * rb.PAGE // 4, rb.PAGE) if used <= r)
+                uv = np.asarray(m.visual.uv, float).copy()
+                uv[:, 1] = 1.0 - (1.0 - uv[:, 1]) * rb.PAGE / rows
+                name = f"backdrop_s{k:02d}_{pi}"
+                m.visual = trimesh.visual.TextureVisuals(uv=uv, material=rb._material(page[:rows], name))
+                m.metadata["sweep"] = where
+                m.apply_transform(hm.Z_UP_TO_Y_UP)
+                scene.add_geometry(m, node_name=name, geom_name=name, metadata={"sweep": where})
+                megapixels += rows * rb.PAGE / 1e6
+        # The photo ground reaches half a metre past the walls: ending on them left a slit at their foot.
+        outside = Point(*centre).buffer(backdrop_radius * 2).difference(ring.buffer(0.5, join_style="mitre"))
+        patches += backdrop_patches(
+            g, centre, backdrop_radius, walls, floor_z, sky=(heaven, None), skip=outside
+        )
+        report["backdrop_sweeps"] = {
+            "sets": len(sets),
+            "megapixels": round(megapixels, 1),
+            "ring_m": [round(float(c), 1) for c in ring.bounds],
+            "sky": sky_report,
+        }
     for p in patches:
         if p.kind != "yard" and not p.meta.get("plain"):
             shade_patch(p)
@@ -2031,7 +2084,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--parts", help=f"comma-separated subset of {sorted(PARTS)} to bake (default: all)")
     ap.add_argument("--no-aerial", action="store_true", help="roof from the scan alone (no Vexcel layers)")
     ap.add_argument("--no-splat", action="store_true", help="do not use the drone splat (out/raw/splat)")
-    ap.add_argument("--backdrop", default="far", choices=("far", "panels", "photo"), help="see add_exterior")
+    ap.add_argument(
+        "--backdrop", default="far", choices=("far", "panels", "sweeps", "photo"), help="see add_exterior"
+    )
     args = ap.parse_args(argv)
     bake = frozenset(args.parts.split(",")) if args.parts else PARTS  # not `parts`: those are the rooms below
     if bake - PARTS:

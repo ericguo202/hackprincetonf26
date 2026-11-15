@@ -65,7 +65,7 @@ walker.onFall = () => spawnAt($("spawn").value);
 
 const state = {
   pack: null, listingId: null, manifest: null, rooms: [], openings: [], doorMeshes: [],
-  interior: null, collision: null, ceilings: [], roofs: [], backdrop: [], collider: null,
+  interior: null, collision: null, ceilings: [], roofs: [], backdrop: [], sweeps: [], sweep: -1, collider: null,
   mode: "orbit", placing: null, drag: null, camDist: 2.5, pitch: -0.25, spawned: false,
 };
 
@@ -161,7 +161,7 @@ function clearHouse() {
     g.clear();
   }
   furniture.clear();
-  Object.assign(state, { rooms: [], openings: [], doorMeshes: [], interior: null, collision: null, ceilings: [], roofs: [], backdrop: [], collider: null, spawned: false });
+  Object.assign(state, { rooms: [], openings: [], doorMeshes: [], interior: null, collision: null, ceilings: [], roofs: [], backdrop: [], sweeps: [], sweep: -1, collider: null, spawned: false });
   walker.collider = null;
 }
 
@@ -194,6 +194,12 @@ async function loadHouse(listingId) {
       // would hide the house from an orbit camera, so they get their own toggles.
       if (/^roof/i.test(o.name)) state.roofs.push(o);
       if (/^backdrop/i.test(o.name)) state.backdrop.push(o);
+      // Experiment (docs/house-pipeline-handoff.md 3.13 item 10): one set of picture walls per Matterport
+      // scan position, nodes backdrop_s<k>_<page> with the position in extras.sweep. Only the set of the
+      // scan position nearest the camera is shown (updateSweeps).
+      const m = /^backdrop_s(\d+)/i.exec(o.name);
+      const at = o.userData?.sweep ?? o.parent?.userData?.sweep;
+      if (m && Array.isArray(at)) state.sweeps.push({ k: +m[1], at: new THREE.Vector3(at[0], at[1], at[2]), node: o });
     });
   }
   if (collision) {
@@ -771,6 +777,20 @@ function showStats(base, entry, ms, catalogCount) {
   ].join("\n");
 }
 
+// The picture walls of the scan position nearest the camera (in walk mode: nearest the walker's eye).
+function updateSweeps() {
+  if (!state.sweeps.length) return;
+  const eye = state.mode === "walk" ? walker.eye : camera.position;
+  let best = -1, bestD = Infinity;
+  for (const s of state.sweeps) {
+    const d = s.at.distanceToSquared(eye);
+    if (d < bestD) { bestD = d; best = s.k; }
+  }
+  state.sweep = best;
+  const on = $("l-backdrop").checked;
+  for (const s of state.sweeps) s.node.visible = on && s.k === best;
+}
+
 let last = performance.now();
 let fpsT = 0, fpsN = 0, fps = 0;
 renderer.setAnimationLoop((now) => {
@@ -782,6 +802,7 @@ renderer.setAnimationLoop((now) => {
   } else {
     orbit.update();
   }
+  updateSweeps();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
   fpsT += dt; fpsN++;
@@ -797,7 +818,8 @@ function updateHud() {
     const room = state.rooms.find((r) => Math.abs((r.floor_y ?? 0) - feet) < 0.6 && pointInPolygon([p.x, p.z], r.polygon));
     where = ` · capsule (${p.x.toFixed(2)}, ${feet.toFixed(2)}, ${p.z.toFixed(2)}) in ${room ? room.label : "no room"}`;
   }
-  $("hud").textContent = `${fps.toFixed(0)} fps · ${info.calls} draws · ${Math.round(info.triangles / 1000)}k tris${where}`;
+  const walls = state.sweeps.length ? ` · walls of scan position ${state.sweep}` : "";
+  $("hud").textContent = `${fps.toFixed(0)} fps · ${info.calls} draws · ${Math.round(info.triangles / 1000)}k tris${where}${walls}`;
 }
 
 $("pack").addEventListener("change", (e) => choosePack(e.target.value).catch((err) => status(err.message, true)));

@@ -7,7 +7,7 @@ from worldgen import exterior as ex
 from worldgen import farfield as fa
 from worldgen.panos import Raycaster
 
-from .test_rebake import pano_set
+from .test_rebake import COLOURS, pano_set
 from .test_splat import disks, join
 
 
@@ -136,3 +136,33 @@ def test_picture_walls_stand_around_the_lot_and_are_cut_out_where_nothing_is_bey
     rows = np.nonzero(solid.any(1))[0]  # row 0 is the wall's top, PANEL_TOP above the ground
     top = fa.PANEL_TOP - rows.min() / fa.PANEL_RES
     assert abs(top - 4.0) < 0.2  # the front keeps its real height on the wall
+
+
+def test_walls_of_a_scan_position_show_its_photo_and_leave_out_the_lot_and_the_sky(tmp_path):
+    # Fake panoramas: looking east (+x, face 1) is green, up is red, the other sides other colours.
+    panos = pano_set(tmp_path, [(0.0, 0.0, 1.5), (2.0, 1.0, 1.5)])
+    fence = np.array(
+        [[[2.9, -1, 0], [2.9, 1, 0], [2.9, 1, 1.8]], [[2.9, -1, 0], [2.9, 1, 1.8], [2.9, -1, 1.8]]]
+    )
+    ring, sets = fa.sweep_walls(
+        panos, box(-3, -3, 3, 3), 0.0, Raycaster(fence), lambda rgb: (rgb[..., 0] > 200) & (rgb[..., 1] < 60)
+    )
+    assert np.allclose(ring.bounds, (-7, -7, 7, 7)) and len(sets) == 2
+    pos, walls = sets[0]
+    assert np.allclose(pos, (0, 0, 1.5)) and len(walls) == 4
+    east = next(p for p in walls if p.n[0] < -0.9)  # the wall east of the lot faces west, into it
+    H, W = east.image.shape[:2]
+    row = lambda z: int((fa.PANEL_TOP - z) * fa.PANEL_RES)  # noqa: E731  image row of a height above the ground
+    mid = W // 2
+    assert tuple(east.image[row(1.5), mid, :3]) == COLOURS[1] and east.image[row(1.5), mid, 3] == 255
+    assert (
+        east.image[row(11.0), mid, 3] == 0
+    )  # steeply up from the scan position: the up face, "sky", cut out
+    # Behind the fence (seen from the scan position) the wall is filled, not left open and not sky.
+    assert east.image[row(0.6), mid, 3] == 255
+    # A wall texel's colour is the photo in its direction from the scan position: exact from there.
+    for s, z in ((1.0, 2.0), (9.0, 4.0)):
+        at = east.origin + s * east.u + (z + fa.PANEL_FOOT) * east.v
+        want, _ = panos.sample(0, at[None])
+        got = east.image[row(z), int(s * fa.PANEL_RES), :3]
+        assert np.abs(got.astype(float) - want[0]).max() < 12

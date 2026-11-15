@@ -84,6 +84,7 @@ PANEL_TOP = 12.0  # ... they reach this high above the ground, m
 PANEL_FOOT = 0.5  # ... and this far under it
 PANEL_DEPTH = 45.0  # ... and show what lies within this beyond them, m
 PANEL_RES = 32.0  # ... at this many texels per metre
+PANEL_SKY_MARGIN = 1.0  # sweep_walls: sky is cut out from this many degrees above the splat's skyline
 SKY_RES = 8.0  # texels per degree of the sky panorama
 SKY_MIN_EL = 8.0  # degrees: lower than this the sky is a smooth continuation (haze), never a photo
 SKY_GAIN = (0.7, 1.4)  # a camera's sky is scaled to the sky already laid down by at most this
@@ -654,13 +655,75 @@ def wall_panels(splat: sp.Splat, bounds: Polygon, base_z: float, gain: np.ndarra
     return out
 
 
-def clear(skyline: Raycaster, eye: np.ndarray, dirs: np.ndarray) -> np.ndarray:
+def sweep_walls(
+    panos: PanoSet,
+    bounds: Polygon,
+    base_z: float,
+    blockers: Raycaster,
+    is_sky: Callable[[np.ndarray], np.ndarray],
+    skyline: Raycaster | None = None,
+) -> tuple[Polygon, list[tuple[np.ndarray, list[rb.Plane]]]]:
+    """An experiment (2026-11-15, the user's idea): picture walls that show, near each scan position, the
+    photo taken from that position, as Matterport's own viewer does. Returns (the walls' ring, one
+    (position, four walls) set per panorama); the client shows the set of the scan position nearest the
+    player (worldgen/viewer does; the game would need the same few lines).
+
+    The walls are the four of `wall_panels` (the smallest rectangle around `bounds`, PANEL_OFFSET out, from
+    PANEL_FOOT under `base_z` to PANEL_TOP above it), at PANEL_RES. Per set, each wall texel takes the
+    panorama's colour in the direction from the scan position to the texel: from that position the walls
+    show exactly the photo, whatever shape they have; away from it the picture is off by the parallax
+    between the wall and the real thing. A texel whose line from the scan position is blocked by the lot
+    itself (`blockers`: the scan and the fitted roof; the yard's fence, trees and the house are real
+    geometry already and must not be painted on the wall as well) is filled smoothly from the texels around
+    it. Sky is cut out (alpha 0) so that the one sky panorama on the dome shows behind every set: a texel
+    with a sky colour (`is_sky`) that is not blocked and, with a `skyline` (the splat's top surface), has
+    nothing of it in the way (`clear`, PANEL_SKY_MARGIN degrees lower: the dome's margin of 3 degrees left
+    a pale band of each photo's own sky around every tree and roof)."""
+    ring = orient(bounds.minimum_rotated_rectangle.buffer(PANEL_OFFSET, join_style="mitre"), 1.0)
+    pts = np.asarray(ring.exterior.coords)
+    h = PANEL_TOP + PANEL_FOOT
+    v = np.array([0.0, 0.0, 1.0])
+    frames = []
+    for a, b in zip(pts[:-1], pts[1:], strict=True):
+        length = float(np.linalg.norm(b - a))
+        along = (b - a) / length
+        u = np.array([*-along, 0.0])  # left to right for someone inside looking out
+        look = np.array([along[1], -along[0], 0.0])
+        origin = np.array([*b, base_z - PANEL_FOOT])
+        W, H = max(2, math.ceil(length * PANEL_RES)), max(2, math.ceil(h * PANEL_RES))
+        S, T = np.meshgrid((np.arange(W) + 0.5) / PANEL_RES, h - (np.arange(H) + 0.5) / PANEL_RES)
+        at = origin + S.ravel()[:, None] * u + T.ravel()[:, None] * v
+        frames.append((origin, u, look, length, W, H, at))
+    out = []
+    for i in range(len(panos)):
+        pos = panos.positions[i]
+        planes = []
+        for origin, u, look, length, W, H, at in frames:
+            d = at - pos
+            dist = np.linalg.norm(d, axis=1)
+            d = d / dist[:, None]
+            col, _ = panos.sample(i, at)
+            t, _ = blockers.cast(np.tile(pos, (len(at), 1)), d)
+            free = (t >= dist - 0.3).reshape(H, W)
+            sky = is_sky(np.clip(col, 0, 255).astype(np.uint8)[None])[0]
+            if skyline is not None:
+                sky &= clear(skyline, pos, d, PANEL_SKY_MARGIN)
+            sky = ndimage.binary_opening(sky.reshape(H, W) & free, iterations=2)  # no pinholes in a wall
+            img = rb._fill(np.clip(col, 0, 255).astype(np.uint8).reshape(H, W, 3), free, detail=False)
+            p = rb.Plane("wall", origin, u, v, -look, length, h, box(0, 0, length, h))
+            p.image = np.dstack([img, np.where(sky, 0, 255).astype(np.uint8)])
+            planes.append(p)
+        out.append((pos, planes))
+    return Polygon(ring.exterior), out
+
+
+def clear(skyline: Raycaster, eye: np.ndarray, dirs: np.ndarray, margin: float | None = None) -> np.ndarray:
     """Which directions (n, 3, unit) from `eye` are open sky: SKY_MARGIN degrees lower nothing of `skyline`
     is in the way. The caller passes `FarField.horizon`, what stands past the far field: everything nearer
     is geometry or a tree model in the scene and must not be on the dome as well. The dome there shows the
     sky panorama and never a photo (no leaves of a tree that became a model, no slab of another camera's
     exposure)."""
-    el = np.arcsin(np.clip(dirs[:, 2], -1, 1)) - math.radians(SKY_MARGIN)
+    el = np.arcsin(np.clip(dirs[:, 2], -1, 1)) - math.radians(SKY_MARGIN if margin is None else margin)
     flat = dirs[:, :2] / np.maximum(np.linalg.norm(dirs[:, :2], axis=1), 1e-9)[:, None]
     lower = np.c_[flat * np.cos(el)[:, None], np.sin(el)]
     _, prim = skyline.cast(np.tile(eye, (len(dirs), 1)), lower)
