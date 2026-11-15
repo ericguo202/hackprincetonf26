@@ -32,7 +32,11 @@ export function useStableFurniture<T extends FurnitureLike>(
 type LayoutArgs = {
   zone: string;
   rooms: Room[];
-  /** Footprints of the current objects (derived from the same content key). */
+  /**
+   * Footprints of the current objects. Must be stable: memoize it on the
+   * stable objects (useStableFurniture) and the catalog, so it changes only
+   * when the furniture's content or the catalog does.
+   */
   rects: Rect[];
   /** furnitureKey of the current objects. */
   furnitureKey: string;
@@ -47,7 +51,9 @@ type LayoutArgs = {
  *   1. recompute indoor spawns from the new free floor
  *   2. push the local player out of anything that landed on them, moving the
  *      physics body itself (playerControl), not just the store
- * Runs when the content key or zone changes, never on an identical patch.
+ * Runs when the content key, zone, rooms or footprints change (footprints
+ * also change when the catalog does, e.g. a missing asset arrives), never on
+ * an identical patch.
  * Deterministic, so every client agrees without the server deciding.
  */
 export function useFurnitureLayout({ zone, rooms, rects, furnitureKey: key, setSpawns, onPushedInto }: LayoutArgs): void {
@@ -73,8 +79,8 @@ export function useFurnitureLayout({ zone, rooms, rects, furnitureKey: key, setS
       player.teleport([moved[0], y, moved[1]]);
       onPushedInto?.(room.id);
     }
-    // Content changes only: rects is derived from the same key, and the
-    // callbacks may be new functions on every render.
+    // The callbacks (setSpawns, onPushedInto) are left out on purpose: they
+    // may be new functions on every render. rects is stable (see LayoutArgs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, zone, rooms]);
+  }, [key, zone, rooms, rects]);
 }

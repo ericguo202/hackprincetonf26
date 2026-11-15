@@ -34,9 +34,18 @@ const patch = (h: House): House => JSON.parse(JSON.stringify(h));
 let seenObjects: FurnitureLike[][] = [];
 let seenKeys: string[] = [];
 
-function Probe({ house, setSpawns }: { house: House | undefined; setSpawns: (id: string, s: unknown[]) => void }) {
+function Probe({
+  house,
+  setSpawns,
+  assets = catalog,
+}: {
+  house: House | undefined;
+  setSpawns: (id: string, s: unknown[]) => void;
+  assets?: Record<string, Asset>;
+}) {
   const { key, objects } = useStableFurniture(house);
-  const rects = useMemo(() => footprints(objects, catalog), [objects]);
+  // As FurnitureLayer does it: footprints memoized on the stable objects and the catalog.
+  const rects = useMemo(() => footprints(objects, assets), [objects, assets]);
   useFurnitureLayout({ zone: ZONE, rooms: ROOMS, rects, furnitureKey: key, setSpawns });
   seenObjects.push(objects);
   seenKeys.push(key);
@@ -70,8 +79,11 @@ describe("FurnitureLayer plan handling under ~20 Hz identical patches", () => {
     unregister();
   });
 
-  const render = (house: House | undefined, setSpawns: (id: string, s: unknown[]) => void) =>
-    act(() => root.render(<Probe house={house} setSpawns={setSpawns} />));
+  const render = (
+    house: House | undefined,
+    setSpawns: (id: string, s: unknown[]) => void,
+    assets: Record<string, Asset> = catalog,
+  ) => act(() => root.render(<Probe house={house} setSpawns={setSpawns} assets={assets} />));
 
   it("50 identical-content new arrays run push-out and setSpawns once", () => {
     const setSpawns = vi.fn();
@@ -110,6 +122,25 @@ describe("FurnitureLayer plan handling under ~20 Hz identical patches", () => {
     expect(new Set(seenObjects).size).toBe(2);
     // The remount key changed with the content even though plan_id did not.
     expect(new Set(seenKeys)).toEqual(new Set([furnitureKey(first), furnitureKey(moved)]));
+  });
+
+  it("same content key, but a catalog that adds a missing asset: footprints change, so it runs once more", () => {
+    const setSpawns = vi.fn();
+    const first: House = { plan_id: plan.plan_id, objects: plan.objects };
+    // The catalog is missing the TV stand at first (o2 is skipped by footprints).
+    const tvId = plan.objects[1].asset_id;
+    const partial = Object.fromEntries(Object.entries(catalog).filter(([id]) => id !== tvId));
+    render(first, setSpawns, partial);
+    for (let i = 0; i < 10; i++) render(patch(first), setSpawns, partial);
+    expect(setSpawns).toHaveBeenCalledTimes(1);
+    expect(footprints(plan.objects, partial)).toHaveLength(1);
+
+    // The real catalog arrives with the TV stand: same furniture content, new footprints.
+    render(patch(first), setSpawns, catalog);
+    for (let i = 0; i < 10; i++) render(patch(first), setSpawns, catalog);
+    expect(footprints(plan.objects, catalog)).toHaveLength(2);
+    expect(setSpawns).toHaveBeenCalledTimes(2);
+    expect(new Set(seenKeys).size).toBe(1); // the content key never changed
   });
 
   it("a zone with no furniture still computes spawns once, and leaving furniture empty does not re-run", () => {
