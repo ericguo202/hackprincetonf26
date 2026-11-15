@@ -607,3 +607,28 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
    - Re-run `scripts/door-check.ts`, the `doorSplit` tests and the `frontDoor` tests on it.
    - Re-check the 4.2 m block door marker (`DOOR_MARKER_M`) and the 7.0 m fallback landing (`DOOR_EXIT_M`) against the new `block/collision.glb`. The `frontDoor.test.ts` clearance test does this once pointed at the new pack.
    - Only then switch `VITE_PACK_BASE_URL`.
+
+## 29. First-person weapon view model
+
+**Not seen in a browser.** Checked by unit tests (each character look's view model built in Node) and the production-build grep. This closes item 3 of the open items in section 28.
+
+- **Problem:** in first person the camera arm hides the whole body (`ARM.hideBodyBelow`), so the held blaster or noodle disappeared too.
+- **`player/FirstPersonWeapon.tsx`:** mounted in `Player.tsx` with the camera, inside Suspense. It's drawn only when the body is hidden, a weapon is held (foam mode) and I'm alive (`fpVisible`). In third person the real hand prop shows as before.
+  - **Following the camera:** a group copies the camera's position and rotation each frame at `FP_WEAPON_PRIORITY` (0, after `CAMERA_PRIORITY`).
+  - **Placement:** 0.25 m right, 0.22 m down, 0.45 m forward.
+  - **Never clipped:** the props have depth test and depth writes off and `renderOrder` 999, so they never clip into walls. They cast no shadows.
+- **`player/fpViewModel.ts`:** a dedicated `buildRig` of the player's own look (the same cached glTF) is posed from `Idle_Shoot`.
+  - The foam-tinted RocketLauncher and the noodle holder are taken off the hand bone. Their world scale and rotation are kept, then turned about Y so the barrel points along the camera's -Z. Tests check it's level for all three looks.
+  - The noodle keeps its geometry, material and `updateNoodleJiggle`, so it still flops when the camera moves.
+- **Motion (`fpWeaponMath.ts`, pure):** driven by `attackClock`. Allocation-free per frame.
+
+  | Motion | What it does |
+  | --- | --- |
+  | Idle sway | ±4 mm side to side, ±3 mm up and down |
+  | Blaster kick | 6 cm back and 0.12 rad nose up, easing out over 0.12 s |
+  | Noodle swing | a 0.22 m, 0.6 rad sweep to the left and back over 0.28 s |
+- **Known:** dart tracers still start from the third-person muzzle point (`muzzleFrom`), which is near the head, not from the view model's barrel.
+- **Tests (`fpWeaponMath.test.ts`, 8):**
+  - Visibility: first person vs third person, explore mode, eliminated.
+  - The kick and sweep curves, and `fpPose` (kick only for the blaster, sweep only for the noodle, no allocation).
+  - For each look: the barrel aims down -Z, the noodle is still 1.2 m long, and depth test is off.

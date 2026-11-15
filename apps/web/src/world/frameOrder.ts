@@ -24,3 +24,6 @@ export const SHOT_PRIORITY = 0;
 
 /** Other players' shots (store.fx): after REMOTE_PRIORITY has published the drawn bodies they are matched to. */
 export const REMOTE_FX_PRIORITY = 0;
+
+/** First-person view model: follows the camera the arm placed this frame (FirstPersonWeapon.tsx). */
+export const FP_WEAPON_PRIORITY = 0;

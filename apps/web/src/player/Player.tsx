@@ -18,7 +18,7 @@
 // capsule renders instead (same HEAD probe as every other mesh). First
 // person hides bodyMesh, which holds the model and the capsule alike.
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Ecctrl, EcctrlAnimationStateController, type EcctrlHandle } from "ecctrl";
 import { Euler, type Group, Quaternion, Vector3 } from "three";
@@ -38,6 +38,7 @@ import { FOOT_BELOW_CENTRE_M, variantFor } from "./characterAsset";
 import { useMeshState } from "../world/meshProbe";
 import { registerPlayer } from "./playerControl";
 import { useWeaponState } from "./weaponState";
+import { FirstPersonWeapon } from "./FirstPersonWeapon";
 import { heldWeaponProp, useFoamMode } from "./foamMode";
 
 /** Lane D sends `move` at 20 Hz, so there is no point writing faster. */
@@ -120,6 +121,8 @@ export function Player({
   // Explore mode: the model holds nothing (foamMode.ts); foam: the selected weapon.
   const weapon = heldWeaponProp(useFoamMode(), useWeaponState((s) => s.weapon));
   const crouchedRef = useRef(false);
+  /** CameraArm hid the body (first person): FirstPersonWeapon draws the held weapon instead. */
+  const bodyHidden = useRef(false);
   useEffect(() => {
     crouchedRef.current = crouched;
   }, [crouched]);
@@ -278,6 +281,7 @@ export function Player({
           initialYaw={spawnYaw}
           crouchedRef={crouchedRef}
           onBodyHidden={(hidden) => {
+            bodyHidden.current = hidden;
             if (bodyMesh.current) bodyMesh.current.visible = !hidden;
           }}
         />
@@ -297,6 +301,12 @@ export function Player({
             actionUntil.current = now + ACTION_HOLD_S.shoot;
           }}
         />
+      ) : null}
+      {/* First person: the held weapon on the camera (the body, and its hand prop, are hidden). */}
+      {followCamera && !children && model === "ok" ? (
+        <Suspense fallback={null}>
+          <FirstPersonWeapon url={lookUrl} weapon={weapon} bodyHidden={bodyHidden} />
+        </Suspense>
       ) : null}
       <Ecctrl
         ref={ecctrl}
