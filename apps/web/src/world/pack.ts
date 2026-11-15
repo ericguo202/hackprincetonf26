@@ -17,6 +17,7 @@
 
 import type { Asset, Listing, PackManifest, Point2, Room } from "../contracts.gen";
 import { pointInPolygon, roomAt, rotationY, spawnPoints } from "./geometry.ts";
+import { focusArrival, yawToward } from "./focusTeleport.ts";
 
 export type Vec3 = [number, number, number];
 type ListingWorld = NonNullable<Listing["world"]>;
@@ -285,9 +286,16 @@ export const FRONT_DOOR_KEY_M = 2.0;
  * (hero_hou_<id> in block/render.glb) have their facade further out than
  * listing.world.door, so a marker at the door point was hidden inside the house.
  */
-export const DOOR_MARKER_M = 2.5;
-/** Leaving a house, you land at least this far out from the door point, clear of the house mesh. */
-export const DOOR_EXIT_M = 3.0;
+export const DOOR_MARKER_M = 4.2;
+/**
+ * exitTo: this far out from the door point, clear of the block collision of the
+ * real house (v3: 7014's starts about 3.66 m out, 6915's about 2.0 m). It is
+ * the leave landing when no sidewalk spawn is in range (focusArrival fallback).
+ * 7.0, not 5.2: on 6915 a wall runs beside the walk-out line 0.10 m away from
+ * 4.2 to 6 m out (block collision.glb, frontDoor.test.ts); at 7 m the nearest
+ * triangle is the ground.
+ */
+export const DOOR_EXIT_M = 7.0;
 
 export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 
@@ -349,8 +357,16 @@ export type Door = {
   local: Vec3;
   /** Block-side marker and trigger point: DOOR_MARKER_M out from the door (block frame). */
   marker: Vec3;
-  /** Where you land in the block when leaving (block frame, floor height). */
+  /** DOOR_EXIT_M out from the door (block frame, floor height): focusArrival's fallback. */
   exitTo: Vec3;
+  /**
+   * Where you land on the block when leaving (crossDoor; block frame, floor
+   * height): focusArrival(door, 0, manifest.spawns), the nearest street-side
+   * sidewalk spawn within 30 m, else exitTo. Set by blockDoors.
+   */
+  leaveTo: Vec3;
+  /** Camera yaw on that landing, facing the house. */
+  leaveYaw: number;
   /** Where you land in the house when entering (house-local, floor height). */
   enterTo: Vec3;
 };
@@ -375,13 +391,17 @@ export function makeDoor(listing: Listing, rooms: Room[]): Door | null {
   const floorY = insideRoom ? insideRoom.floor_y : local[1];
 
   const out = (m: number): Vec3 => [local[0] + ox * m, local[1], local[2] + oz * m];
+  const block = houseToBlock(world, local);
+  const exitTo = houseToBlock(world, out(Math.max(DOOR_STEP_M, DOOR_EXIT_M)));
   return {
     listing_id: listing.id,
     world,
-    block: houseToBlock(world, local),
+    block,
     local,
     marker: houseToBlock(world, out(DOOR_MARKER_M)),
-    exitTo: houseToBlock(world, out(Math.max(DOOR_STEP_M, DOOR_EXIT_M))),
+    exitTo,
+    leaveTo: exitTo,
+    leaveYaw: yawToward(block[0] - exitTo[0], block[2] - exitTo[2]),
     enterTo: [inside[0], floorY, inside[1]],
   };
 }
@@ -406,7 +426,11 @@ export function blockDoors(
     }
     if (l.block_id && l.block_id !== manifest.block_id) continue;
     const d = makeDoor(l, roomsByHouse[h.listing_id] ?? []);
-    if (d) doors.push(d);
+    if (d) {
+      // Leave onto the sidewalk in front of the house, not into its collision (lift 0: a floor point).
+      const a = focusArrival(d, 0, manifest.spawns as Vec3[]);
+      doors.push({ ...d, leaveTo: a.pos, leaveYaw: a.yaw });
+    }
     else warnOnce(`noworld:${h.listing_id}`, `[pack] listing ${h.listing_id} has no world placement; it has no door`);
   }
   return doors;
@@ -423,7 +447,8 @@ export type ZoneState = {
   armed: boolean;
 };
 
-export type ZoneChange = { zone: string; spawn: Vec3 };
+/** yaw: camera yaw on landing, if the switch sets one (leaving a house faces it). */
+export type ZoneChange = { zone: string; spawn: Vec3; yaw?: number };
 
 function distXZ(a: Vec3, b: Vec3): number {
   return Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -465,7 +490,7 @@ export function stepZone(
 
 /**
  * Go through `door` from the zone in `state`: from the block into its house at
- * enterTo, from the house out to the block at exitTo. The trigger is disarmed,
+ * enterTo, from the house out to the block at leaveTo (facing the house). The trigger is disarmed,
  * so it re-arms only once you walk DOOR_REARM_M clear of the door you came
  * through. The one zone switch shared by the walk-in trigger and the E key.
  */
@@ -478,7 +503,7 @@ export function crossDoor(state: ZoneState, door: Door): { state: ZoneState; cha
   }
   return {
     state: { zone: "block", armed: false },
-    change: { zone: "block", spawn: door.exitTo },
+    change: { zone: "block", spawn: door.leaveTo, yaw: door.leaveYaw },
   };
 }
 

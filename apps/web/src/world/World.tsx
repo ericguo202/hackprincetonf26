@@ -151,7 +151,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       const { state, change } = pressFrontDoor(zoneState.current, useStore.getState().me.pos, pack.doors);
       if (!change) return false;
       zoneState.current = state;
-      goTo(change.zone, change.spawn);
+      goTo(change.zone, change.spawn, change.yaw);
       return true;
     };
     useFrontDoors.getState().set(pack.doors, addresses, press);
@@ -166,7 +166,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
         const { state, change } = stepZone(zoneState.current, s.me.pos, pack.doors);
         zoneState.current = state;
         if (change) {
-          goTo(change.zone, change.spawn);
+          goTo(change.zone, change.spawn, change.yaw);
           return;
         }
         if (s.me.zone !== "block") {

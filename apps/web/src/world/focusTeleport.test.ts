@@ -11,6 +11,8 @@ const door = (block: [number, number, number], exitTo: [number, number, number])
   local: [0, 0, 0],
   marker: block,
   exitTo,
+  leaveTo: exitTo,
+  leaveYaw: 0,
   enterTo: [0, 0, 0],
 });
 

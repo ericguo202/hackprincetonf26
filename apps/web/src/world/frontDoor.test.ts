@@ -7,13 +7,15 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import type { Listing, Room } from "../contracts.gen";
+import type { Listing, PackManifest, Room } from "../contracts.gen";
+import { type Mesh, Triangle, Vector3 } from "three";
 import { doorTargetAt, frontDoorPromptText, pickDoorAction, DOOR_INTERACT_RADIUS_M } from "./doorInteract";
 import { extractWallBoxes, splitClosedDoors, type OpenedDoor } from "./doorSplit";
 import {
+  blockDoors,
+  DOOR_EXIT_M,
   DOOR_RADIUS_M,
   FRONT_DOOR_KEY_M,
-  makeDoor,
   parseListings,
   pressFrontDoor,
   roomIdAt,
@@ -37,8 +39,11 @@ const H7014 = "hou_236595179";
 const H6915 = "hou_237901269";
 const listing7014 = listings.find((l) => l.id === H7014)!;
 const rooms7014 = rooms(H7014);
-const door7014 = makeDoor(listing7014, rooms7014)!;
-const door6915 = makeDoor(listings.find((l) => l.id === H6915)!, rooms(H6915))!;
+const manifest = json(join(V3, "manifest.json")) as PackManifest;
+// Through blockDoors, as the game builds them: leaveTo comes from manifest.spawns.
+const blockDoorList = blockDoors(manifest, listings, { [H7014]: rooms7014, [H6915]: rooms(H6915) });
+const door7014 = blockDoorList.find((d) => d.listing_id === H7014)!;
+const door6915 = blockDoorList.find((d) => d.listing_id === H6915)!;
 const doors: Door[] = [door7014, door6915];
 
 /** A body centre `d` m from `p` along +X (XZ distance d), 1 m up. */
@@ -64,10 +69,10 @@ describe("E at 7014's front door (real v3 data)", () => {
     expect(keyOut).toEqual(walkOut);
   });
 
-  it("inside, E near the door goes back out to exitTo", () => {
+  it("inside, E near the door goes back out to leaveTo", () => {
     const pos = off(door7014.local, 1.9, [0, 1]);
     const { state, change } = pressFrontDoor({ zone: H7014, armed: true }, pos, doors);
-    expect(change).toEqual({ zone: "block", spawn: door7014.exitTo });
+    expect(change).toEqual({ zone: "block", spawn: door7014.leaveTo, yaw: door7014.leaveYaw });
     expect(state).toEqual({ zone: "block", armed: false });
   });
 
@@ -179,24 +184,78 @@ describe("interior door vs front door precedence", () => {
   });
 });
 
-describe("block door marker in front of the real facade (pack v3)", () => {
+describe("block door marker and leave landing clear of the real house (pack v3)", () => {
   const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
+  let tris: Triangle[] = [];
+  beforeAll(async () => {
+    const buf = readFileSync(join(V3, "block/collision.glb"));
+    const ab = new ArrayBuffer(buf.length);
+    new Uint8Array(ab).set(buf);
+    const gltf = await new Promise<GLTF>((res, rej) => new GLTFLoader().parse(ab, "", res, rej));
+    gltf.scene.updateMatrixWorld(true);
+    const out: Triangle[] = [];
+    gltf.scene.traverse((o) => {
+      const m = o as Mesh;
+      if (!m.isMesh) return;
+      const g = m.geometry;
+      const pos = g.getAttribute("position");
+      const idx = g.getIndex();
+      const n = idx ? idx.count : pos.count;
+      const v = (k: number) => new Vector3().fromBufferAttribute(pos, idx ? idx.getX(k) : k).applyMatrix4(m.matrixWorld);
+      for (let k = 0; k < n; k += 3) out.push(new Triangle(v(k), v(k + 1), v(k + 2)));
+    });
+    tris = out;
+  });
+  /** Nearest block collision triangle to a point at body height (0.5 to 1.5 m above the landing floor point). */
+  const clearance = (p: Vec3) => {
+    let best = Infinity;
+    const q = new Vector3();
+    for (const h of [0.5, 1.0, 1.5]) {
+      const at = new Vector3(p[0], p[1] + h, p[2]);
+      for (const t of tris) best = Math.min(best, t.closestPointToPoint(at, q).distanceTo(at));
+    }
+    return best;
+  };
+  const leave = (d: Door) => pressFrontDoor({ zone: d.listing_id, armed: true }, d.local, doors);
+
+  it("loaded the block collision", () => expect(tris.length).toBeGreaterThan(0));
+
+  it("leaving 7014 (walk-in and E) lands on a manifest spawn, facing the house", () => {
+    const out = leave(door7014);
+    expect(stepZone({ zone: H7014, armed: true }, door7014.local, doors)).toEqual(out);
+    expect(manifest.spawns.some((s) => dist(s as Vec3, out.change!.spawn) < 1e-9)).toBe(true);
+    expect(out.change!.yaw).toBeCloseTo(door7014.leaveYaw, 9);
+  });
+
+  it("leaving 6915 lands DOOR_EXIT_M (7.0 m) out from its door point (no spawn in range)", () => {
+    const out = leave(door6915);
+    expect(dist(out.change!.spawn, door6915.block)).toBeCloseTo(DOOR_EXIT_M, 6);
+  });
+
   it.each([
     ["7014", door7014],
     ["6915", door6915],
-  ])("%s: marker 2.5 m out, exitTo >= 3.0 m out, trigger and E measured from the marker", (_, d) => {
-    expect(dist(d.marker, d.block)).toBeCloseTo(2.5, 6);
-    expect(dist(d.exitTo, d.block)).toBeGreaterThanOrEqual(3.0 - 1e-9);
-    // The old door point is now out of walk-in range, the marker is in it.
+  ])("%s: landing is 0.3 m clear of block collision and does not re-trigger the door", (_, d) => {
+    const out = leave(d);
+    expect(clearance(out.change!.spawn)).toBeGreaterThan(0.3);
+    let s = out.state;
+    for (let i = 0; i < 20; i++) {
+      const step = stepZone(s, out.change!.spawn, doors);
+      expect(step.change).toBeNull();
+      s = step.state;
+    }
+  });
+
+  it.each([
+    ["7014", door7014],
+    ["6915", door6915],
+  ])("%s: marker 4.2 m out; walk-in and E measured from it", (_, d) => {
+    expect(dist(d.marker, d.block)).toBeCloseTo(4.2, 6);
     expect(stepZone({ zone: "block", armed: true }, d.block, doors).change).toBeNull();
     expect(stepZone({ zone: "block", armed: true }, off(d.marker, DOOR_RADIUS_M - 0.05), doors).change).toEqual({
       zone: d.listing_id,
       spawn: d.enterTo,
     });
     expect(pressFrontDoor({ zone: "block", armed: true }, off(d.marker, FRONT_DOOR_KEY_M - 0.05), doors).change?.zone).toBe(d.listing_id);
-    // Leaving lands disarmed; you re-arm once DOOR_REARM_M clear of the marker.
-    const out = pressFrontDoor({ zone: d.listing_id, armed: true }, d.local, doors);
-    expect(out.change?.spawn).toEqual(d.exitTo);
-    expect(stepZone(out.state, out.change!.spawn, doors).state.armed).toBe(false);
   });
 });
