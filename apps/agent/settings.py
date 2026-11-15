@@ -20,6 +20,11 @@ MOCK_AGENT = flag("MOCK_AGENT")
 FAKE_PLACEMENT = flag("FAKE_PLACEMENT")
 HITL = flag("HITL")
 MODEL = os.getenv("MODEL", "")
+# Latency knobs (empty = provider default). MODEL_REASONING_EFFORT: none | minimal | low | medium | high,
+# sent as reasoning.effort (OpenRouter) or reasoning_effort (OpenAI). MODEL_PROVIDER_SORT (OpenRouter only):
+# latency | throughput | price, to route each call to the fastest upstream provider.
+MODEL_REASONING_EFFORT = os.getenv("MODEL_REASONING_EFFORT", "").strip().lower()
+MODEL_PROVIDER_SORT = os.getenv("MODEL_PROVIDER_SORT", "").strip().lower()
 
 # LangSmith tracing is automatic for LangChain/Deep Agents once these env vars are set (load_dotenv
 # above runs before any langchain import). Traces go to the agent + environment (agent-based workspace).

@@ -11,6 +11,7 @@ from __future__ import annotations
 from deepagents import FilesystemPermission, create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 from langchain.agents.middleware import TodoListMiddleware
+from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -72,10 +73,26 @@ SUBAGENTS = [
 ]
 
 
+def chat_model(spec: str) -> BaseChatModel:
+    """The model from MODEL ("provider:model") with the latency knobs from settings applied."""
+    provider = spec.split(":", 1)[0]
+    kwargs: dict = {}
+    effort = settings.MODEL_REASONING_EFFORT
+    if effort and provider == "openrouter":
+        kwargs["reasoning"] = {"effort": effort}
+    elif effort and provider == "openai":
+        kwargs["reasoning_effort"] = effort
+    if settings.MODEL_PROVIDER_SORT and provider == "openrouter":
+        kwargs["openrouter_provider"] = {"sort": settings.MODEL_PROVIDER_SORT}
+    return init_chat_model(spec, **kwargs)
+
+
 def build_agent(model: str | BaseChatModel | None = None, checkpointer=CHECKPOINTER):
     model = model or settings.MODEL
     if not model:
         raise RuntimeError("MODEL is not set (provider:model, e.g. anthropic:claude-sonnet-5-5)")
+    if isinstance(model, str):
+        model = chat_model(model)
     return create_deep_agent(
         model=model,
         tools=tools.CONCIERGE_TOOLS,
@@ -87,6 +104,6 @@ def build_agent(model: str | BaseChatModel | None = None, checkpointer=CHECKPOIN
         context_schema=AgentContext,
         checkpointer=checkpointer,
         # deepagents 0.7 no longer adds write_todos by default; the concierge's plan streams as agent.todos.
-        middleware=[TodoListMiddleware()],
+        middleware=[TodoListMiddleware(system_prompt=prompts.TODOS)],
         name="concierge",
     )

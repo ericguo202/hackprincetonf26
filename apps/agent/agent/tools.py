@@ -201,6 +201,10 @@ def next_instance_id(plan: dict) -> str:
     return f"o{max(used, default=0) + 1}"
 
 
+def _no_score(pose: dict) -> dict:
+    return {k: v for k, v in pose.items() if k != "score"}
+
+
 def compact_asset(a: dict) -> dict:
     keys = ("id", "name", "category", "style", "color", "size_m", "cover", "placement")
     return {k: a.get(k) for k in keys}
@@ -596,7 +600,9 @@ def propose_poses(
 
     Rules: against_wall (back to a wall), corner, center (open floor; with relative_to: in front of that
     piece, or on top of it for table lamps), facing (front toward relative_to), beside (next to relative_to).
-    Every returned pose already passes validation against the room and the placed pieces.
+    Every returned pose already passes validation against the room and the placed pieces. When none does,
+    "blocked" lists poses that fit the room but not the pieces in their blocked_by; place_asset on one
+    takes those pieces out of the plan first, so you can put them back elsewhere.
 
     Args:
         room_id: Room id with a started plan.
@@ -615,10 +621,18 @@ def propose_poses(
         geo = room_geometry(load_room(room_id))
         out = _propose(geo, a, r, relative_to, placed_pairs(plan, skip=moving))
         stored = FILES.read_json(poses_path(room_id)) or {}
-        stored[asset_id] = {"rule": r, "relative_to": relative_to, "moving": moving, "poses": out["poses"]}
+        blocked = out.get("blocked", [])
+        stored[asset_id] = {
+            "rule": r,
+            "relative_to": relative_to,
+            "moving": moving,
+            "poses": out["poses"] + blocked,
+        }
         FILES.write_json(poses_path(room_id), stored)
-        poses = [{k: v for k, v in p.items() if k != "score"} for p in out["poses"]]
-        return {"asset_id": asset_id, "rule": r, "poses": poses, "note": out["note"]}
+        result = {"asset_id": asset_id, "rule": r, "poses": [_no_score(p) for p in out["poses"]]}
+        if blocked:
+            result["blocked"] = [_no_score(p) for p in blocked]
+        return {**result, "note": out["note"]}
 
     return _run(run)
 
@@ -633,6 +647,9 @@ def place_asset(
     instance_id: str | None = None,
 ) -> str:
     """Put an asset into the plan at a pose from the latest propose_poses call for that asset.
+
+    A blocked pose (b1, b2, ...) first removes the pieces in its blocked_by and returns them in "removed":
+    put each back with propose_poses and place_asset (new instance), or leave it out and say so.
 
     Args:
         room_id: Room id with a started plan.
@@ -650,6 +667,13 @@ def place_asset(
             raise ToolError(f"no pose {pose_id} for {asset_id}; call propose_poses for it first")
         if instance_id is not None and instance_id not in {o["instance_id"] for o in plan["objects"]}:
             raise ToolError(f"{instance_id} is not in the plan")
+        blockers = set(pose.get("blocked_by", [])) - {instance_id}
+        removed = [
+            {"instance_id": o["instance_id"], "asset_id": o["asset_id"], "name": asset(o["asset_id"])["name"]}
+            for o in plan["objects"]
+            if o["instance_id"] in blockers
+        ]
+        plan["objects"] = [o for o in plan["objects"] if o["instance_id"] not in blockers]
         obj = {
             "instance_id": instance_id or next_instance_id(plan),
             "asset_id": asset_id,
@@ -669,7 +693,8 @@ def place_asset(
         plan["objects"] = [o for o in plan["objects"] if o["instance_id"] != obj["instance_id"]] + [obj]
         plan["status"], plan["conflicts"] = "draft", []
         save_plan(plan)
-        return {"placed": obj["instance_id"], "plan": plan_view(plan)}
+        out = {"placed": obj["instance_id"], "plan": plan_view(plan)}
+        return {**out, "removed": removed} if removed else out
 
     return _run(run)
 

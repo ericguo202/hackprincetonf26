@@ -353,11 +353,21 @@ async def main_async(args: argparse.Namespace) -> int:
 
     results = await asyncio.gather(*(one(c) for c in cases))
     print_report(results)
+    secs = [t["seconds"] for c in results for t in c["turns"]]
+    print(f"turn seconds: {secs}, total {sum(secs):.0f}s")
 
     out_dir = EVALS / "out"
     out_dir.mkdir(exist_ok=True)
-    out = out_dir / f"{datetime.now():%Y%m%d-%H%M%S}.json"
-    meta = {"model": settings.MODEL, "block_id": block_id, "use_fixtures": settings.USE_FIXTURES}
+    tag = f"-{args.tag}" if args.tag else ""
+    out = out_dir / f"{datetime.now():%Y%m%d-%H%M%S}{tag}.json"
+    meta = {
+        "model": settings.MODEL,
+        "reasoning_effort": settings.MODEL_REASONING_EFFORT or None,
+        "provider_sort": settings.MODEL_PROVIDER_SORT or None,
+        "tag": args.tag,
+        "block_id": block_id,
+        "use_fixtures": settings.USE_FIXTURES,
+    }
     out.write_text(json.dumps({**meta, "cases": results}, indent=2, default=str), encoding="utf-8")
     print(f"wrote {out}")
     if args.feedback:
@@ -373,6 +383,7 @@ def main() -> None:
     parser.add_argument("--block", default=None, help="block_id (default: settings.BLOCK_ID)")
     parser.add_argument("--fixtures", action="store_true", help="read contracts/fixtures (USE_FIXTURES=1)")
     parser.add_argument("--feedback", action="store_true", help="score each turn's LangSmith trace")
+    parser.add_argument("--tag", default="", help="suffix for the results file (A/B runs)")
     parser.add_argument("--list", action="store_true", help="list the cases and exit")
     args = parser.parse_args()
     if args.list:

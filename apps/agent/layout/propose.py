@@ -59,6 +59,8 @@ FACING_RANGE = {
 DEFAULT_FACING_RANGE = (1.2, 3.0)
 TARGET_NEEDED = ("facing", "beside")
 MIN_SPREAD_M = 0.4  # returned poses with the same rotation are at least this far apart
+BLOCKED_LIMIT = 3  # blocked poses offered when no pose fits
+BLOCKED_SCAN = 60  # room-valid blocked candidates examined, best scores first
 
 
 def _cand(x: float, z: float, rot: float, score: float, reason: str) -> dict:
@@ -258,7 +260,8 @@ def propose_poses(
     """Up to `limit` conflict-free poses, best first: {"poses": [...], "note": str}.
 
     placed: [(plan object, its asset)] already in the plan (the piece being moved must be left out).
-    Each pose: {pose_id, x, y, z, rot_deg, reason, score}. When none fit, poses is empty and note says why.
+    Each pose: {pose_id, x, y, z, rot_deg, reason, score}. When none fit, poses is empty and note says why;
+    if some fit the room but not the placed pieces, "blocked" lists up to 3 of them with blocked_by ids.
     """
     placed = placed or []
     if rule not in RULES:
@@ -327,13 +330,73 @@ def propose_poses(
         }
         for i, c in enumerate(chosen)
     ]
+    out = {"poses": poses}
     if poses:
         note = f"{len(poses)} valid pose{'s' if len(poses) > 1 else ''} by {rule}"
     elif tried == 0:
         note = _why_none(geo, asset, rule)
     else:
         note = f"all {tried} {rule} candidates conflict with the room or placed pieces"
-    return {"poses": poses, "note": note}
+        blocked = _blocked(geo, asset, ranked, others, target, floor_y)
+        if blocked:
+            out["blocked"] = blocked
+            note += "; blocked poses fit once the pieces in blocked_by move out"
+    out["note"] = note
+    return out
+
+
+def _blocked(
+    geo: RoomGeometry,
+    asset: dict,
+    ranked: list[dict],
+    others: list[tuple[dict, dict]],
+    target: dict | None,
+    floor_y: float,
+    limit: int = BLOCKED_LIMIT,
+) -> list[dict]:
+    """Poses that fit the room but conflict with placed pieces, fewest blockers first, then by score.
+
+    Each: {pose_id: b1.., x, y, z, rot_deg, reason, score, blocked_by: [instance_id]}. A candidate blocked
+    by the relative_to piece is never offered (moving that piece would break the relation).
+    """
+    found: list[tuple[int, int, dict, list[str]]] = []
+    for i, c in enumerate(ranked):
+        if len(found) >= BLOCKED_SCAN:
+            break
+        obj = {"instance_id": "o0", "x": c["x"], "z": c["z"], "rot_deg": c["rot_deg"]}
+        if object_conflicts(geo, obj, asset, [], check_reverse=True):
+            continue  # does not fit the room itself
+        by = [
+            o["instance_id"]
+            for o, a in others
+            if object_conflicts(geo, obj, asset, [(o, a)], check_reverse=True)
+        ]
+        if not by or (target is not None and target["instance_id"] in by):
+            continue
+        found.append((len(by), i, c, by))
+    chosen: list[tuple[dict, list[str]]] = []
+    for _, _, c, by in sorted(found, key=lambda f: (f[0], f[1])):
+        if any(
+            math.dist((c["x"], c["z"]), (k["x"], k["z"])) < MIN_SPREAD_M and set(by) == set(kb)
+            for k, kb in chosen
+        ):
+            continue
+        chosen.append((c, by))
+        if len(chosen) == limit:
+            break
+    return [
+        {
+            "pose_id": f"b{i + 1}",
+            "x": round(c["x"], 3),
+            "y": round(c.get("y", floor_y), 3),
+            "z": round(c["z"], 3),
+            "rot_deg": round(c["rot_deg"], 1),
+            "reason": c["reason"],
+            "score": round(c["score"], 3),
+            "blocked_by": by,
+        }
+        for i, (c, by) in enumerate(chosen)
+    ]
 
 
 def _why_none(geo: RoomGeometry, asset: dict, rule: str) -> str:
