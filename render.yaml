@@ -103,7 +103,9 @@ projects:
             name: web
             runtime: static
             rootDir: apps/web
-            buildCommand: npm i -g pnpm@12.18.0 && pnpm install --frozen-lockfile && pnpm build
+            # setup-matterport.sh: Matterport bundle + tour furniture into public/matterport
+            # ("View in Matterport"). Never fails the build: without it the tour says it is missing.
+            buildCommand: npm i -g pnpm@12.18.0 && pnpm install --frozen-lockfile && (bash scripts/setup-matterport.sh || echo "setup-matterport failed; building without the Matterport tour") && pnpm build
             staticPublishPath: dist
             previews:
               generation: manual

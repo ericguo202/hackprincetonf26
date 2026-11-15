@@ -8,8 +8,10 @@
 #   furniture/v<N>/  furniture .glb copies without meshopt compression, which the
 #                    bundle's loader cannot decode (worldgen/scripts/tour_furniture.mjs)
 #
-# Also needs VITE_MATTERPORT_SDK_KEY in the repo-root .env, with the page's domain
-# on the key's allow list (localhost is).
+# Also needs VITE_MATTERPORT_SDK_KEY (repo-root .env locally, Render dashboard in
+# production), with the page's domain on the key's allow list (localhost and
+# web-eagy.onrender.com are). The Render web build runs this script before
+# `pnpm build`; if it fails there, the build goes on without the tour.
 set -euo pipefail
 
 BUNDLE_VERSION="26.10.4_webgl-1728-g1cd7e0997a"
@@ -24,7 +26,11 @@ if [ "$(cat "$OUT/bundle/version.txt" 2>/dev/null || true)" != "$BUNDLE_VERSION"
   tmp="$(mktemp -d)"
   curl -fsSL -o "$tmp/bundle.zip" "$BUNDLE_URL"
   rm -rf "$OUT/bundle"
-  unzip -q "$tmp/bundle.zip" -d "$OUT/bundle"
+  if command -v unzip >/dev/null; then
+    unzip -q "$tmp/bundle.zip" -d "$OUT/bundle"
+  else
+    python3 -m zipfile -e "$tmp/bundle.zip" "$OUT/bundle"
+  fi
   rm -rf "$tmp"
 else
   echo "Showcase bundle $BUNDLE_VERSION already there"

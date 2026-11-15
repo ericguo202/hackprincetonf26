@@ -48,11 +48,12 @@ export function sweepsOf(sdk: ShowcaseSdk): Promise<{ id: string; position: Vec 
 }
 
 /**
- * Offered on localhost only: the SDK key's allow list has no deployed domain
- * (free keys are localhost-only), and the deployed build has no bundle.
+ * Offered only on hosts on the SDK key's allow list (Matterport rejects the key
+ * anywhere else): local dev and the Render web service. If the deployed build
+ * has no bundle (setup-matterport.sh failed in the build), TourView says so.
  */
-export const TOUR_AVAILABLE: boolean =
-  typeof location !== "undefined" && ["localhost", "127.0.0.1"].includes(location.hostname);
+export const TOUR_HOSTS = ["localhost", "127.0.0.1", "web-eagy.onrender.com"];
+export const TOUR_AVAILABLE: boolean = typeof location !== "undefined" && TOUR_HOSTS.includes(location.hostname);
 
 /** "View in Matterport" open/closed. Local to this browser; nothing is sent. */
 export const useTour = create<{ open: boolean; setOpen: (open: boolean) => void }>((set) => ({
