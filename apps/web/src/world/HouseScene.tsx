@@ -4,7 +4,7 @@
 // room, walls along each polygon edge with gaps for doors, and the front door
 // lit so you can find the way out.
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { CuboidCollider, RigidBody, TrimeshCollider } from "@react-three/rapier";
 import { Shape, type Object3D } from "three";
 
@@ -49,6 +49,15 @@ export function HouseScene({ pack, listingId }: Props) {
   const [loadedCollision, setLoadedCollision] = useState<{ id: string; scene: Object3D } | null>(null);
   const collisionScene = loadedCollision?.id === listingId ? loadedCollision.scene : null;
 
+  const onScene = useCallback(
+    (scene: Object3D) => {
+      setLoadedCollision((prev) =>
+        prev && prev.id === listingId && prev.scene === scene ? prev : { id: listingId, scene },
+      );
+    },
+    [listingId],
+  );
+
   const split = useMemo(() => {
     if (!collisionScene || !listingId) return null;
     const boxes = extractWallBoxes(collisionScene);
@@ -72,7 +81,7 @@ export function HouseScene({ pack, listingId }: Props) {
         url={base && packUrl(base, house.collision)}
         label={house.collision}
         skipNodes={SKIP_WALLS}
-        onScene={(scene) => setLoadedCollision({ id: listingId, scene })}
+        onScene={onScene}
         placeholder={<PlaceholderHouseCollision rooms={rooms} door={door} />}
       />
       {split ? (

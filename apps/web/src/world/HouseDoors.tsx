@@ -2,7 +2,7 @@
 // While closed: fixed CuboidCollider (ZONE_COLLIDER) fills the doorway.
 // Door leaf: off-white mesh hinged at point a, rotating 90° over 0.3 s when opened.
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group } from "three";
@@ -34,20 +34,15 @@ export function HouseDoors({ doors }: Props) {
 
 function SingleDoor({ door }: { door: OpenedDoor }) {
   const isOpen = useDoorState((s) => s.isOpen(door.id));
+  const [initialProgress] = useState(() => (isOpen ? 1 : 0));
   const hingeRef = useRef<Group>(null);
-  const progress = useRef(isOpen ? 1 : 0);
+  const progress = useRef(initialProgress);
 
   const dx = door.b[0] - door.a[0];
   const dz = door.b[1] - door.a[1];
   const yaw = Math.atan2(-dz, dx);
   const cx = (door.a[0] + door.b[0]) / 2;
   const cz = (door.a[1] + door.b[1]) / 2;
-
-  useLayoutEffect(() => {
-    if (hingeRef.current) {
-      hingeRef.current.rotation.y = (isOpen ? 1 : 0) * (Math.PI / 2);
-    }
-  }, [isOpen]);
 
   useFrame((_, delta) => {
     const target = isOpen ? 1 : 0;
@@ -83,7 +78,7 @@ function SingleDoor({ door }: { door: OpenedDoor }) {
 
       {/* Door leaf mesh: hinged at point a, rotates 90 deg when open */}
       <group position={[door.a[0], door.floorY, door.a[1]]} rotation-y={yaw}>
-        <group ref={hingeRef}>
+        <group ref={hingeRef} rotation-y={initialProgress * (Math.PI / 2)}>
           <mesh position={[door.width / 2, 1.0, 0]} castShadow receiveShadow>
             <boxGeometry args={[door.width, 2.0, 0.04]} />
             <meshStandardMaterial color="#f0ede6" roughness={0.7} />
