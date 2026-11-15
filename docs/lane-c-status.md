@@ -421,3 +421,12 @@ Neither fix has been checked in a browser. Both rest on code and unit tests only
   - keys 1/2 picking weapons in foam and ignored in explore;
   - the held prop being `null` in explore and the selected weapon in foam.
 - **`characterRig.test.ts`:** on the real model, explore hides both props and foam shows the selected one.
+
+## 20. No firing while eliminated
+
+While the server has my `Player.alive` false (the 3 s before respawn), the blaster and noodle do nothing and nothing is sent; the crosshair and hit marker are hidden. Keys 1/2 still switch weapons, so you respawn holding what you picked. Holding the trigger through a respawn does not auto-fire; press again.
+
+- `player/foamMode.ts`: `isAlive(meId, players)` (pure), `canAttackNow(foam, alive)`, `meAliveNow()` for frame loops, `useMeAlive()` for components. No id yet (SOLO, before join) or my entry missing counts as alive, so a missing server never locks the trigger.
+- `player/Blaster.tsx`: the existing per-frame gate is now `canAttackNow(foamModeNow(), meAliveNow())`. `player/Crosshair.tsx` hides on the same gate.
+- Lane D's respawn path (`world/RespawnWatcher.tsx`, `world/respawn.ts`, `Player.tsx` elimination handling) is untouched.
+- Tested: `foamMode.test.ts` (no id, missing entry, alive, dead and respawn, another player's death, the 4-row gate table, keys 1/2 while dead). Not yet seen in a browser.
