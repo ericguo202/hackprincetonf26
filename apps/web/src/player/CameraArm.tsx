@@ -62,6 +62,8 @@ type Props = {
    * centres (CENTRE_ABOVE_FLOOR_M).
    */
   crouchedRef?: MutableRefObject<boolean>;
+  /** Yaw (radians) the camera starts at when mounted; default 0. */
+  initialYaw?: number;
 };
 
 /** Rapier's Ray, typed through @react-three/rapier (rapier3d-compat is not a direct dependency). */
@@ -72,11 +74,11 @@ function typing(): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
 }
 
-export function CameraArm({ ecctrl, body, onBodyHidden, zone, crouchedRef }: Props) {
+export function CameraArm({ ecctrl, body, onBodyHidden, zone, crouchedRef, initialYaw = 0 }: Props) {
   const canvas = useThree((s) => s.gl.domElement);
   const { world, rapier } = useRapier();
 
-  const look = useRef({ yaw: 0, pitch: -0.12 });
+  const look = useRef({ yaw: initialYaw, pitch: -0.12 });
   const arm = useRef<ArmSetting>(armDefaults(zone));
   const armLen = useRef(0);
   /** One Ray reused every frame. */

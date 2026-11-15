@@ -9,7 +9,7 @@
 // is in that zone's own frame. Only one zone's geometry is mounted at a time.
 // net/game.ts sees me.zone change and sends enter_zone.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { Sky } from "@react-three/drei";
@@ -40,6 +40,7 @@ import { DevRemotes } from "./DevRemotes";
 import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
 import { RemotePlayers } from "./RemotePlayers";
 import { RespawnWatcher } from "./RespawnWatcher";
+import { type FocusState, focusArrival, stepFocus } from "./focusTeleport";
 import { sendFire } from "../net/game";
 import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
@@ -109,6 +110,8 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
   // reading that would mount the block for a frame and fetch its meshes.
   const [zone, setZone] = useState(start.zone);
   const [spawn, setSpawn] = useState<Vec3>(() => lift(start.pos));
+  // Camera yaw for the next Player mount (focus teleport faces the house); undefined = default.
+  const [spawnYaw, setSpawnYaw] = useState<number | undefined>(undefined);
   // Bumped on every zone change: remounts the Player at the new spawn, in the new frame.
   const [epoch, setEpoch] = useState(0);
   const zoneState = useRef<ZoneState>({ zone: start.zone, armed: true });
@@ -120,6 +123,20 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
     setMe(start);
   }, [start, setMe]);
 
+  // Put the player in `zone` at `at` (that zone's frame, floor height): store first,
+  // then remount the Player there. Used by the door trigger and the focus teleport.
+  const goTo = useCallback(
+    (to: string, at: Vec3, yaw?: number) => {
+      const rooms = pack.roomsByHouse[to] ?? [];
+      setMe({ zone: to, pos: at, roomId: to === "block" ? null : roomIdAt(at, rooms) });
+      setZone(to);
+      setSpawn(lift(at));
+      setSpawnYaw(yaw);
+      setEpoch((e) => e + 1);
+    },
+    [pack, setMe],
+  );
+
   // Door trigger and room tracking, on every position the Player writes (20 Hz).
   useEffect(
     () =>
@@ -128,15 +145,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
         const { state, change } = stepZone(zoneState.current, s.me.pos, pack.doors);
         zoneState.current = state;
         if (change) {
-          const rooms = pack.roomsByHouse[change.zone] ?? [];
-          setMe({
-            zone: change.zone,
-            pos: change.spawn,
-            roomId: change.zone === "block" ? null : roomIdAt(change.spawn, rooms),
-          });
-          setZone(change.zone);
-          setSpawn(lift(change.spawn));
-          setEpoch((e) => e + 1);
+          goTo(change.zone, change.spawn);
           return;
         }
         if (s.me.zone !== "block") {
@@ -144,7 +153,29 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
           if (roomId !== s.me.roomId) setMe({ roomId });
         }
       }),
-    [pack, setMe],
+    [pack, setMe, goTo],
+  );
+
+  // Lane D: focus teleport (HANDOFF lane-b 16:45). When the agent's focus_listing
+  // changes MY beacon, land outside that house's door on the block, facing it.
+  // The first value seen is a starting point, not a jump (focusTeleport.ts).
+  const focusState = useRef<FocusState>({ seen: false, listing: undefined });
+  useEffect(
+    () =>
+      useStore.subscribe((s) => {
+        const id = s.me.id;
+        if (!s.connected || !id) return;
+        const { state, goTo: listing } = stepFocus(focusState.current, s.focus[id]);
+        focusState.current = state;
+        if (!listing || s.players[id]?.alive === false) return;
+        const door = pack.doors.find((d) => d.listing_id === listing);
+        if (!door) return; // not a house on this block
+        const arrival = focusArrival(door, 0);
+        // Right outside the door: the trigger stays disarmed until we walk clear.
+        zoneState.current = { zone: "block", armed: false };
+        goTo("block", arrival.pos, arrival.yaw);
+      }),
+    [pack, goTo],
   );
 
   const inHouse = zone !== "block" && pack.manifest.houses.some((h) => h.listing_id === zone);
@@ -162,6 +193,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       <Player
         key={epoch}
         spawn={spawn}
+        spawnYaw={spawnYaw}
         zone={zone}
         getHitboxes={remoteHitboxes}
         onFire={DEV_REMOTES_ON ? devFire : sendFire}

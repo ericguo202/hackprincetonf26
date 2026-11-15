@@ -73,6 +73,8 @@ const KEYS = {
 type Props = {
   /** Where to drop the player in the current zone's frame. */
   spawn?: [number, number, number];
+  /** Camera yaw (radians, armMath convention) at mount; default 0. Lane D: the focus teleport faces the house. */
+  spawnYaw?: number;
   /** "block" or a listing_id. Indoors the camera starts in first person. */
   zone?: string;
   /**
@@ -93,6 +95,7 @@ type Props = {
 
 export function Player({
   spawn = [0, 1, 0],
+  spawnYaw,
   zone = "block",
   followCamera = true,
   getHitboxes,
@@ -270,6 +273,7 @@ export function Player({
           ecctrl={ecctrl}
           body={bodyMesh}
           zone={zone}
+          initialYaw={spawnYaw}
           crouchedRef={crouchedRef}
           onBodyHidden={(hidden) => {
             if (bodyMesh.current) bodyMesh.current.visible = !hidden;
