@@ -16,7 +16,7 @@
 # Filled since (furniture v3): three cribs from FurniMesh and two team-made flat-screen TVs whose screen is
 # a separate mesh with material "tv_screen" (the web client can play a video on it). Neither has a stable
 # download URL, so their source files are committed in worldgen/furniture_src/ and the items name them with
-# `local:` (path under worldgen/) instead of `url:`. changing_table is still missing.
+# `local:` (path under worldgen/) instead of `url:`. Furniture v4 adds two team-made changing tables.
 # Optional per item: mount_y_m (wall-mounted pieces: origin height above the floor, copied to the catalog).
 
 # Kenney Furniture Kit "televisionModern" (published by Kenney on Poly Pizza as "Television").
@@ -67,6 +67,21 @@ team_tv: &team_tv
   yaw_deg: 0
   tags: [living_room, tv, movie_night, screen, electronics]
   clearance_m: {front: 1.0}
+
+# Team-made changing tables (procedural, CC0; generator scripts/make_changing_table.py, committed). About
+# 0.90 x 0.50 x 0.95 m: a padded changing surface at 0.85 m with a low rail on the back and both ends (the
+# open side is the front, +Z) and two open shelves below holding fabric bins. One white, one natural wood.
+team_changing_table: &team_changing_table
+  category: changing_table
+  dataset: Team
+  license: CC0 1.0
+  credit: HackPrinceton team
+  style: modern
+  material: wood
+  yaw_deg: 0
+  tags: [nursery, infant, baby, changing, storage]
+  placement: wall
+  clearance_m: {front: 0.75}
 
 items:
   - <<: *kenney_tv
@@ -130,3 +145,21 @@ items:
     local: furniture_src/team/tv_team_wall.glb
     file: team/tv_team_wall.glb
     sha256: 2e80b71a49bc81a3f25c8e130c112d58fa78c9af42d437db5d81639ddc87146f
+  - <<: *team_changing_table
+    id: changing_table_team_white
+    name: White changing table
+    item_id: changing_table_white
+    product_name: Changing table with open shelves, white (team-made, make_changing_table.py)
+    color: white
+    local: furniture_src/team/changing_table_team_white.glb
+    file: team/changing_table_team_white.glb
+    sha256: 9db7ccab27c721a2573d49b28858c5dba36a0a99f9395caa94651411d16afb98
+  - <<: *team_changing_table
+    id: changing_table_team_wood
+    name: Wooden changing table
+    item_id: changing_table_wood
+    product_name: Changing table with open shelves, natural wood (team-made, make_changing_table.py)
+    color: natural wood
+    local: furniture_src/team/changing_table_team_wood.glb
+    file: team/changing_table_team_wood.glb
+    sha256: e85616fb67f78dd7092e38c37e3dcba713e4a2bc29595afbd82920914f4302e0
