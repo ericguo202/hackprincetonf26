@@ -17,6 +17,7 @@ Geometry is in Matterport Z-up plan coordinates; house_mesh.Z_UP_TO_Y_UP is appl
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -453,6 +454,7 @@ def bake_plane(
     behind: Polygon | None = None,
     fallback: bool = False,
     relief: float = 0.06,
+    extra: Callable | None = None,
 ) -> tuple[dict[str, float], list[Plane]]:
     """Texture a plane from the panoramas. For walls with a room behind them (`behind` = union of room
     polygons), texels with no scanned wall that a camera sees through are cut out (alpha 0); openings are
@@ -461,7 +463,9 @@ def bake_plane(
     side walls can be out of every camera's view), instead of a blur of their neighbours. `relief` is how
     far in front of the plane a texel may be sampled at the real surface (default 6 cm; facades pass more: a
     garage door sits in a recess, so the wall above it stands 20 cm in front of the plane fitted to the door
-    and hid the plane from every camera)."""
+    and hid the plane from every camera). `extra(p, res, W, H, mask, rgb, valid)` -> (colours, covered) is
+    another source for texels no camera saw, asked before the scan's texture (outdoors: the drone splat,
+    splat.WallFill); it never replaces a photographed texel."""
     res = min(res, (PAGE - 2 * PAD - 2) / max(p.w, p.h))
     W, H = max(2, math.ceil(p.w * res)), max(2, math.ceil(p.h * res))
     s = (np.arange(W) + 0.5) / res
@@ -492,6 +496,13 @@ def bake_plane(
     else:
         rgb, valid = shade(at, nrm, panos, scan.eyes, snap=False)
     photo = valid
+    filled_extra = 0
+    if extra is not None and (~valid).any():
+        e_rgb, e_ok = extra(p, res, W, H, mask, rgb, valid)
+        take = e_ok & ~valid
+        rgb[take] = e_rgb[take]
+        valid = valid | take
+        filled_extra = int(take.sum())
     if fallback and (near & ~valid).any():
         # Only scan faces that face the same way as the plane: where the outer surface was not scanned the
         # ray reaches the inside of the wall, whose texture is the room (a facade once showed the interior).
@@ -527,7 +538,12 @@ def bake_plane(
     # Outside the plane's shape nothing is drawn: count it as seen so the fill does no work there.
     p.image = np.dstack([_fill(img, ok | ~mask) if ok.any() else np.full_like(img, 200), alpha])
     seen = float(ok.sum() - (valid & ~photo).sum())  # texels a camera saw (not the scan-texture fallback)
-    stats = {"area": p.shape.area, "seen": seen / max(1, mask.sum()), "carved_m2": carved}
+    stats = {
+        "area": p.shape.area,
+        "seen": seen / max(1, mask.sum()),
+        "carved_m2": carved,
+        "extra": filled_extra / max(1, mask.sum()),
+    }
     p.seen = stats["seen"]
     p.unseen = mask & ~ok & (alpha > 0)
     p.shape_mask = mask

@@ -28,6 +28,7 @@ from worldgen import aerial as ae
 from worldgen import exterior as ex
 from worldgen import house_mesh as hm
 from worldgen import rebake as rb
+from worldgen import splat
 from worldgen.pack import load_block, pack_dir, update_manifest
 from worldgen.panos import PanoSet
 from worldgen.sources import matterport as mp
@@ -762,7 +763,19 @@ def build(
             hand = [(*d["at"], float(d["radius"])) for d in overrides.get("remove_outdoor") or []]
             outdoors.append(
                 ex.add_exterior(
-                    scene, scan, rooms_in, all_panos, doors_out, house_outline, aerial=aerial, remove=hand
+                    scene,
+                    scan,
+                    rooms_in,
+                    all_panos,
+                    doors_out,
+                    house_outline,
+                    aerial=aerial,
+                    remove=hand,
+                    # The drone splat, when out/raw/splat has one for this model (`"splat": false` on the
+                    # house turns it off): the roof's shape and shingles, walls no camera saw (splat.py).
+                    splat=splat.load(out, model_id, house_outline.centroid.coords[0])
+                    if house.get("splat", True)
+                    else None,
                 )
             )
 

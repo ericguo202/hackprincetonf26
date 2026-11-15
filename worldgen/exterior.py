@@ -43,10 +43,11 @@ from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
 from worldgen import aerial as ae
-from worldgen import fences, vegetation
+from worldgen import fences, railings, vegetation
 from worldgen import house_mesh as hm
 from worldgen import rebake as rb
 from worldgen import roof as rf
+from worldgen import splat as sp
 from worldgen.panos import PanoSet, Raycaster, shade
 
 CELL = 0.15  # ground heightfield sample spacing (m)
@@ -84,6 +85,12 @@ EAVE_OVER = 0.5  # undersides are looked for up to this far above the fitted roo
 # under ORTHO_SPREAD. A roof under bare winter branches is a pattern of shadows, not of shingles.
 ORTHO_GAIN = (0.6, 1.6)
 ORTHO_SPREAD = 3.0
+SPLAT_PLANE = (
+    1.0,
+    24,
+)  # roof from the splat: smallest plane (m2) and most planes (its sheet is sharp enough)
+SPLAT_LEVEL = 0.2  # the splat's ground must sit within this of the scan's (offset and spread), m
+SPLAT_GAIN = (0.8, 1.25)  # the splat's shingles and walls are scaled to the ground photos by at most this
 SUN = (
     205.0,
     50.0,
@@ -272,6 +279,19 @@ def bake_patch(p: Patch, panos: PanoSet, scan: rb.Scan, max_dist: float) -> floa
         gain = np.ones(3)
         if both.sum() > 500:
             gain = np.median(rgb[both], axis=0) / np.maximum(np.median(air[both], axis=0), 1.0)
+        if p.meta.get("whole"):
+            # The drone splat (splat.roof_colour): real shingles over the whole roof, from straight above,
+            # with the tree over the roof cut away. It takes every texel: a ground camera sees a roof at a
+            # grazing angle and through leaves, and two sources on one slope show as a seam. No exposure
+            # match to the ground photos: their few roof texels are leaves and sky as often as shingles (the
+            # gain came out at its limit and the roof pale pink). What the drone did not see (under a dense
+            # canopy) is filled from the shingles around it.
+            p.meta["aerial"] = {"source": "splat", "covered": round(float(air_ok.mean()), 3)}
+            img[mask] = np.clip(air, 0, 255).astype(np.uint8)
+            ok[mask] = air_ok
+            ok &= ndimage.binary_opening(ok, iterations=2)
+            p.image = np.dstack([rb._fill(img, ok), np.full((H, W), 255, np.uint8)])
+            return float(valid.sum()) / max(1, mask.sum())
         lum = air[air_ok] @ np.array([0.299, 0.587, 0.114])
         spread = float(np.percentile(lum, 90) / max(np.percentile(lum, 10), 1.0)) if len(lum) > 500 else 99.0
         usable = bool(
@@ -818,6 +838,99 @@ def aerial_roof(
     return roof
 
 
+def splat_level(splat: sp.Splat, g: Ground, walls: Polygon) -> tuple[float, float]:
+    """(offset, spread): how far the scan's ground is above the splat's, on the yard away from the house
+    (median over every 7th ground cell more than 1.5 m from the walls), and the median absolute deviation.
+    The two are in one frame; this is the check, and the few cm are taken out before anything is read."""
+    ii, jj = np.nonzero(np.isfinite(g.z))
+    x, y = g.x0 + ii[::7] * CELL, g.y0 + jj[::7] * CELL
+    z = g.z[ii[::7], jj[::7]]
+    away = ~shapely.dwithin(walls, shapely.points(x, y), 1.5)
+    x, y, z = x[away], y[away], z[away]
+    if len(x) < 50:
+        raise ValueError("too little yard to level the splat on")
+    sheet = splat.roof_sheet(
+        (x.min() - 1, y.min() - 1, x.max() + 1, y.max() + 1), z.min() - 1.0, z.max() + 1.0
+    )
+    d = z - sheet(x, y)
+    d = d[np.isfinite(d)]
+    if len(d) < 50:
+        raise ValueError("the splat has no ground under the yard")
+    off = float(np.median(d))
+    return off, float(np.median(np.abs(d - off)))
+
+
+def splat_roof(
+    splat: sp.Splat,
+    vexcel: Polygon | None,
+    walls: Polygon,
+    rooms: list[rb.ShellRoom],
+    floor_z: float,
+    report: dict,
+) -> tuple[rf.Roof, Callable] | tuple[None, None]:
+    """The roof from the drone splat (preferred over the aerial surface model: 3 cm Gaussians in the scan's
+    own frame against a 13 cm raster registered to about 0.3 m). Planes are fitted (roof.fit_roof, on
+    splat.SHEET_CELL) to the splat's roof sheet over everything within splat.EDGE_REACH of the walls (and
+    Vexcel's outline when there is one); the roof's edge is then where the sheet stops agreeing with those
+    planes (splat.roof_outline), and the planes are fitted again inside it, never below the ceilings.
+    Returns the roof and its shingles (splat.roof_colour), or (None, None) when no plane is found."""
+    limit = orient(walls, 1.0).buffer(sp.EDGE_REACH, join_style="mitre")
+    if vexcel is not None:
+        limit = limit.union(vexcel.buffer(0.6, join_style="mitre"))
+    limit = Polygon(max(polygons(limit), key=lambda q: q.area).exterior)
+    sheet = splat.roof_sheet(limit.buffer(0.5).bounds, floor_z + 1.9, floor_z + 9.0)
+    first = rf.fit_roof(
+        sheet,
+        limit,
+        min_z=floor_z + 1.9,
+        step=sp.SHEET_CELL,
+        min_area=SPLAT_PLANE[0],
+        max_planes=SPLAT_PLANE[1],
+    )
+    if first is None:
+        return None, None
+    edge = splat.roof_outline(
+        sheet, first.surface, orient(walls, 1.0).buffer(MIN_OVERHANG, join_style="mitre"), limit
+    )
+    region = roof_region(walls, edge)
+    roof = rf.fit_roof(
+        sheet,
+        region,
+        floor=ceiling_floor(rooms),
+        min_z=floor_z + 1.9,
+        step=sp.SHEET_CELL,
+        snap=True,
+        min_area=SPLAT_PLANE[0],
+        max_planes=SPLAT_PLANE[1],
+    )
+    if roof is None:
+        return None, None
+    nx, ny = roof.label.shape
+    X, Y = np.meshgrid(
+        roof.x0 + np.arange(nx) * roof.step, roof.y0 + np.arange(ny) * roof.step, indexing="ij"
+    )
+    inside = shapely.contains_xy(region, X, Y)
+    d = sheet(X[inside], Y[inside]) - roof.surface(X[inside], Y[inside])
+    d = d[np.isfinite(d)]
+    frac, most = roof.lifted()
+    colour = splat.roof_colour(roof.height, region, ROOF_RES)
+    report["roof"] = {
+        "source": "splat",
+        "planes": len(roof.planes),
+        "plane_m2": [round(a, 1) for a in roof.areas],
+        "pitch_deg": round(math.degrees(roof.pitch), 1),
+        "region_m2": round(region.area, 1),
+        "vexcel_outline": vexcel is not None,
+        "sheet_within_5cm": round(float((np.abs(d) < 0.05).mean()), 3) if len(d) else 0.0,
+        "sheet_within_10cm": round(float((np.abs(d) < 0.10).mean()), 3) if len(d) else 0.0,
+        "lifted_by_ceilings": round(frac, 3),
+        "max_lift_m": round(most, 2),
+        "shingles_covered": round(colour.covered, 3),
+        "splat": splat.source,
+    }
+    return roof, colour
+
+
 def eave_underside(
     scan: rb.Scan, roof: rf.Roof, walls: Polygon, g: Ground, floor_z: float, step: float = 0.15
 ) -> rf.Height:
@@ -925,10 +1038,17 @@ def eave_underside(
     return under
 
 
-def aerial_roof_patches(roof: rf.Roof, walls: Polygon, aerial: ae.Aerial, under: rf.Height) -> list[Patch]:
-    """The fitted roof as patches: the top (ground photos where a camera saw shingles, the aerial photo
-    elsewhere), the underside outside the walls (eaves, porch and alcove ceilings: `under`, see
-    eave_underside), and a SOFFIT-high band around the edge (fascia, rake boards)."""
+def aerial_roof_patches(
+    roof: rf.Roof,
+    walls: Polygon,
+    aerial: ae.Aerial | None,
+    under: rf.Height,
+    shingles: Callable | None = None,
+) -> list[Patch]:
+    """The fitted roof as patches: the top (with `shingles` = splat.roof_colour: the drone splat's, over the
+    whole top; else ground photos where a camera saw shingles and the aerial photo elsewhere), the underside
+    outside the walls (eaves, porch and alcove ceilings: `under`, see eave_underside), and a SOFFIT-high
+    band around the edge (fascia, rake boards)."""
     region = roof.region
     x0, y0, x1, y1 = region.bounds
 
@@ -939,12 +1059,17 @@ def aerial_roof_patches(roof: rf.Roof, walls: Polygon, aerial: ae.Aerial, under:
         x, y = xyz[:, 0], xyz[:, 1]
         return aerial.colour(x, y), aerial.surface(x, y) - xyz[:, 2] < 0.4
 
-    # The sun's direction in plan coordinates (the block frame is east, south; plan y is house-local -z).
-    az, el = math.radians(SUN[0]), math.radians(SUN[1])
-    sx, sy = aerial.from_block(
-        aerial.position[0] + math.sin(az) * math.cos(el), aerial.position[1] - math.cos(az) * math.cos(el)
-    )
-    sun = (sx, sy, math.sin(el))
+    sun = (0.0, 0.0, 1.0)
+    if aerial is not None:
+        # The sun's direction in plan coordinates (the block frame is east, south; plan y is house-local -z).
+        az, el = math.radians(SUN[0]), math.radians(SUN[1])
+        sx, sy = aerial.from_block(
+            aerial.position[0] + math.sin(az) * math.cos(el), aerial.position[1] - math.cos(az) * math.cos(el)
+        )
+        sun = (sx, sy, math.sin(el))
+    top_meta = {"colour": colour if aerial is not None else None, "sun": sun}
+    if shingles is not None:
+        top_meta = {"colour": shingles, "whole": True}
 
     local = affinity.translate(region, -x0, -y0)
     out = [
@@ -958,7 +1083,7 @@ def aerial_roof_patches(roof: rf.Roof, walls: Polygon, aerial: ae.Aerial, under:
             local,
             step=0.2,
             no_sky=True,
-            meta={"colour": colour, "sun": sun},
+            meta=top_meta,
         )
     ]
     pale = {"default": (226, 222, 214)}  # painted eaves, when no camera saw one at all
@@ -1286,6 +1411,7 @@ def add_exterior(
     bake: frozenset[str] = PARTS,
     aerial: ae.Aerial | None = None,
     remove: list[tuple[float, float, float, float]] = (),
+    splat: sp.Splat | None = None,
 ) -> Exterior:
     """Bake the lot, facades, roof, outdoor pieces and backdrop into `scene` (Y-up nodes). `doors` are the
     outside doors opened for play (also cut from the rooms' walls via ShellRoom.cuts, and from collision).
@@ -1307,7 +1433,29 @@ def add_exterior(
     eave_z = eave_height(corners, normals, scan, floor_z, top)
     report.update(lot_m2=round(g.lot.area, 1), eave_z=round(eave_z, 2), ground_edge_z=round(g.edge_z, 2))
 
-    roof = aerial_roof(aerial, g, walls, rooms, floor_z, report) if aerial is not None else None
+    roof, shingles = None, None
+    if splat is not None:
+        # The drone splat (splat.py): levelled on the yard, then the roof's shape and shingles, and further
+        # down the walls no camera saw. Off by more than SPLAT_LEVEL it is not this house's: not used.
+        try:
+            lift, spread = splat_level(splat, g, walls)
+        except ValueError:
+            lift, spread = math.inf, math.inf
+        report["splat"] = {"ground_offset_m": round(lift, 3), "ground_spread_m": round(spread, 3)}
+        if abs(lift) > SPLAT_LEVEL or spread > SPLAT_LEVEL:
+            splat = None
+        else:
+            splat = dataclasses.replace(splat, xyz=splat.xyz + np.array([0.0, 0.0, lift], np.float32))
+            roof, shingles = splat_roof(
+                splat,
+                aerial.roof_outline(walls) if aerial is not None else None,
+                walls,
+                rooms,
+                floor_z,
+                report,
+            )
+    if roof is None and aerial is not None:
+        roof = aerial_roof(aerial, g, walls, rooms, floor_z, report)
     under = None
     if roof is not None:
         under = eave_underside(scan, roof, walls, g, floor_z)
@@ -1331,7 +1479,7 @@ def add_exterior(
     patches = ground_patches(g)
     if roof is not None:
         eaves = roof.region
-        patches += aerial_roof_patches(roof, walls, aerial, under)
+        patches += aerial_roof_patches(roof, walls, aerial, under, shingles)
     elif cover < 0.7:
         eaves = Polygon(orient(walls, 1.0).buffer(OVERHANG, join_style="mitre").exterior)
         pitch = measure_pitch(scan, eaves, eave_z)
@@ -1353,11 +1501,23 @@ def add_exterior(
     for p in frames:  # seen from inside and outside: every camera
         rb.bake_plane(p, scan, panos, FACADE_RES)
     blank = []
+    # Walls no ground camera saw (a side strip nobody walked, a gable behind a tree): the drone splat's view
+    # of them, texel by texel, before the scan's own texture and the plain colour (splat.WallFill).
+    wall_fill = sp.WallFill(splat, SPLAT_GAIN) if splat is not None else None
     for p in planes:
-        st, _ = rb.bake_plane(p, eyes, out_panos, FACADE_RES, fallback=True, relief=FACADE_RELIEF)
+        st, _ = rb.bake_plane(
+            p, eyes, out_panos, FACADE_RES, fallback=True, relief=FACADE_RELIEF, extra=wall_fill
+        )
         seen.setdefault("facade", []).append((st["seen"], st["area"]))
-        if st["seen"] < 0.02:
+        if st["seen"] + st["extra"] < 0.02:
             blank.append(p)
+    if wall_fill is not None and wall_fill.filled:
+        total = sum(a for a, _ in wall_fill.filled)
+        report["splat"]["facade_filled"] = round(
+            sum(a * f for a, f in wall_fill.filled) / max(total, 1e-9), 3
+        )
+        report["splat"]["facade_gains"] = [round(k, 2) for k in wall_fill.gains]
+        report["splat"]["facade_walls"] = wall_fill.walls
     # A facade no camera saw (and the scan has no outer surface for) gets the house's typical facade colour
     # instead of _fill's flat grey.
     blank_ids = {id(p) for p in blank}
@@ -1455,7 +1615,15 @@ def add_exterior(
         # For plants the house is everything under the roof: a sapling beside a porch post, measured and
         # modelled, came out as a crown growing through the porch roof. It stays scan.
         roofed = walls if roof is None else filled(walls.union(roof.region))
-        for replace, house in ((fences.replace_fences, walls), (vegetation.replace_vegetation, roofed)):
+
+        def rails(*args):  # railings come from the splat (railings.py); without one nothing is replaced
+            return railings.replace_railings(*args, splat=splat)
+
+        for replace, house in (
+            (fences.replace_fences, walls),
+            (rails, walls),
+            (vegetation.replace_vegetation, roofed),
+        ):
             taken, tris = replace(scene, eyes, g, faces, tree, avail, out_panos, house, report)
             avail &= ~taken
             solids.append(np.asarray(tris, float).reshape(-1, 3, 3))
@@ -1544,6 +1712,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--parts", help=f"comma-separated subset of {sorted(PARTS)} to bake (default: all)")
     ap.add_argument("--no-aerial", action="store_true", help="roof from the scan alone (no Vexcel layers)")
+    ap.add_argument("--no-splat", action="store_true", help="do not use the drone splat (out/raw/splat)")
     args = ap.parse_args(argv)
     bake = frozenset(args.parts.split(",")) if args.parts else PARTS  # not `parts`: those are the rooms below
     if bake - PARTS:
@@ -1583,6 +1752,7 @@ def main(argv: list[str] | None = None) -> int:
         bake=bake,
         aerial=air,
         remove=[(*d["at"], float(d["radius"])) for d in hand],
+        splat=None if args.no_splat else sp.load(args.out, model_id, footprint.centroid.coords[0]),
     )
     dest = args.dest or args.out / "cache" / "glb" / f"{model_id}_exterior.glb"
     dest.parent.mkdir(parents=True, exist_ok=True)
