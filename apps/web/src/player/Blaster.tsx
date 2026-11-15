@@ -43,6 +43,7 @@ import { useBlasterHud } from "./blasterHud";
 import { canAttack, noodlePayload, noodleSwing } from "./weapons";
 import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
+import { markAttack } from "./attackClock";
 
 type Props = {
   ecctrl: RefObject<EcctrlHandle | null>;
@@ -219,6 +220,7 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
       const weapon = useWeaponState.getState().weapon;
       if (canAttack(weapon, lastShotAt.current, now)) {
         lastShotAt.current = now;
+        markAttack(weapon); // for the weapon bar's cooldown sweep only
         const cam = state.camera;
         cam.getWorldDirection(tmpDir.current);
         const centre = body.current ? body.current.getWorldPosition(tmpBody.current) : handle.currPos;
