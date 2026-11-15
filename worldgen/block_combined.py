@@ -1995,7 +1995,8 @@ class GroundClasses:
         sig = 0.5 / GRES
         blur_all = np.stack([ndimage.gaussian_filter(rgb[..., k], 2 * sig) for k in range(3)], -1)
         masks = {name: lab == i for i, name in enumerate(GROUND_CLASSES)}
-        masks["lawn"] = masks["lawn"] & ~self.paver_px & ~self.pale  # no brick or concrete tint in grass
+        # lawn colour from grass-coloured pixels only (no brick, concrete or faded-brick fringe)
+        masks["lawn"] = masks["lawn"] & ~self.paver_px & ~self.pale & (rgb[..., 1] >= rgb[..., 0] * 0.97)
         masks["road"] = self.road_m
         for name, m in masks.items():
             w = (m & ~crown).astype(np.float32)

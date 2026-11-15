@@ -907,8 +907,11 @@ def fit_walk(poly: Polygon, min_w: float = 0.8, max_w: float = 1.6):
     s = np.linspace(0, ln.length, max(5, int(ln.length / 0.25)))
     pts = shapely.points([ln.interpolate(v).coords[0] for v in s[1:-1]])
     d = shapely.distance(poly.exterior, pts)
+    core = d[len(d) // 8 : len(d) - len(d) // 8] if len(d) >= 8 else d
+    if np.std(core) > 0.45 * np.median(core):
+        return None  # the half-width varies along the axis: a blob (bed, square pad), not a walk
     w = float(np.clip(2 * np.median(d), min_w, max_w))
-    if ln.length < 2.5 * w:
+    if ln.length < 3.0 * w:
         return None
     return ln.buffer(w / 2, cap_style=2, join_style=1, quad_segs=6), ln, w
 
