@@ -174,3 +174,58 @@ def search(
         )
     matches.sort(key=lambda m: (-m["score"], m["price_usd"] if m["price_usd"] is not None else float("inf")))
     return {"matches": matches[: max(1, limit)], "excluded": excluded, "considered": len(listings)}
+
+
+M2_PER_SQFT = 0.09290304
+
+
+def _price_per_m2(listing: dict) -> float | None:
+    price, area = listing.get("price_usd"), listing.get("area_m2")
+    return price / area if price and area else None
+
+
+def market(listings: list[dict], hard: dict) -> dict:
+    """Counts and medians over the whole index for the same hard criteria. Never returns listings.
+
+    passed_hard: every hard criterion is known and passes ("762 homes fit your budget and beds").
+    unknown_hard: none fails but at least one is not in the data (for example no price listed).
+    median_price_per_m2_usd: over passed_hard homes with both price_usd and area_m2.
+    """
+    passed, unknown = [], 0
+    for listing in listings:
+        ev = _hard_failures(listing, hard)
+        if any(e["passed"] is False for e in ev):
+            continue
+        if any(e["passed"] is None for e in ev):
+            unknown += 1
+        else:
+            passed.append(listing)
+    prices = sorted(x["price_usd"] for x in passed if x.get("price_usd"))
+    per_m2 = sorted(p for p in map(_price_per_m2, passed) if p is not None)
+
+    def median(xs: list[float]) -> float | None:
+        if not xs:
+            return None
+        mid = len(xs) // 2
+        return xs[mid] if len(xs) % 2 else (xs[mid - 1] + xs[mid]) / 2
+
+    med_price, med_m2 = median(prices), median(per_m2)
+    return {
+        "listings": len(listings),
+        "passed_hard": len(passed),
+        "unknown_hard": unknown,
+        "median_price_usd": None if med_price is None else round(med_price),
+        "median_price_per_m2_usd": None if med_m2 is None else round(med_m2),
+        "median_price_per_sqft_usd": None if med_m2 is None else round(med_m2 * M2_PER_SQFT),
+        "priced_with_area": len(per_m2),
+        "source": "listings/index.json price_usd, area_m2",
+    }
+
+
+def add_pricing(matches: list[dict], listings_by_id: dict[str, dict], median_per_m2: float | None) -> None:
+    """Per match: listed price per m2 and per sq ft, and percent above (+) or below (-) the market median."""
+    for m in matches:
+        p = _price_per_m2(listings_by_id.get(m["listing_id"], {}))
+        m["price_per_m2_usd"] = None if p is None else round(p)
+        m["price_per_sqft_usd"] = None if p is None else round(p * M2_PER_SQFT)
+        m["vs_market_pct"] = None if p is None or not median_per_m2 else round(100 * (p / median_per_m2 - 1))

@@ -355,8 +355,10 @@ def search_listings(
 ) -> str:
     """Search homes the player can walk into on this block: hard criteria filter, soft needs rank.
 
-    Only listings with a scanned interior on the player's block are searched. A field the data does not have
-    is reported as passed=null (unknown), never as failed. Also saved to /search/results.json for auditors.
+    Only listings with a scanned interior on the player's block are ranked. `market` counts the whole
+    listings index under the same hard criteria (passed_hard, median price and price per m2 / sq ft), and
+    each match has price_per_sqft_usd and vs_market_pct against that median. A field the data does not
+    have is reported as passed=null (unknown), never as failed. Saved to /search/results.json for auditors.
 
     Args:
         needs: Soft needs with weights, e.g. [{"need": "single_story", "weight": "high"}].
@@ -379,15 +381,22 @@ def search_listings(
 
     def run() -> dict:
         block = runtime.context.block_id
-        homes = [x for x in packs.listings() if x.get("block_id") == block and x.get("has_interior")]
+        every = packs.listings()
+        homes = [x for x in every if x.get("block_id") == block and x.get("has_interior")]
         if not homes:
             raise ToolError(f"no listings with a scanned interior on block {block}")
+        hard_set = {k: v for k, v in hard.items() if v is not None}
         out = search.search(
             homes,
-            {k: v for k, v in hard.items() if v is not None},
+            hard_set,
             [n.model_dump() if isinstance(n, BaseModel) else dict(n) for n in needs],
             _house_data,
             limit=max(1, min(int(limit), 5)),
+        )
+        # Whole-index context as counts and medians only: the model never sees more than the walkable matches.
+        out["market"] = search.market(every, hard_set)
+        search.add_pricing(
+            out["matches"], {x["id"]: x for x in homes}, out["market"]["median_price_per_m2_usd"]
         )
         FILES.write_json(SEARCH_PATH, out)
         return out

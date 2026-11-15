@@ -81,7 +81,12 @@ SUMMARIES: dict[str, Callable[[Any], str]] = {
     "validate_layout": lambda r: f"{r['status']}, {r['objects']} pieces, {len(r['conflicts'])} conflicts",
     "commit_placement": lambda r: f"{r['placed']} pieces placed in the world ({r['plan_id']})",
     "search_listings": lambda r: (
-        f"{len(r['matches'])} matches of {r['considered']}: "
+        (
+            f"{r['market']['passed_hard']} of {r['market']['listings']} listings fit; "
+            if r.get("market")
+            else ""
+        )
+        + f"{len(r['matches'])} matches of {r['considered']} walkable: "
         + ", ".join(f"{m['listing_id']} {m['score']}" for m in r["matches"])
     ),
     "focus_listing": lambda r: f"Beacon on {r['focused']}",

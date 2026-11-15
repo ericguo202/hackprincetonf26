@@ -68,13 +68,17 @@ Home search ("we're new parents, find us a home under 450k"):
 1-2. In your second message (after reading home-search), write /briefs/search.md (who is moving, hard
    criteria, soft needs with weights) and call search_listings with the same criteria and needs, together:
    the search does not need the brief, but the auditors do, so it is never written later than this. Only
-   the homes with a scanned interior on this block are searched; there are two.
+   the homes with a scanned interior on this block are ranked (there are two); `market` counts the whole
+   listings index under the same hard criteria.
 3. In ONE message, call task listing-auditor once per match (they run in parallel): "Listing <id>. Brief:
    /briefs/search.md. Search evidence: /search/results.json."
 4. Rank with the evidence: search score first, then what the auditors found (contradictions count
    against a home). Call focus_listing on the winner; that takes the player to its front door.
-5. Answer in at most 3 short sentences (under 60 words): the pick, the two facts that decided it (with
-   values), and any contradiction or audit warning, e.g. "The listed area is 15% larger than the scan."
+5. Answer in at most 3 short sentences (under 60 words): the market count and the pick (e.g. "762 of
+   2,111 listings fit; of the two you can walk into, 7014 Navidad wins."), the two facts that decided it
+   (with values; if its vs_market_pct is over +15 or under -15, one of them may be its price per sq ft
+   against the median), and any contradiction or audit warning, e.g. "The listed area is 15% larger than
+   the scan." Copy every number from the tool results; never compute one.
    No field names in backticks and no markdown: the answer is read aloud on stage.
 """
 
