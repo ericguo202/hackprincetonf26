@@ -236,6 +236,7 @@ GROUND_TEX = {
     "lawn": ("leafy_grass", 2.0, 1.0),
     "concrete": ("brushed_concrete", 2.0, 1.0),
     "beds": ("brown_mud_leaves_01", 1.3, 0.8),
+    "pavers": ("concrete_pavement", 1.6, 1.0),
     "road": ("brushed_concrete", 3.0, 0.9),
 }
 
@@ -547,7 +548,7 @@ def build(args) -> dict:
         cp["concrete"] = areal(cp["concrete"].union(walks))
         rest = near_land
         areas = {}
-        for name in ("concrete", "beds", "photo"):
+        for name in ("concrete", "pavers", "beds", "photo"):
             reg = areal(cp[name].intersection(rest))
             rest = areal(rest.difference(reg))
             cp[name] = reg
@@ -619,7 +620,12 @@ def build(args) -> dict:
 
     # ---- far zone: 3D Cities mesh
     log("far zone mesh")
-    far_nodes, far_tris = far_zone(tiles, surf, P, mesh_fp, proc_fp, mats, images)
+    tops = []  # mesh houses: roof top above ground from the DSM (85th percentile inside the footprint)
+    for poly, _ in mesh_b:
+        sel = contains_xy(poly, X, Z)
+        if sel.sum() > 8:
+            tops.append((poly, float(np.percentile(nd[sel], 85))))
+    far_nodes, far_tris = far_zone(tiles, surf, P, mesh_fp, proc_fp, mats, images, tops=tops)
     summary["far_mesh_triangles"] = far_tris
 
     # ---- trees (procedural region)
@@ -854,7 +860,9 @@ def emit_building(b: Building, bufs, wall_tex_m, ground, road_lines, ortho) -> N
     gable_ends(bufs["wall_siding"], b, y0, 2.0, gable)
 
 
-def far_zone(tiles, surf, P, mesh_fp, proc_fp, mats, images, keep_crowns=False) -> tuple[list[Node], int]:
+def far_zone(
+    tiles, surf, P, mesh_fp, proc_fp, mats, images, keep_crowns=False, tops=()
+) -> tuple[list[Node], int]:
     """3D Cities faces outside the procedural region. Mesh buildings keep all their faces; everything
     else (crowns) only if no vertex is inside the procedural region and it is not a low skirt."""
     shapely.prepare(P)
@@ -876,8 +884,16 @@ def far_zone(tiles, surf, P, mesh_fp, proc_fp, mats, images, keep_crowns=False) 
         keep &= ~(~bld & (c[:, 1] < 0.3))  # mesh ground: replaced by the ortho ground layer
         # tree crowns hanging over mesh houses (green faces above 2 m): gone, model trees stand there
         col = piece_colours(p, np.arange(len(c)), np.full((len(c), 3), 1 / 3))
-        green = (col[:, 1] > col[:, 0] + 0.015) & (col[:, 1] > col[:, 2] + 0.03)
+        green = (col[:, 1] > col[:, 0] - 0.01) & (col[:, 1] > col[:, 2] + 0.04)  # olive crowns too
         keep &= ~(bld & green & (hag.min(axis=1) > 2.0))
+        # and anything above the house's DSM roof, or hanging outside its eaves above 2.2 m
+        hc = hag.mean(axis=1)
+        for poly, top in tops:
+            near = contains_xy(poly.buffer(1.5), c[:, 0], c[:, 2])
+            if not near.any():
+                continue
+            out_eave = ~contains_xy(poly.buffer(0.6), c[:, 0], c[:, 2])
+            keep &= ~(near & ((hc > top + 0.4) | (out_eave & (hc > 2.2))))
         sp = bp.submesh(p, keep, p.name)
         if sp is None:
             continue
@@ -1209,7 +1225,7 @@ def fetch_cars(half: float = 160.0) -> dict:
 # ---------------------------------------------------------------- ground classes and cars
 
 GRES = 0.2  # classification raster (m)
-GROUND_CLASSES = ("lawn", "concrete", "beds", "photo")
+GROUND_CLASSES = ("lawn", "concrete", "beds", "photo", "pavers")
 
 
 def car_polys(sun_az_deg: float) -> list[Polygon]:
@@ -1349,7 +1365,7 @@ class GroundClasses:
         sat = (mx - mn) / np.maximum(mx, 1)
         lum = rgb.mean(-1)
         green = ch[..., 1] - np.maximum(ch[..., 0], ch[..., 2])
-        score = np.zeros((4, n, n), np.float32)
+        score = np.zeros((len(GROUND_CLASSES), n, n), np.float32)
         score[0] = np.clip((green + 0.002) / 0.02, 0, 1) + 0.05  # lawn (default)
         # concrete: grey, also in tree shadow (dark but still unsaturated)
         score[1] = np.clip((0.18 - sat) / 0.06, 0, 1) * np.clip((lum - 22) / 25, 0, 1) * 1.3
@@ -1359,13 +1375,20 @@ class GroundClasses:
         score[3] = (
             np.clip((ch[..., 2] - ch[..., 0] - 0.05) / 0.04, 0, 1) * np.clip((sat - 0.3) / 0.1, 0, 1) * 2
         )
+        # pavers: the red brick walks and patios (bright, red, saturated); beds are darker browns
+        score[4] = (
+            np.clip((ch[..., 0] - 0.37) / 0.025, 0, 1)
+            * np.clip((lum - 85) / 25, 0, 1)
+            * np.clip((sat - 0.18) / 0.08, 0, 1)
+            * 1.6
+        )
         score = np.stack([ndimage.gaussian_filter(sc, 1.5) for sc in score])
         lab = score.argmax(0).astype(np.int8)
         self.road_m = contains_xy(road, Xc, Zc)
         self.built_m = contains_xy(built, Xc, Zc)
         lab[self.road_m | self.built_m] = -1
         # despeckle: small blobs take the label of their surroundings
-        for k in range(4):
+        for k in range(len(GROUND_CLASSES)):
             comp, nc = ndimage.label(lab == k)
             if nc == 0:
                 continue
