@@ -116,7 +116,7 @@ def _stations(line: LineString, step: float = 1.0):
 
 
 def find_sidewalks(
-    recs, road, lab_vis, half: float, res: float, zone, names
+    recs, road, lab_vis, half: float, res: float, zone, names, width_lab=None
 ) -> tuple[list[dict], list[dict]]:
     """Per named street and side: fit one setback (from the curb) and width from the ortho classes
     (concrete band with non-concrete behind it), then mark where it exists (visible evidence over
@@ -142,12 +142,17 @@ def find_sidewalks(
             Q = P[:, None, :] + side * (rec["width"] / 2 + d)[None, :, None] * N[:, None, :]
             C = sample(conc, Q).astype(float)
             V = sample(vis, Q).astype(float)
+            if width_lab is not None:
+                CW = sample(width_lab == 1, Q).astype(float)
+                VW = sample(width_lab >= 0, Q).astype(float)
+            else:
+                CW, VW = C, V
             inzone = contains_xy(
                 zone,
                 P[:, 0] + side * N[:, 0] * (rec["width"] / 2 + 2),
                 P[:, 1] + side * N[:, 1] * (rec["width"] / 2 + 2),
             )
-            groups.setdefault((rec["name"], id(rec), side), []).append((rec, P, N, C, V, inzone))
+            groups.setdefault((rec["name"], id(rec), side), []).append((rec, P, N, C, V, inzone, CW, VW))
     strips, report = [], []
     k = np.ones(7)
     for (name, _wid, side), items in groups.items():
@@ -158,7 +163,7 @@ def find_sidewalks(
                 if i0 + w + 3 >= len(d):
                     continue
                 score = 0.0
-                for _rec, _P, _N, C, V, inz in items:
+                for _rec, _P, _N, C, V, inz, _cw, _vw in items:
                     cs = ndimage.convolve1d(C, k, axis=0, mode="nearest")
                     vs = ndimage.convolve1d(V, k, axis=0, mode="nearest")
                     f = cs / np.maximum(vs, 1e-6)
@@ -173,18 +178,18 @@ def find_sidewalks(
         score, i0, w = best if best else (0, 0, 6)
         # measure the real band: per station where the walk is clear, the run of concrete around i0
         starts, widths = [], []
-        for _rec, _P, _N, C, V, inz in items:
-            f = ndimage.convolve1d(C, k, axis=0, mode="nearest") / np.maximum(
-                ndimage.convolve1d(V, k, axis=0, mode="nearest"), 1e-6
+        for _rec, _P, _N, _C, _V, inz, CW, VW in items:
+            f = ndimage.convolve1d(CW, k, axis=0, mode="nearest") / np.maximum(
+                ndimage.convolve1d(VW, k, axis=0, mode="nearest"), 1e-6
             )
             for row in f[inz]:
                 if row[i0 + w // 2] < 0.6:
                     continue
                 a_ = i0 + w // 2
-                while a_ > 0 and row[a_ - 1] >= 0.5:
+                while a_ > 0 and row[a_ - 1] >= 0.65:  # 0.65: the blurred band edges do not count
                     a_ -= 1
                 b_ = i0 + w // 2
-                while b_ < len(row) - 1 and row[b_ + 1] >= 0.5:
+                while b_ < len(row) - 1 and row[b_ + 1] >= 0.65:
                     b_ += 1
                 if 4 <= b_ - a_ + 1 <= 10:
                     starts.append(a_)
@@ -207,7 +212,7 @@ def find_sidewalks(
                 }
             )
             continue
-        for rec, P, N, C, V, inz in items:
+        for rec, P, N, C, V, inz, _cw, _vw in items:
             # setback per station (piecewise: blocks differ), smoothed over +-15 m
             f = ndimage.convolve1d(C, k, axis=0, mode="nearest") / np.maximum(
                 ndimage.convolve1d(V, k, axis=0, mode="nearest"), 1e-6

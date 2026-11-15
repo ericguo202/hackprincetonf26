@@ -942,13 +942,51 @@ def _wall_contact(wp: Polygon, target, min_len: float = 2.2):
     return best
 
 
+def _hidden_drive(wp: Polygon, road, lab_vis, allowed, width: float = 5.0):
+    """Fallback for a house the ortho shows no driveway for because shade or a crown hides it: on the
+    wall facing the street, the 5 m wide strip to the curb that is least lawn-like; accepted only if
+    the ortho shows almost no lawn in it (hidden or paved). Returns (polygon, ((x, z), width))."""
+    from shapely.geometry.polygon import orient
+
+    ring = np.asarray(orient(wp, 1.0).exterior.coords)
+    best = None
+    for i in range(len(ring) - 1):
+        a, b = ring[i], ring[i + 1]
+        L = float(np.hypot(*(b - a)))
+        if L < width + 0.6:
+            continue
+        t = (b - a) / L
+        nrm = np.array([t[1], -t[0]])
+        mid = (a + b) / 2
+        ray = LineString([mid + nrm * 0.1, mid + nrm * 30.0])
+        hit = ray.intersection(road)
+        if hit.is_empty:
+            continue
+        dist = min(Point(mid).distance(g) for g in getattr(hit, "geoms", [hit]))
+        if dist > 25.0:
+            continue
+        for s0 in np.arange(0.3, L - width - 0.3 + 1e-6, 0.5):
+            p0 = a + t * s0
+            rect = Polygon([p0, p0 + t * width, p0 + t * width + nrm * dist, p0 + nrm * dist])
+            lawn, vis = _frac_lawn(lab_vis, rect, 0.4)
+            if lawn < 0.2 and (best is None or lawn < best[0]):
+                best = (lawn, rect.intersection(allowed.buffer(0.05)), (p0 + t * width / 2, width))
+    if best is None or best[1].is_empty:
+        return None
+    return best[1], best[2]
+
+
 def trace_hard(gc, road, recs, mask, parcels, buildings, skip_zone, summary) -> dict:
     """Paving traced from the ortho before the facades are built: fitted sidewalk strips, concrete and
     red-brick paver polygons (curves kept), driveways = concrete reaching the curb, and per house where
     a driveway meets a wall (garage door) and where a walk meets a wall (front door)."""
     lab_vis = gc.lab_visible
     names = {r["name"] for r in recs if r["name"] and r["line"].intersects(mask)}
-    strips, report = bh.find_sidewalks(recs, road, lab_vis, HALF, GRES, mask, names)
+    # sidewalk presence and setback from the concrete class; the width from bright pavement only (the
+    # class also takes the blurred edge of the walk); shade stays "not visible"
+    shade = (gc.rgb.mean(-1) < 70) & (lab_vis >= 0)
+    lab_sw = np.where(shade, -2, np.where(lab_vis >= 0, np.where(gc.pale, 1, 0), lab_vis)).astype(np.int8)
+    strips, report = bh.find_sidewalks(recs, road, lab_vis, HALF, GRES, mask, names, width_lab=lab_sw)
     summary["sidewalks"] = report
     side_u = areal(unary_union([s_["poly"] for s_ in strips])) if strips else Polygon()
     built = unary_union([b.poly for b in buildings])
@@ -970,7 +1008,9 @@ def trace_hard(gc, road, recs, mask, parcels, buildings, skip_zone, summary) -> 
             q = q.simplify(0.45).buffer(0.25, join_style=2).buffer(-0.25, join_style=2)
             drives.append(q if not q.is_empty else p)
         else:
-            walks.append(p)
+            # pale slivers along the fitted sidewalk are its blurred edge, not separate walks
+            q = p.difference(side_u.buffer(0.6)).buffer(-0.3, join_style=2).buffer(0.3, join_style=2)
+            walks.extend(g for g in polys_of(q) if g.area >= 1.0)
     # walks and pavers only where they connect to something (a wall, a drive, a sidewalk, each other):
     # isolated red/pale blobs in back yards are dirt, mulch or play sets, not paving
     anchor = unary_union([side_u, unary_union(drives) if drives else Polygon(), built.buffer(0.6)])
@@ -984,7 +1024,7 @@ def trace_hard(gc, road, recs, mask, parcels, buildings, skip_zone, summary) -> 
                 changed = True
     pav = areal(unary_union([pieces[i] for i in keep_ids if i >= len(walks)])) if pieces else Polygon()
     walks = [pieces[i] for i in sorted(keep_ids) if i < len(walks)]
-    hints, n_gar, n_door, bridges = {}, 0, 0, []
+    hints, n_gar, n_door, bridges, n_fb = {}, 0, 0, [], 0
     walk_u = unary_union(walks + [pav]) if (walks or not pav.is_empty) else Polygon()
     for b in buildings:
         if not b.primary or not mask.contains(b.poly.centroid) or skip_zone.intersects(b.poly):
@@ -1008,6 +1048,12 @@ def trace_hard(gc, road, recs, mask, parcels, buildings, skip_zone, summary) -> 
                     if lawn < 0.35:  # bridge only across hidden or paved ortho, never across lawn
                         bridges.append(br)
                         h["garage_at"] = (np.array(pw.coords[0]), 4.9)
+        if "garage_at" not in h and b.kind != "flat":
+            fb = _hidden_drive(wp, road, lab_vis, allowed_poly)
+            if fb is not None:
+                bridges.append(fb[0])
+                h["garage_at"] = fb[1]
+                n_fb += 1
         if "garage_at" in h:
             n_gar += 1
         if b.tag:
@@ -1026,7 +1072,8 @@ def trace_hard(gc, road, recs, mask, parcels, buildings, skip_zone, summary) -> 
         "driveway_bridges": len(bridges),
         "concrete_walk_pieces": len(walks),
         "paver_m2": round(pav.area),
-        "garage_doors_at_traced_drives": n_gar,
+        "garage_doors_at_traced_drives": n_gar - n_fb,
+        "driveways_heuristic_under_shade": n_fb,
         "front_doors_at_traced_walks": n_door,
     }
     log(f"  traced {summary['traced']}")
