@@ -7,7 +7,7 @@ by hand in `agent/prompts.py`: add a new furnishing skill to the concierge's lis
 | --- | --- |
 | `furnish-living-room` | Living room for everyday life (first: it is in the demo) |
 | `furnish-for-play` | Nerf-war arena or playroom (in the demo) |
-| `furnish-nursery` | A baby's room |
+| `furnish-nursery` | A baby's room: crib, changing table (furniture v4 and later) |
 | `furnish-bedroom` | Adults' bedroom: primary or guest |
 | `furnish-home-office` | Home office in a spare bedroom |
 | `furnish-dining-room` | Dining room for family dinners |

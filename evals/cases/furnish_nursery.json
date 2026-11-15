@@ -1,0 +1,19 @@
+{
+  "id": "furnish_nursery",
+  "description": "furnish-nursery in the hero house (needs furniture v4): the small bedroom next to the primary (r9, 9.8 m2) gets a crib off the window and a changing table beside it. changing_table is required, not optional as first planned: beside the crib it always fits r9, and this case is the proof that the new category is searched and placed",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Set up a nursery for the baby",
+      "expect": {
+        "max_words": 45,
+        "committed": true,
+        "room_label": "bedroom",
+        "categories_all": ["crib", "changing_table"],
+        "categories_any": ["rocking_chair", "dresser", "toy_storage", "rug"],
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}
