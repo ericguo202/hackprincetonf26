@@ -5,6 +5,11 @@ import { useStore } from "../store";
 import { Broadcasts } from "./Broadcasts";
 import { useBuild } from "../world/buildState";
 import { TOUR_AVAILABLE, useTour } from "./tourSdk";
+import { DEV_MODE_TOGGLE_ON } from "../world/devFlags";
+
+/** Toggles foam mode for the room, like the HUD button. In a SOLO dev build F is the local override
+ *  of world/DevModeToggle.tsx instead (there is no server to ask). */
+export const FOAM_KEY = "KeyF";
 
 export function Hud() {
   const mode = useStore((s) => s.mode);
@@ -19,6 +24,11 @@ export function Hud() {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+      if (e.code === FOAM_KEY && !DEV_MODE_TOGGLE_ON) {
+        if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+        setMode(useStore.getState().mode === "foam" ? "explore" : "foam");
+        return;
+      }
       if (e.code !== "Tab") return;
       e.preventDefault();
       setBoard((v) => !v);
@@ -36,6 +46,7 @@ export function Hud() {
         <button
           type="button"
           className={mode === "foam" ? "on" : ""}
+          title="Foam fight on or off for everyone in the room (F)"
           onClick={() => setMode(mode === "foam" ? "explore" : "foam")}
         >
           {mode === "foam" ? "Foam on" : "Foam fight"}
@@ -63,7 +74,7 @@ export function Hud() {
           {mine ? `${mine.score} pts · ${mine.hp} hp` : me.zone === "block" ? "On the block" : me.zone}
         </span>
         <span className="hud-keys">
-          T concierge · Esc play · Tab scores{inHouse ? " · G furnish" : ""}
+          T concierge · F foam · Esc play · Tab scores{inHouse ? " · G furnish" : ""}
           {hasHomes ? " · H homes" : ""}
         </span>
       </div>
