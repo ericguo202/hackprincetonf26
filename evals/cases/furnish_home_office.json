@@ -1,0 +1,19 @@
+{
+  "id": "furnish_home_office",
+  "description": "furnish-home-office in the hero house: no room is labelled office, so the scout takes the largest spare bedroom (r8, 11.5 m2); desk on a wall, chair facing it",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Set up a home office in the spare bedroom",
+      "expect": {
+        "max_words": 45,
+        "committed": true,
+        "room_label": "bedroom",
+        "categories_all": ["desk", "office_chair"],
+        "categories_any": ["bookshelf", "table_lamp", "plant"],
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}

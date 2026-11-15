@@ -9,5 +9,6 @@ by hand in `agent/prompts.py`: add a new furnishing skill to the concierge's lis
 | `furnish-for-play` | Nerf-war arena or playroom (in the demo) |
 | `furnish-nursery` | A baby's room |
 | `furnish-bedroom` | Adults' bedroom: primary or guest |
+| `furnish-home-office` | Home office in a spare bedroom |
 | `home-search` | Home search criteria and the infant profile |
 | `listing-audit` | The auditors' checks |
