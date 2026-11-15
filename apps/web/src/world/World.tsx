@@ -40,7 +40,7 @@ import {
 import { usePack } from "./usePack";
 import { useFrontDoors } from "./frontDoorState";
 import { bodyCentreAt } from "./landing";
-import { SUN_DIR_BLOCK, sunPosition } from "./sun";
+import { skyFor } from "./sun";
 import { SunLight } from "./SunLight";
 import { DevPlan, DevProbe } from "./DevPlan";
 import { DevModeToggle } from "./DevModeToggle";
@@ -60,8 +60,6 @@ import { FIXTURE_RAW } from "./fixtures";
 import { leavesByKeyOnly } from "./houseGround";
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
-/** Sky's sun, far out along the baked sun direction (it only reads the direction). */
-const SKY_SUN = sunPosition([0, 0, 0], SUN_DIR_BLOCK, 100);
 /** A floor point (spawn, door landing, dev room) to the body centre: landing.ts. */
 const lift = bodyCentreAt;
 
@@ -82,8 +80,6 @@ export function World() {
   return (
     <>
       <Canvas shadows camera={{ position: [0, 3.4, 9], fov: 50 }} frameloop={tourOpen ? "never" : "always"}>
-        {/* Sky and live sun both from the baked sun (sun.ts, Lane A HANDOFF 22:20). */}
-        <Sky sunPosition={SKY_SUN} />
         <ambientLight intensity={0.45} />
         {/* Fixed 1/60 s step with interpolation (the defaults) suits 60-144 Hz displays;
             the camera must follow the interpolated body, see CameraArm. */}
@@ -218,9 +214,12 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
   );
 
   const inHouse = zone !== "block" && pack.manifest.houses.some((h) => h.listing_id === zone);
+  // Sky and live sun both from the baked sun (sun.ts, Lane A HANDOFF 22:20); the sky on the block only.
+  const sky = skyFor(inHouse);
   return (
     <>
       {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
+      {sky ? <Sky {...sky} /> : null}
       <SunLight headingDeg={inHouse ? (pack.doors.find((d) => d.listing_id === zone)?.world.heading_deg ?? 0) : 0} />
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}

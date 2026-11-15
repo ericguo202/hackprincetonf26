@@ -123,3 +123,34 @@ describe("snapToTexel (shadow box on the texel grid)", () => {
     expect(snapToTexel([1, 2, 3], basis, T, out)).toBe(out);
   });
 });
+
+describe("block sky", () => {
+  it("is drawn on the block and never inside a house", async () => {
+    const { BLOCK_SKY, skyFor } = await import("./sun");
+    expect(skyFor(false)).toBe(BLOCK_SKY);
+    expect(skyFor(true)).toBeNull();
+  });
+
+  it("uses the capture sun direction, with a clear (not hazy) atmosphere", async () => {
+    const { BLOCK_SKY } = await import("./sun");
+    const [x, y, z] = BLOCK_SKY.sunPosition;
+    const len = Math.hypot(x, y, z);
+    expect([x / len, y / len, z / len].map((v) => +v.toFixed(3))).toEqual(
+      SUN_DIR_BLOCK.map((v) => +(v / Math.hypot(...SUN_DIR_BLOCK)).toFixed(3)),
+    );
+    expect(BLOCK_SKY.turbidity).toBeLessThanOrEqual(4);
+    expect(BLOCK_SKY.rayleigh).toBeLessThanOrEqual(2);
+  });
+
+  it("encloses the block and stays inside the camera far plane from anywhere on it", async () => {
+    const { BLOCK_SKY } = await import("./sun");
+    const FAR = 1000; // R3F default camera far; World's Canvas does not set one
+    const BLOCK_HALF = 165; // block collision.glb is about +-163 m in x and z
+    const half = BLOCK_SKY.distance / 2;
+    expect(half).toBeGreaterThan(BLOCK_HALF + 20);
+    // Farthest sky-box corner from a camera at the block's corner, 20 m up.
+    const corner = Math.hypot(half + BLOCK_HALF, half + BLOCK_HALF, half + 20);
+    expect(corner).toBeLessThan(FAR);
+    expect(FAR).toBeGreaterThanOrEqual(100); // Lane A: far >= 100 m
+  });
+});

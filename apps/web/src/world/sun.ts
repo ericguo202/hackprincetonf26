@@ -87,3 +87,25 @@ export function snapToTexel(point: Vec3, basis: LightBasis, texel: number, out: 
   out[2] = sx * x[2] + sy * y[2] + pz * z[2];
   return out;
 }
+
+/**
+ * The block's sky (drei <Sky>, three's Preetham model), block zone only: houses
+ * get none (v6 houses bring their own backdrop dome). Sun from the capture sun
+ * (Lane A HANDOFF 22:20); low turbidity and rayleigh read as a clear Texas
+ * morning, not an orange haze. `distance` is the sky box's size: 600 m encloses
+ * the block (collision about +-163 m) and every corner stays inside the
+ * default camera far (1000 m) from anywhere on it (sun.test.ts).
+ */
+export const BLOCK_SKY = {
+  sunPosition: sunPosition([0, 0, 0], SUN_DIR_BLOCK, 100),
+  distance: 600,
+  turbidity: 2,
+  rayleigh: 1,
+  mieCoefficient: 0.003,
+  mieDirectionalG: 0.7,
+} as const;
+
+/** The sky to draw for a zone: the block's on the block, none inside a house. */
+export function skyFor(inHouse: boolean): typeof BLOCK_SKY | null {
+  return inHouse ? null : BLOCK_SKY;
+}
