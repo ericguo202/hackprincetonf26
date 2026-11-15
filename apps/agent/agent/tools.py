@@ -770,7 +770,7 @@ async def commit_placement(room_id: str, runtime: ToolRuntime[AgentContext]) -> 
                 "status": "placed",
                 "conflicts": [],
             }
-        result = await game_api.post_plan(ctx.block_id, ctx.player_id, sent)
+        result = await game_api.post_plan(ctx.block_id, ctx.player_id, sent, room_label=room.get("label"))
         plan["status"] = "placed"
         save_plan(plan)
         return {"plan_id": plan["plan_id"], "placed": result.get("placed", len(sent["objects"]))}

@@ -56,8 +56,8 @@ def files(monkeypatch):
 def game(monkeypatch):
     calls = []
 
-    async def post_plan(block_id, player_id, plan):
-        calls.append(("plan", block_id, player_id, plan))
+    async def post_plan(block_id, player_id, plan, room_label=None):
+        calls.append(("plan", block_id, player_id, plan, room_label))
         return {"placed": len(plan["objects"])}
 
     async def post_focus(block_id, player_id, listing_id):
@@ -249,8 +249,8 @@ async def test_commit_refuses_conflicts_then_places(files, game):
     call(tools.remove_asset, room_id=ROOM, instance_id="o3")
     out = await acall(tools.commit_placement, room_id=ROOM, runtime=RT)
     assert out["placed"] == 2
-    kind, block, player, sent = game[0]
-    assert (kind, block, player) == ("plan", "hou_navidad_01", "p1")
+    kind, block, player, sent, room_label = game[0]
+    assert (kind, block, player, room_label) == ("plan", "hou_navidad_01", "p1", "living_room")
     assert sent["status"] == "placed" and sent["conflicts"] == [] and sent["listing_id"] == "hou_000123"
     assert files.read_json(f"/plans/{ROOM}.json")["status"] == "placed"
 

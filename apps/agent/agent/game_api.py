@@ -15,13 +15,14 @@ def _client() -> httpx.AsyncClient:
     )
 
 
-async def post_plan(block_id: str, player_id: str, plan: dict) -> dict:
+async def post_plan(block_id: str, player_id: str, plan: dict, room_label: str | None = None) -> dict:
+    """room_label (contracts v2.4.2, optional) names the room in the game's furnish toast."""
     if plan.get("conflicts"):
         raise ValueError("refusing to commit a plan with conflicts")
     async with _client() as c:
         r = await c.post(
             f"/internal/rooms/{block_id}/houses/{plan['listing_id']}/plan",
-            json={"player_id": player_id, "plan": plan},
+            json={"player_id": player_id, "plan": plan, "room_label": room_label},
         )
         r.raise_for_status()
         return r.json()
