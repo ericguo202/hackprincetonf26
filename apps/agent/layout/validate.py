@@ -26,6 +26,18 @@ MIN_AREA_M2 = 1e-3
 FLAT = {"rug", "play_mat"}
 OK_IN_FRONT_CLEARANCE = FLAT | {"coffee_table", "ottoman"}
 WINDOW_MAX_H_M = 1.0
+# Never under a window at any height (AGENTS.md section 10, furnish-nursery): window-covering cords and
+# falls are a strangulation and fall risk for an infant (CPSC window-covering cord guidance).
+NOT_UNDER_WINDOW = {"crib"}
+
+
+def covers_window(asset: dict) -> bool:
+    """Whether this piece may not stand in a window's keep-clear strip."""
+    if asset["category"] in NOT_UNDER_WINDOW:
+        return True
+    # top edge above the floor: a wall-mounted TV (mount_y_m) covers a window even though short
+    return asset["size_m"]["h"] + float(asset.get("mount_y_m") or 0.0) > WINDOW_MAX_H_M
+
 
 AssetLookup = Mapping[str, dict] | Callable[[str], dict | None]
 
@@ -73,16 +85,15 @@ def object_conflicts(
                 out.append(_c(iid, "blocks_opening", f"{asset['name']} is in the swing of the {where}"))
             elif (
                 o.type == "window"
-                and asset["size_m"]["h"] > WINDOW_MAX_H_M
+                and covers_window(asset)
                 and fp.intersection(o.keep_clear).area > MIN_AREA_M2
             ):
-                out.append(
-                    _c(
-                        iid,
-                        "blocks_opening",
-                        f"{asset['name']} ({asset['size_m']['h']:.2f} m tall) covers a window",
-                    )
+                why = (
+                    f"{asset['name']} must not stand under a window"
+                    if asset["category"] in NOT_UNDER_WINDOW
+                    else f"{asset['name']} ({asset['size_m']['h']:.2f} m tall) covers a window"
                 )
+                out.append(_c(iid, "blocks_opening", why))
 
     if not stands_on_others(asset):
         for other, other_asset in others:

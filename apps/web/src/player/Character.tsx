@@ -28,7 +28,7 @@ type Props = {
   /** Optional: true while the body is moving, so shoot uses the running variant. */
   moving?: boolean;
   /** Which prop the character holds. Remote players: always the blaster for now (no wire field). */
-  weapon?: Weapon;
+  weapon?: Weapon | null;
   url?: string;
   /** Rendered while the model is checked or loading, and if it is missing or broken. */
   fallback?: ReactNode;
@@ -55,7 +55,7 @@ function CharacterModel({
   url: string;
   animState: AnimState;
   moving: boolean;
-  weapon: Weapon;
+  weapon: Weapon | null;
 }) {
   const gltf = usePackGLTF(url);
   const rig = useMemo(() => buildRig(gltf.scene, gltf.animations), [gltf]);

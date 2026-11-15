@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { sendAgentMessage } from "../net/agent";
 import { useStore } from "../store";
+import { ListingCard } from "./ListingCard";
 import { startLooking, stopLooking, useLooking } from "./pointerLock";
 
 const SUGGESTIONS = [
@@ -16,25 +17,6 @@ const SUGGESTIONS = [
     text: "We're new parents with an infant. Find us a home to buy under 450k.",
   },
 ];
-
-function fmt(value: unknown): string {
-  if (typeof value === "number") {
-    if (value >= 1000 && Number.isInteger(value)) return value.toLocaleString("en-US");
-    return String(value);
-  }
-  if (typeof value === "boolean") return value ? "yes" : "no";
-  if (value == null) return "n/a";
-  if (typeof value === "object") {
-    const vals = Object.values(value as Record<string, unknown>);
-    if (vals.length === 1) return fmt(vals[0]);
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return "complex";
-    }
-  }
-  return String(value);
-}
 
 function inField(el: Element | null): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
@@ -198,35 +180,19 @@ export function ChatPanel() {
           m.text ? (
             <p key={i} className={m.role}>
               {m.text}
+              {m.trace ? (
+                <a className="trace-link" href={m.trace} target="_blank" rel="noreferrer">
+                  View LangSmith trace
+                </a>
+              ) : null}
             </p>
           ) : null,
         )}
         {waiting ? <p className="hint thinking">Thinking…</p> : null}
 
-        {listings.map((m) => {
-          const audit = audits[m.listing_id];
-          return (
-            <article key={m.listing_id} className="listing-card">
-              <h3>
-                {m.listing_id} <span>{Math.round(m.score * 100)} fit</span>
-              </h3>
-              <ul>
-                {m.evidence.map((e) => (
-                  <li key={e.criterion} data-ok={e.passed}>
-                    {e.criterion}: {fmt(e.value)}
-                  </li>
-                ))}
-              </ul>
-              {audit?.findings
-                .filter((f) => f.severity !== "info")
-                .map((f) => (
-                  <p key={f.check} className={`finding ${f.severity}`}>
-                    {f.check}: listed {fmt(f.listed)} vs scan {fmt(f.observed)}
-                  </p>
-                ))}
-            </article>
-          );
-        })}
+        {listings.map((m, i) => (
+          <ListingCard key={m.listing_id} match={m} rank={i + 1} audit={audits[m.listing_id]} />
+        ))}
       </div>
 
       {suggestions}

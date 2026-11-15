@@ -13,6 +13,7 @@ Use this for any living-room request that is not about play ("for a family that 
 | Order | Category | Priority | Rule (`propose_poses`) | relative_to | Notes |
 |---|---|---|---|---|---|
 | 1 | `tv_stand` | 1 | `against_wall` | none | Prefer the longest free wall that is not `under_window` (glare). |
+| 1b | `tv` | 1 | `center` | the TV stand | A TV with `placement: on_surface` (e.g. `tv_team_stand`) sits on top of the stand; it must be no wider than the stand. Only when the user asks for a mounted TV: a `placement: wall` TV (`tv_team_wall`) goes `against_wall` *instead of* the stand (their footprints would overlap), is lifted to its `mount_y_m` automatically, and the sofa faces it. |
 | 2 | `sofa` (or `sectional` in a room over 30 m2) | 1 | `facing` | the TV stand | `facing` keeps it 2.2 to 3.6 m from the TV and backs it to a wall when it can. |
 | 3 | `coffee_table` | 1 | `center` | the sofa | `center` with relative_to puts it 0.45 m in front of the seat. |
 | 4 | `rug` | 2 | `center` | none | Under the seating area; rugs never block anything. |
@@ -34,6 +35,9 @@ Small room (under 15 m2): skip priority 3 pieces and the armchair.
 
 - No poses: read the `note`. Try the next rule in the table, a different `relative_to`, or ask the curator
   for a smaller piece (in an edit, search is not available to the planner: drop it and say so).
+- Edit and the asked-for spot is taken ("move the couch to the other wall", "put the TV on the window
+  wall"): place it on a `blocked` pose, then put the displaced pieces back (the TV stand `facing` the
+  sofa, or the sofa `facing` the TV) and re-place pieces that now conflict, by the table's rules.
 - After 3 validate-and-fix rounds, drop the lowest-priority piece in a conflict and report it in `dropped`.
 
 ## Regenerate ("try another layout", "different furniture")

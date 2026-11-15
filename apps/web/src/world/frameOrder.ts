@@ -16,5 +16,8 @@ export const REMOTE_PRIORITY = -20;
 /** Camera arm: reads the interpolated body transform written by the step above. */
 export const CAMERA_PRIORITY = -10;
 
+/** Sun: follows the player's body after the physics step, so the shadow box is centred where they stand. */
+export const SUN_PRIORITY = -5;
+
 /** Blaster: aims along the camera, so it runs after the camera arm has placed it this frame. */
 export const SHOT_PRIORITY = 0;

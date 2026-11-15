@@ -48,13 +48,18 @@ class Dataset(Enum):
     PolyHaven = "PolyHaven"
     KayKit = "KayKit"
     Kenney = "Kenney"
+    FurniMesh = "FurniMesh"
+    Team = "Team"
 
 
 class Source(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    dataset: Dataset
+    dataset: Annotated[
+        Dataset,
+        Field(description="Team: made by the team (procedural, e.g. the flat-screen TVs), license CC0"),
+    ]
     item_id: str | None = None
     product_name: Annotated[
         str | None,
@@ -110,6 +115,13 @@ class Asset(BaseModel):
         Field(description="Default placement; wall, corner, center and beside match propose_poses rules"),
     ]
     clearance_m: ClearanceM
+    mount_y_m: Annotated[
+        float | None,
+        Field(
+            description="Wall-mounted assets only (e.g. a wall TV): height of the mesh origin above the floor; a placement's y is floor_y + mount_y_m",
+            ge=0.0,
+        ),
+    ] = None
     cover: Annotated[
         Cover, Field(description="full: taller than 1.2 m; half: 0.5 to 1.2 m; none: below 0.5 m")
     ]

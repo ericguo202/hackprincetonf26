@@ -81,12 +81,25 @@ SUMMARIES: dict[str, Callable[[Any], str]] = {
     "validate_layout": lambda r: f"{r['status']}, {r['objects']} pieces, {len(r['conflicts'])} conflicts",
     "commit_placement": lambda r: f"{r['placed']} pieces placed in the world ({r['plan_id']})",
     "search_listings": lambda r: (
-        f"{len(r['matches'])} matches of {r['considered']}: "
+        (
+            f"{r['market']['passed_hard']} of {r['market']['listings']} listings fit; "
+            if r.get("market")
+            else ""
+        )
+        + f"{len(r['matches'])} matches of {r['considered']} walkable: "
         + ", ".join(f"{m['listing_id']} {m['score']}" for m in r["matches"])
     ),
     "focus_listing": lambda r: f"Beacon on {r['focused']}",
     "get_player_context": lambda r: f"in {r.get('in_house') or 'the street'}",
 }
+
+
+def strip_say(audit: dict) -> dict:
+    """get_audit's result without the model-only `say` sentences: the event keeps audit.schema.json."""
+    return {
+        **audit,
+        "findings": [{k: v for k, v in f.items() if k != "say"} for f in audit.get("findings", [])],
+    }
 
 
 def summarize(tool: str, content: Any) -> tuple[str, str]:
@@ -198,10 +211,11 @@ class EventMapper:
         r = _json(m.content)
         if status == "finished" and isinstance(r, dict):
             if tool == "search_listings":
-                matches = [{k: x[k] for k in ("listing_id", "score", "evidence")} for x in r["matches"]]
+                keys = ("listing_id", "address", "price_usd", "score", "evidence")
+                matches = [{k: x.get(k) for k in keys} for x in r["matches"]]
                 out.append({"type": "listings.results", "data": {"matches": matches}})
             elif tool == "get_audit":
-                out.append({"type": "audit.findings", "data": r})
+                out.append({"type": "audit.findings", "data": strip_say(r)})
         return out
 
     def finish(self, completed: bool = True) -> list[Event]:

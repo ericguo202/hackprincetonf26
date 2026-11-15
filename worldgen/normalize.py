@@ -2,8 +2,13 @@
 
     uv run python -m worldgen.normalize --version N [--force] [--jobs 6]   (never a version a live pack uses)
     uv run python -m worldgen.normalize --preview   # orientation contact sheets
+    uv run python -m worldgen.normalize --version 2 --base 1 --extra extra_furniture.yaml
 
 Input:  out/abo_selection.json (from `worldgen.sources.abo select`) and out/raw/abo/<3dmodel_id>.glb.
+        --extra: non-ABO items (Poly Haven, KayKit, Kenney) from a YAML such as extra_furniture.yaml,
+        source files in out/raw/extra/ (from `worldgen.sources.furniture fetch`; --extra-raw overrides).
+        --base M: copy the published library v<M> into v<N> unchanged (same ids and files, `file` paths
+        rewritten to furniture/v<N>/...) instead of re-normalizing ABO, then add the --extra items.
 Output: out/furniture/v<N>/<id>.glb and out/furniture/v<N>/catalog.json. The library is shared by every
 block (contracts v2.3.0): a pack's manifest points at it with furniture_catalog, and asset `file` paths
 are relative to the published root (furniture/v<N>/<id>.glb). Publish a new v<N> instead of changing one.
@@ -12,7 +17,9 @@ Per asset:
   1. Units. ABO meshes are already meters. The mesh is only rescaled when it is clearly in another unit
      (about 100x, 1000x or 39.37x off the listing's item_dimensions); otherwise a >15% mismatch with the
      listing text is recorded as a scale warning and the mesh is left alone (listing text is often wrong).
-  2. Yaw fix per category from abo_orientation.yaml so the asset front faces +Z.
+     Extra items with `fit_m` (low-poly kits in arbitrary units) are scaled uniformly so one axis has a
+     real-world length; the factor is recorded as unit_scale.
+  2. Yaw fix per category from abo_orientation.yaml (extra items: their own yaw_deg) so the front faces +Z.
   3. Origin to bottom center (min Y = 0, X/Z centered).
   Steps 1-3 are one matrix on a new root node (pygltflib), so materials and textures are untouched.
   4. gltf-transform optimize: flatten (bakes the matrix), meshopt, textures to 1024 px WebP.
@@ -41,6 +48,8 @@ import numpy as np
 import trimesh
 import yaml
 from pygltflib import GLTF2, Node
+
+from worldgen.sources.furniture import RAW_EXTRA, load_extra
 
 HERE = Path(__file__).resolve().parent  # worldgen/
 OUT = HERE / "out"
@@ -89,14 +98,39 @@ NAMES = {
     "beanbag": "Beanbag",
     "play_equipment": "Play equipment",
     "canopy_tent": "Play tent",
+    "tv": "Flat-screen TV",
+    "crib": "Crib",
+    "changing_table": "Changing table",
 }
 
 
 # ---------------------------------------------------------------- geometry
 
 
+PACKED = {"EXT_meshopt_compression", "KHR_mesh_quantization"}
+
+
+def is_meshopt(path: Path) -> bool:
+    """Compressed or quantized geometry, which trimesh reads wrong (quantized positions are not rescaled)."""
+    return bool(PACKED & set(GLTF2().load(str(path)).extensionsUsed or []))
+
+
+def decoded(path: Path, tmp: Path) -> Path:
+    """`path`, or a float-position copy of it in `tmp` when it is meshopt-compressed or quantized.
+    Sources can arrive already packed (the FurniMesh cribs): trimesh misreads them and pygltflib cannot
+    re-save them."""
+    if not is_meshopt(path):
+        return path
+    plain = tmp / f"{path.stem}.plain.glb"
+    _cli("dequantize", str(path), str(plain))
+    return plain
+
+
 def load_vertices(path: Path) -> np.ndarray:
     """All vertices in scene (world) coordinates, node transforms applied."""
+    if is_meshopt(path):
+        with tempfile.TemporaryDirectory(prefix="decode_") as tmp:
+            return load_vertices(decoded(path, Path(tmp)))
     scene = trimesh.load(path, force="scene", process=False)
     parts = []
     for node in scene.graph.nodes_geometry:
@@ -197,10 +231,28 @@ def texture_report(path: Path) -> dict:
     }
 
 
+def raw_path(entry: dict) -> Path:
+    """Source .glb: `raw` for extra (non-ABO) items, else the ABO download."""
+    return Path(entry["raw"]) if entry.get("raw") else RAW / f"{entry['3dmodel_id']}.glb"
+
+
+def fit_scale(v: np.ndarray, yaw: float, fit: dict) -> float:
+    """Uniform scale so one axis (w = X, d = Z, h = Y, after the yaw) has the given length in meters."""
+    (key, target), *rest = fit.items()
+    if rest or key not in ("w", "d", "h"):
+        raise ValueError(f"fit_m takes exactly one of w, d, h: {fit}")
+    vr = trimesh.transformations.transform_points(v, rot_y(yaw))
+    ext = vr.max(0) - vr.min(0)
+    return float(target) / float(ext[{"w": 0, "h": 1, "d": 2}[key]])
+
+
 def transform_for(entry: dict, yaw: float) -> tuple[np.ndarray, dict, float, np.ndarray]:
-    raw = RAW / f"{entry['3dmodel_id']}.glb"
+    raw = raw_path(entry)
     v = load_vertices(raw)
-    scale = unit_scale(v.max(0) - v.min(0), entry.get("item_dimensions_m"))
+    if entry.get("fit_m"):
+        scale = fit_scale(v, yaw, entry["fit_m"])
+    else:
+        scale = unit_scale(v.max(0) - v.min(0), entry.get("item_dimensions_m"))
     m = rot_y(yaw) @ np.diag([scale, scale, scale, 1.0])
     vt = trimesh.transformations.transform_points(v, m)
     lo, hi = vt.min(0), vt.max(0)
@@ -219,18 +271,18 @@ def process(entry: dict, out_dir: Path, yaw: float, force: bool) -> dict:
     cache = CACHE / f"{aid}.json"
     if not force and out.exists() and cache.exists():
         rec = json.loads(cache.read_text(encoding="utf-8"))
-        if rec.get("yaw_deg") == yaw:
+        if rec.get("yaw_deg") == yaw and rec.get("fit_m") == entry.get("fit_m"):
             rec["skipped"] = True
             rec["scale_warning"] = scale_warning(rec["size_m"], entry.get("item_dimensions_m"))
             return rec
-    raw = RAW / f"{entry['3dmodel_id']}.glb"
+    raw = raw_path(entry)
     if not raw.exists():
         raise FileNotFoundError(raw)
 
     m, size, scale, vt = transform_for(entry, yaw)
     with tempfile.TemporaryDirectory(prefix="normalize_") as tmp:
         mid = Path(tmp) / "wrapped.glb"
-        wrap_root(raw, mid, m)
+        wrap_root(decoded(raw, Path(tmp)), mid, m)
         tex = 1024
         tmp_out = Path(tmp) / "out.glb"
         _cli(
@@ -263,6 +315,7 @@ def process(entry: dict, out_dir: Path, yaw: float, force: bool) -> dict:
     rec = {
         "id": aid,
         "yaw_deg": yaw,
+        "fit_m": entry.get("fit_m"),
         "unit_scale": scale,
         "size_m": size,
         "bytes": out.stat().st_size,
@@ -280,16 +333,41 @@ def process(entry: dict, out_dir: Path, yaw: float, force: bool) -> dict:
 # ---------------------------------------------------------------- catalog
 
 
+def yaw_for(entry: dict, orient: dict) -> float:
+    """Extra items carry their own yaw_deg; ABO items use the per-category fix."""
+    return float(entry["yaw_deg"] if "yaw_deg" in entry else orient.get(entry["category"], 0))
+
+
 def cover_for(h: float) -> str:
     return "full" if h > 1.2 else "half" if h >= 0.5 else "none"
 
 
 def catalog_entry(entry: dict, rec: dict, version: int) -> dict:
-    """Asset contract, AGENTS.md section 9. style/color/material straight from ABO, else null."""
+    """Asset contract, AGENTS.md section 9. style/color/material straight from the source, else null."""
     src = entry.get("source") or {}
+    extra = bool(entry.get("dataset")) and entry["dataset"] != "ABO"
+    if extra:
+        source = {
+            "dataset": entry["dataset"],
+            "item_id": entry.get("item_id"),
+            "product_name": entry.get("product_name"),
+            "brand": entry.get("brand"),
+            "license": entry["license"],
+            "credit": entry["credit"],
+        }
+    else:
+        source = {
+            "dataset": "ABO",
+            "item_id": src.get("item_id") or entry["item_id"],
+            "product_name": entry.get("product_name"),
+            "brand": entry.get("brand"),
+            "license": "CC BY 4.0",
+            "credit": "Amazon Berkeley Objects, Amazon.com",
+        }
     return {
         "id": entry["id"],
-        "name": NAMES.get(entry["category"], entry["category"].replace("_", " ").capitalize()),
+        "name": entry.get("name")
+        or NAMES.get(entry["category"], entry["category"].replace("_", " ").capitalize()),
         "category": entry["category"],
         "style": entry.get("style"),
         "color": entry.get("color"),
@@ -299,16 +377,36 @@ def catalog_entry(entry: dict, rec: dict, version: int) -> dict:
         "size_m": rec["size_m"],
         "placement": entry["placement"],
         "clearance_m": entry.get("clearance_m") or {},
-        "cover": cover_for(rec["size_m"]["h"]),
-        "source": {
-            "dataset": "ABO",
-            "item_id": src.get("item_id") or entry["item_id"],
-            "product_name": entry.get("product_name"),
-            "brand": entry.get("brand"),
-            "license": "CC BY 4.0",
-            "credit": "Amazon Berkeley Objects, Amazon.com",
-        },
+        # a wall-mounted panel (e.g. a wall TV) is a few cm thick and off the floor: nobody hides behind it
+        "cover": "none" if entry.get("mount_y_m") is not None else cover_for(rec["size_m"]["h"]),
+        **({"mount_y_m": entry["mount_y_m"]} if entry.get("mount_y_m") is not None else {}),
+        "source": source,
     }
+
+
+def copy_base(base_dir: Path, out_dir: Path, version: int) -> list[dict]:
+    """Published library v<M> -> v<N>: same assets and bytes, `file`/`thumb` rewritten to furniture/v<N>/."""
+    if base_dir.resolve() == out_dir.resolve():
+        raise ValueError("--base must differ from --version")
+    catalog = json.loads((base_dir / "catalog.json").read_text(encoding="utf-8"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    prefix = f"furniture/{base_dir.name}/"
+    copied = []
+    for asset in catalog:
+        a = dict(asset)
+        for key in ("file", "thumb"):
+            if key not in a:
+                continue
+            if not a[key].startswith(prefix):
+                raise ValueError(f"{a['id']}: {key} {a[key]!r} is not under {prefix}")
+            rel = a[key][len(prefix) :]
+            src, dst = base_dir / rel, out_dir / rel
+            if not (dst.exists() and dst.stat().st_size == src.stat().st_size):
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(src, dst)
+            a[key] = f"furniture/v{version}/{rel}"
+        copied.append(a)
+    return copied
 
 
 # ---------------------------------------------------------------- preview (orientation by eye)
@@ -356,12 +454,12 @@ def preview(selection: list[dict], orient: dict, dest: Path) -> None:
     for cat, items in by_cat.items():
         rows = []
         for e in items:
-            _, _, _, vt = transform_for(e, float(orient.get(cat, 0)))
+            _, _, _, vt = transform_for(e, yaw_for(e, orient))
             mesh_pts = vt
-            scene = trimesh.load(RAW / f"{e['3dmodel_id']}.glb", force="scene", process=False)
+            scene = trimesh.load(raw_path(e), force="scene", process=False)
             try:
                 mesh = scene.to_geometry()
-                m, _, _, _ = transform_for(e, float(orient.get(cat, 0)))
+                m, _, _, _ = transform_for(e, yaw_for(e, orient))
                 mesh.apply_transform(m)
                 mesh_pts = trimesh.sample.sample_surface(mesh, 60000)[0]
             except Exception:  # noqa: BLE001 - preview only; fall back to vertices
@@ -394,14 +492,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--jobs", type=int, default=6)
     p.add_argument("--only", nargs="*", help="asset ids or categories to process")
     p.add_argument("--preview", action="store_true", help="write orientation contact sheets and exit")
+    p.add_argument("--base", type=int, help="copy published v<BASE> unchanged instead of re-normalizing ABO")
+    p.add_argument("--extra", type=Path, help="non-ABO items, e.g. extra_furniture.yaml")
+    p.add_argument(
+        "--extra-raw", type=Path, default=RAW_EXTRA, help="where `sources.furniture fetch` put them"
+    )
     a = p.parse_args(argv)
     if not a.preview:
         from worldgen import versions
 
         versions.refuse_live_furniture(a.version)
 
-    selection = json.loads(a.selection.read_text(encoding="utf-8"))
     orient = (yaml.safe_load(ORIENTATION.read_text(encoding="utf-8")) or {}) if ORIENTATION.exists() else {}
+    extra = load_extra(a.extra, a.extra_raw) if a.extra else []
+    # with --base the ABO assets come from the published base version, not from the selection
+    abo = [] if a.base else json.loads(a.selection.read_text(encoding="utf-8"))
+    full = abo + extra  # every asset this run owns, in catalog order
+    selection = full
     if a.only:
         selection = [e for e in selection if e["id"] in a.only or e["category"] in a.only]
     if a.preview:
@@ -409,12 +516,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     fdir = OUT / "furniture" / f"v{a.version}"
+    base = copy_base(OUT / "furniture" / f"v{a.base}", fdir, a.version) if a.base else []
+    # extra items the base already ships (e.g. v2's Kenney TVs when building v3) keep the base's bytes
+    in_base = {b["id"] for b in base}
+    carried = [e["id"] for e in full if e["id"] in in_base]
+    full = [e for e in full if e["id"] not in in_base]
+    selection = [e for e in selection if e["id"] not in in_base]
+    if carried:
+        print(f"kept from v{a.base} unchanged: {', '.join(carried)}")
     recs: dict[str, dict] = {}
     failed: dict[str, str] = {}
     with cf.ProcessPoolExecutor(max_workers=a.jobs) as pool:
-        futs = {
-            pool.submit(process, e, fdir, float(orient.get(e["category"], 0)), a.force): e for e in selection
-        }
+        futs = {pool.submit(process, e, fdir, yaw_for(e, orient), a.force): e for e in selection}
         for i, f in enumerate(cf.as_completed(futs), 1):
             e = futs[f]
             try:
@@ -427,8 +540,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"[{i}/{len(futs)}] {e['id']}: FAILED {failed[e['id']]}", file=sys.stderr, flush=True)
 
     # catalog over every asset that has an output (keeps assets from earlier partial runs)
-    full = json.loads(a.selection.read_text(encoding="utf-8"))
-    catalog = []
+    catalog = list(base)
     for e in full:
         cache = CACHE / f"{e['id']}.json"
         if (fdir / f"{e['id']}.glb").exists() and cache.exists():
@@ -441,6 +553,8 @@ def main(argv: list[str] | None = None) -> int:
     (fdir / "catalog.json").write_text(
         json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if base:
+        print(f"copied {len(base)} assets from v{a.base}")
 
     done = [r for r in recs.values()]
     sizes = sorted(r["bytes"] for r in done)

@@ -71,6 +71,21 @@ export function applyAgentEvent(type: string, raw: unknown) {
   }
 }
 
+/** Attach the turn's LangSmith link to the latest agent reply (it closes with final: true). */
+export async function fetchTrace(sessionId: string): Promise<void> {
+  try {
+    const r = await fetch(`${AGENT_URL}/sessions/${sessionId}/trace`);
+    const { url } = (await r.json()) as { url: string | null };
+    const s = useStore.getState();
+    let i = s.messages.length - 1;
+    while (i >= 0 && s.messages[i].role !== "agent") i--;
+    if (!url || i < 0) return;
+    s.set({ messages: s.messages.map((m, j) => (j === i ? { ...m, trace: url } : m)) });
+  } catch {
+    // tracing off or agent unreachable: the reply just has no link
+  }
+}
+
 export async function startAgentSession(playerId: string, blockId: string): Promise<string> {
   stream?.close();
   stream = null;
@@ -83,7 +98,11 @@ export async function startAgentSession(playerId: string, blockId: string): Prom
   const { session_id } = (await r.json()) as { session_id: string };
   const es = new EventSource(`${AGENT_URL}/sessions/${session_id}/stream`);
   for (const type of EVENTS) {
-    es.addEventListener(type, (e) => applyAgentEvent(type, JSON.parse((e as MessageEvent).data)));
+    es.addEventListener(type, (e) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      applyAgentEvent(type, data);
+      if (type === "agent.message" && data.final) void fetchTrace(session_id);
+    });
   }
   es.onerror = () => {
     // EventSource retries on its own; a dead agent still shows up as a chat error once.

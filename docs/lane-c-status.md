@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 221 tests in 14 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 251 tests in 18 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -70,19 +70,16 @@ An `apps/web/.env.local` is ignored.
 
 | Var | Effect |
 | --- | --- |
-| `VITE_PACK_BASE_URL` | Pack folder, e.g. `/packs/hou_navidad_01/v1`. Unset means the contract fixtures and placeholder geometry. The published root (listings, shared `furniture/v<N>/`) is derived from it by `publishedRoot()`: three levels up for `.../packs/<block>/v<N>`. |
+| `VITE_PACK_BASE_URL` | Pack folder, e.g. `/packs/packs/hou_navidad_01/v2`. Unset means the contract fixtures and placeholder geometry. The published root (listings, shared `furniture/v<N>/`) is derived from it by `publishedRoot()`: three levels up for `.../packs/<block>/v<N>`. |
 | `VITE_START_ROOM` | `<listing_id>.rN`: start inside that house at the room's area centroid, skipping the block. The only way into a house until a listings index exists. A wrong ID logs one warning and starts on the block. |
 | `VITE_DEV_PLAN` | Furnish the current house from `contracts/fixtures/placement_plan.json`, moved to centre on the target room (pieces that don't fit are dropped with a warning). Dev stand-ins cover any asset the catalog lacks, matched by category. **P** swaps between this plan and plan B (`devFurniture.ts`), which drops a sectional on the room centre to exercise push-out. |
 | `VITE_DEV_REMOTES` | **Dev builds only, never deployed:** gated on `import.meta.env.DEV`, so `vite build` drops them even if the var is set on the host (checked: a production build with it set contains no trace of them). Two fake remote players in my zone on scripted paths (a runner on a circle; a walker that pauses and shoots), written into `store.players` at 20 Hz with arrival jitter. Your shots hit them: 3 hits play their death animation, and they respawn after 3 s. The console logs each `fire` payload. |
 | `VITE_SOLO` | Lane D's: `net/game.ts` skips the game server. |
 
-Current local `/.env.local`:
-`VITE_PACK_BASE_URL=/packs/hou_navidad_01/v1`, `VITE_START_ROOM=hou_237901269.r4`, `VITE_DEV_PLAN=1`, `VITE_DEV_REMOTES=1`.
-
-**Heads-up:** Lane A has since made 7014 Navidad (`hou_236595179`, living room `hou_236595179.r3`) the hero house.
-- **Rebuild the local pack:** `cd worldgen && uv run python -m worldgen.publish hou_navidad_01 --local`.
-- **Base URL:** that copies to `apps/web/public/packs/packs/...`, so the base becomes `/packs/packs/hou_navidad_01/v1`. It also copies the furniture library, so real furniture can load.
-- **Start room:** point `VITE_START_ROOM` at `hou_236595179.r3`. The pack on disk today is still the older zip, which only has 6915 (`hou_237901269`).
+Pack v2 is the live pack (Lane A, HANDOFF 22:20). It is committed and served from `apps/web/public/packs/` (listings index, `packs/hou_navidad_01/v2/`, `furniture/v2/`); v1 is no longer published.
+- **Local `/.env.local` for v2:** `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v2`, plus `VITE_SOLO=1` to run without the game server. Add `VITE_START_ROOM=hou_236595179.r3` (7014's living room) to skip the block, and `VITE_DEV_PLAN=1` / `VITE_DEV_REMOTES=1` as needed.
+- **Hero house:** 7014 Navidad (`hou_236595179`), listed first in the v2 manifest. Render sets `VITE_HERO_LISTING=hou_236595179`.
+- **Spawns:** v2's manifest has 8 sidewalk spawns in front of 7014, so the derived spawn (section 12) is only a fallback now.
 
 ## 4. `window.__laneC` (dev builds only)
 
@@ -105,11 +102,11 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 - **No block pack:** Lane A hasn't published one. No `block/render.glb` or `collision.glb`, and `spawns` is `[]`, so the block is always placeholder geometry.
 - **No listings index:** `listings/index.json` doesn't exist yet (Lane A's `costar.py` is a stub). No listing has a door point, so you can't walk into a house from the block. Use `VITE_START_ROOM`.
 - **Furniture renders as boxes** until real meshes are published. The labelled box is also the deliberate fallback if they never are. With Lane A's `publish --local`, the library lands in `public/packs/furniture/v1/`, so real meshes should start loading; that path isn't verified.
-- **Interior looks washed out:** Lane A's HANDOFF suggests `material.toneMapped = false` on `interior.glb` meshes, since its textures are finished photos. Not done.
+- **Interior looks washed out: fixed (section 17, not checked in a browser).** `interior.glb` meshes now have `material.toneMapped = false`, since their textures are finished photos (Lane A's HANDOFF suggestion). It applies only to the interior.
 - **Blocky walls up close:** walls look blocky within about 30 cm. The camera arm pulls in 0.15 m from walls, so this can show indoors.
 - **Character and collider don't line up:** the model is 1.3 m with feet on the floor, but ecctrl floats the 1.3 m capsule 0.3 m up, so the collider spans 0.3–1.6 m. Shot hitboxes for remote players should match the model, not the capsule: centre at feet + 0.65 m, which is 0.30 m below the body centre (`FOOT_BELOW_CENTRE_M` − 0.65).
 - **7014's doors are unchecked:** the radius is now 0.25 m, so per Lane A's widths every bathroom door in both houses should fit, and 6915 is confirmed headless (section 12). 7014 hasn't been run: its pack isn't on this machine or any branch. Run `apps/web/scripts/door-check.ts` on it once Lane A's publish lands.
-- **Jump apex vs ceiling:** the 1.6 m eye sits exactly at the capsule top. A normal jump (4 m/s) peaks at about 2.40 m, which puts the first-person eye within the 0.1 m near plane of a 2.43 m ceiling, so the roof can clip at the top of a jump. Fixes: a lower `jumpVel` (3 m/s gives about a 0.46 m apex), or an eye a little below the capsule top. Not done.
+- **Jump apex vs ceiling: fixed (section 17, not checked in a browser).** `jumpVel` is now 3.0 m/s (about a 0.46 m apex), down from 4.0 (about 0.8 m). The 1.6 m first-person eye no longer reaches the 2.43 m ceilings at the top of a jump. Crouch still sets it to 0.
 - **No respawn yet:** `indoorSpawns` computes indoor spawns, but nothing uses them yet. That's the foam-fight round loop, Lane D server and C client.
 - **Weapon choice:** the character holds the kit's `RocketLauncher`, tinted foam orange. Despite the name it's a chunky cartoon tube, the only prop in the kit that reads as a toy; the pistols and rifles are realistic. Changing it is one constant: `CHARACTER.keepWeapon`.
 
@@ -189,7 +186,7 @@ Merged to main this session:
 | Spawn drop height | 1.0 m | `FOOT_BELOW_CENTRE_M` + 0.1 | `World.tsx` |
 | Remote hitbox | centre 0.30 m below body centre, radius 0.25, half-height 0.40 | centre 0.15 m below body centre, radius 0.25, half-height 0.625 | section 5, HANDOFF to Lane D |
 | Spawn clearance, door trigger | 0.6 / 0.9 / 1.2 m | unchanged (radius-based) | — |
-| `jumpVel` | 4.0 (about 0.8 m apex) | about 3.0, or the head goes through 2.43 m ceilings | `movement.ts` |
+| `jumpVel` | 3.0 (about 0.46 m apex; section 17) | 3.0 is fine: the eye rises to about 2.1 m | `movement.ts` |
 
 **Tests that need new expectations:**
 1. `characterRig.test`: "1.3 m tall" becomes 1.75, and the `heightM` formula check gains `+ floatHeight`.
@@ -362,3 +359,104 @@ Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, 
 - **One-shot replay restored:** `if (prev === next && !plan.once) return`, now in `characterRig.crossfadeTo` and tested on the real rig. A repeated one-shot (hit, jump, death, Duck) restarts from frame 0. A repeated loop carries on.
   - **Shoot is a loop:** `Idle_Shoot` (or `Run_Shoot`) loops, so rapid blaster fire is one continuous clip, and this line never governed it.
   - **The crossfade effect only re-runs when its inputs change:** `animState`, `moving` or the rig. So a state that repeats without changing (`hit` → `hit`) doesn't re-trigger at all. A per-event replay would need a counter prop.
+
+## 17. Interior tone mapping off; jumpVel 3
+
+Neither fix has been checked in a browser. Both rest on code and unit tests only.
+
+- **Interior colours:** `world/interiorMaterials.ts` `disableToneMapping(root)` sets `toneMapped = false` (and `needsUpdate`) on every mesh material under the loaded `interior.glb` scene. The materials are `KHR_materials_unlit`, so `MeshBasicMaterial`, with finished photo textures. It runs once per loaded scene, before the first paint, through a new optional `prepare` prop on `GlbOrPlaceholder`. Only `HouseScene`'s interior passes it, so furniture, characters, effects and the block keep tone mapping. `alphaTest` / alpha mask is untouched, so doorways stay cut out. Tests: interior meshes (multi-material and nested included) are switched off, other scenes are unchanged, `alphaTest` is kept, and a second pass is a no-op.
+- **Jump height:** `MOVEMENT.jumpVel` is 3.0 (was 4.0), so the jump peaks at about 0.46 m and the first-person eye at about 2.1 m, under 2.43 m ceilings. Crouch still sets `jumpVel` to 0. No test pinned the old value.
+- **Checks:** typecheck, lint and 227 tests pass. A production build with `VITE_DEV_PLAN`, `VITE_START_ROOM` and `VITE_DEV_REMOTES` set contains none of `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM` or `__laneC`.
+
+## 18. Furniture keyed on content, not array identity
+
+**The bug:** `net/game.ts` (Lane D) writes `houses: j.houses` from Colyseus `toJSON()` on every state patch. So `store.houses[zone].objects` is a new array about 20 times a second per connected player, even when the furniture hasn't changed (Lane B's 18:12 HANDOFF line to Lane D). FurnitureLayer memoized `objects` and `rects` on array identity, and its layout effect ran on `[planId, zone, rects]`. So footprints, `houseSpawns` + `setSpawns`, and the local player's push-out/teleport all re-ran on every patch. In multiplayer that would teleport a player standing next to furniture in small jumps, and churn indoor spawns.
+
+**Fixed on the Lane C side**, so it holds whatever Lane D does:
+- **`world/furnitureKey.ts`:** `furnitureKey(house)` builds a content key from `plan_id` plus each object, sorted by `instance_id`, as `instance_id|asset_id|x|y|z|rot_deg`. Positions are rounded to 1 mm and rotation to 0.1°, so float noise isn't a change.
+- **`world/useFurniturePlan.ts`:**
+  - `useStableFurniture(house)` keeps the objects array from the first render with a given key, and only replaces it when the key changes.
+  - `useFurnitureLayout` is FurnitureLayer's former layout effect (spawns, then push-out moving the real body), now keyed on the content key, zone, rooms and footprints (`rects`, so a catalog change re-runs it too).
+- **FurnitureLayer:** uses both hooks. It remounts its furniture group on the content key instead of `plan_id`, so any change tears down the old RigidBodies with no ghost colliders, including a re-furnish that reuses a `plan_id`. An identical patch never remounts.
+- **Constraint:** the effect also depends on `rooms` by identity. `HouseScene` memoizes `rooms` per house, so that holds today; passing a fresh array there would bring the per-patch re-runs back.
+
+**Tests:**
+- `furnitureKey.test.ts`: same content in a new array, reordered, or below-noise float changes give the same key. A moved, rotated, swapped, added or removed object, or the same `plan_id` with different objects, gives a different key.
+- `useFurniturePlan.test.tsx`: renders the hooks with react-dom, with a fake local player inside the fixture sofa.
+  - **50 identical-content new arrays:** push-out and `setSpawns` run once, the player is pushed out once, and the objects array keeps one identity.
+  - **A real change (the sofa moved, same `plan_id`):** they run exactly once more, and the remount key changes.
+- The existing re-furnish and push-out tests still pass.
+
+**Not seen in a browser with two players.** It's verified by unit tests only; the ~20 Hz patch stream from a real game server was simulated, not observed.
+
+## 19. Weapons only in foam mode
+
+**Not seen in a browser.** It's checked by unit tests and the production-build grep only.
+
+**The problem:** the game has two modes, `store.mode = "explore" | "foam"`. The server writes it and it's `"explore"` by default. Lane C never read it, so the blaster and the pool noodle worked even while touring the house.
+
+**What changed:**
+- **`player/foamMode.ts`, the one place that decides:**
+  - pure rules: `effectiveMode`, `weaponsEnabled`, `heldWeaponProp` and `weaponForKey`;
+  - `useFoamMode()` for components;
+  - `foamModeNow()` for frame loops and event handlers.
+- **Explore mode:**
+  - **Blaster and noodle:** don't fire and send no `onFire`. The trigger is dropped every frame while not in foam, so there's no tracer, muzzle flash, impact or `shoot` state from local input. Darts already in flight when the mode flips finish their flight.
+  - **HUD:** the crosshair and hit marker are hidden.
+  - **Keys 1/2:** ignored.
+  - **The model:** holds no weapon. `Character`'s `weapon` prop is `null`, which hides both the blaster and the noodle, for the local player and for remote players alike.
+  - **Animations:** unchanged otherwise.
+- **Foam mode:** exactly the previous behaviour.
+- **Switching mid-session:** takes effect within one frame. The hooks re-render on the store change, and the blaster reads `foamModeNow()` every frame. Nothing remounts: props are toggled in place, and `Player` (with its ecctrl body) stays mounted.
+- **Dev only:** with `VITE_SOLO=1` there's no server, so the mode never changes. In a dev build with `VITE_SOLO=1`, **F** toggles a local override between explore and foam (`world/DevModeToggle.tsx`). It's gated by `DEV_MODE_TOGGLE_ON` in `world/devFlags.ts`, the same way as the other dev switches. A production build with `VITE_DEV_PLAN`, `VITE_START_ROOM`, `VITE_DEV_REMOTES` and `VITE_SOLO` all set contains none of `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM`, `__laneC`, `dev mode toggle`, `DEV_MODE_TOGGLE` or `DevModeToggle`.
+
+**Unit tests (10 new):**
+- **`foamMode.test.ts`:**
+  - weapons off in explore and on in foam;
+  - `foamModeNow()` following `store.mode` live;
+  - the dev override taking priority, and being ignored when the toggle is off;
+  - keys 1/2 picking weapons in foam and ignored in explore;
+  - the held prop being `null` in explore and the selected weapon in foam.
+- **`characterRig.test.ts`:** on the real model, explore hides both props and foam shows the selected one.
+
+## 20. No firing while eliminated
+
+While the server has my `Player.alive` false (the 3 s before respawn), the blaster and noodle do nothing and nothing is sent; the crosshair and hit marker are hidden. Keys 1/2 still switch weapons, so you respawn holding what you picked. Holding the trigger through a respawn does not auto-fire; press again.
+
+- `player/foamMode.ts`: `isAlive(meId, players)` (pure), `canAttackNow(foam, alive)`, `meAliveNow()` for frame loops, `useMeAlive()` for components. No id yet (SOLO, before join) or my entry missing counts as alive, so a missing server never locks the trigger.
+- `player/Blaster.tsx`: the existing per-frame gate is now `canAttackNow(foamModeNow(), meAliveNow())`. `player/Crosshair.tsx` hides on the same gate.
+- Lane D's respawn path (`world/RespawnWatcher.tsx`, `world/respawn.ts`, `Player.tsx` elimination handling) is untouched.
+- Tested: `foamMode.test.ts` (no id, missing entry, alive, dead and respawn, another player's death, the 4-row gate table, keys 1/2 while dead). Not yet seen in a browser.
+
+## 21. Weapon hotbar
+
+A two-slot weapon bar in the style of a battle-royale hotbar, bottom centre: **1** Foam blaster, **2** Pool noodle. Each slot is a 64 px rounded square with the key number top-left, an icon and a short name under it. The selected slot gets a yellow border, 1.12x scale and full opacity; the other is dimmed. Changes ease over 120 ms.
+
+- **Files:** `player/WeaponBar.tsx` (DOM overlay, mounted next to `<Crosshair />` in `world/World.tsx`), `player/hotbar.ts` (pure logic), `player/weaponIcons.tsx`, `player/attackClock.ts`.
+- **Slots** come from `weapons.ts` `WEAPON_KEYS`, so they can't drift from the keys. Names are a `Record<Weapon, string>`, so a new weapon fails typecheck until it's named.
+- **Cooldown sweep:** after an attack, a dark shade over the selected slot shrinks so the slot clears from the bottom up, over that weapon's interval (`WEAPON_RULES`: blaster 0.25 s, noodle 0.8 s). Same rule as Blaster's `canAttack`. Blaster now calls `markAttack(weapon)` (a tiny zustand store, `attackClock.ts`) next to its own `lastShotAt`; its logic is otherwise unchanged. The bar animates with rAF only while a cooldown runs.
+- **Visibility** (`barView`): only in foam mode, whether or not the pointer is locked. Greyed (40%, grayscale) while eliminated (`useMeAlive`). Hidden while a text input, textarea or contenteditable has focus, so it doesn't cover the chat panel. `pointer-events: none` throughout. Scales to 0.75 below 700 px wide.
+- **Icons:** original inline SVGs (orange toy blaster with a dart, bendy green noodle tube). No logos, not traced from the kit or any product. CC0, recorded in the `weaponIcons.tsx` header (`public/characters/CREDITS.md` lists model files only).
+- **Tested** (`hotbar.test.ts`, `WeaponBar.test.tsx`): slot order from the keys, highlight per weapon, explore hidden / foam shown / dead dimmed, typing hides, cooldown fraction at t = 0, half and full for both weapons, sweep only on the selected slot. **Not yet seen in a browser:** the Chrome extension wasn't connected, so the F / 1 / 2 / shot check is still to do. The dev server compiles and serves every new module.
+
+## 22. Pack v2 block: door heights, block tone mapping, baked sun
+
+Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
+
+- **Door heights.** `Listing.world.position.y` is now the block ground at each front door (7014 0.348 m, 6915 0.103 m).
+  - `houseToBlock` / `blockToHouse` already added and removed `position.y`, so `Door.block`, `exitTo` and `deriveSpawn` were already at ground height.
+  - What changed: the landing is explicit. `world/landing.ts` `bodyCentreAt(floor)` = floor + `FOOT_BELOW_CENTRE_M` (0.95) + `SPAWN_DROP_M` (0.05). It replaces World.tsx's untested 1 m lift (the same 1.0 m total today, but now tied to the capsule).
+  - The block door marker's ring and label now add the door's local y (they sat on the group at `position.y` already).
+  - The door trigger compares XZ only, so a raised ground can't stop it firing. A test stands a body on the raised ground and checks it does fire.
+- **Tested with the real v2 listings index and rooms.json** (`world/landing.test.ts`):
+  - 7014: door local y −0.003, so `exitTo` y = 0.345 and the body lands at 1.345.
+  - 6915: door local y 0.004, so `exitTo` y = 0.107 and the body lands at 1.107.
+  - Entering lands on the room `floor_y` (−0.003 / 0.004) in the house frame.
+  - `door-check.ts` on both v2 houses exits 0. Closets, 7014's kitchen and dining room, and 6915's kitchen are unreachable, the same as v1 (byte-for-byte the same houses).
+- **Block tone mapping.** `disableToneMapping(root, { only })`, plus `disableUnlitToneMapping`, which switches off only `MeshBasicMaterial`. It's passed as BlockScene's render `prepare`. v2's `render.glb` has 37 materials: 19 unlit (ground, paving, curbs, far-zone tiles) are switched off; 18 lit (roofs, walls, trim, fences, bark, leaves) keep tone mapping. Unit-tested on a stand-in scene.
+- **Sun.** `world/sun.ts` `SUN_DIR_BLOCK` = (−0.355, 0.541, 0.762), azimuth 205°, elevation 32.8°. A test checks the vector against the angles (+X east, +Z south).
+  - `world/SunLight.tsx` replaces World.tsx's fixed light: intensity 1.2 kept, light at target + dir × 60 m, target = the local player's body.
+  - Its shadow box is 60 × 60 m around the player (2048² map) and follows them every frame at `SUN_PRIORITY` −5. That's after physics and the camera, never positive.
+  - Indoors the same sun is rotated into the house frame (`sunDirInHouse`). Sky's `sunPosition` uses the same direction. Ambient 0.45 is unchanged.
+- **Not seen in a browser:** the landing on the real `collision.glb` lawn, the unlit block's look with tone mapping off, live shadows lining up with the baked ones, and shadow-edge shimmer as the box follows the player (no texel snapping yet).
+- **Trees (note 4), not done:** the 168 live oaks are 9 meshes as about 340 separate draw calls. Make an `InstancedMesh` per variant only if the frame rate drops on weaker laptops. Lane A saw 60 fps on an M-series laptop.

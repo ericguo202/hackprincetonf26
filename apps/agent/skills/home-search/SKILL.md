@@ -39,10 +39,12 @@ garage low); a remote worker (small_bedroom_near_primary is not the need: ask wh
 ## 3. Delegate, rank, act
 
 1. Write `/briefs/search.md` with the buyers, the hard criteria and the needs with weights.
-2. `search_listings`; it saves `/search/results.json`.
+2. `search_listings`; it saves `/search/results.json`. Its `market` block counts the whole CoStar index
+   under the same hard criteria (`passed_hard` of `listings`, median price and price per sq ft); each match
+   has `price_per_sqft_usd` and `vs_market_pct`. Quote these numbers; never compute your own.
 3. One `listing-auditor` task per match, **all in the same message** so they run in parallel.
 4. Rank: search score first; then contradictions the auditors found count against a home; then price.
 5. `focus_listing` on the winner (the player is taken to its front door).
 6. Answer with the pick and the facts that decided it, with values and their fields: e.g. "7014 Navidad:
-   bedroom r9 (9.8 m2) opens straight off the primary bedroom; $220,000; one story." Then name any
-   contradiction or audit warning for either home, e.g. "6915's scanned area is 15% below the listed area."
+   the small bedroom (105 sq ft) opens straight off the primary bedroom; $220,000; one story." Then name any
+   contradiction or audit warning for either home as its `say` sentence from get_audit (in sq ft).

@@ -1,0 +1,132 @@
+# Non-ABO furniture (AGENTS.md 7.6: ABO first, Poly Haven for gaps, then KayKit or Kenney).
+# Fetch:     uv run python -m worldgen.sources.furniture fetch                 -> out/raw/extra/<file>
+# Normalize: uv run python -m worldgen.normalize --version 3 --base 2 --extra extra_furniture.yaml
+#            (v3 = v2 unchanged + the cribs and team TVs; items already in the base keep its bytes)
+#
+# Per item: id <category>_<source>_<source id> (stable), category, name (short, generic), dataset
+# (PolyHaven | KayKit | Kenney), item_id, product_name (as the source names it), page, url, sha256, file
+# (path under the raw dir), license, credit, yaw_deg (turn so the front faces +Z), fit_m (scale the whole
+# mesh uniformly so this axis, w/d/h after the turn, has this length in meters; for low-poly kits whose
+# units are not meters), tags, placement, clearance_m. style/color/material only when the source states
+# them (none of these do), so they stay null. size_m and cover are measured from the normalized mesh.
+#
+# Searched on 2026-11-14 and NOT available from these sources (or from ABO, see abo_categories.yaml):
+#   crib, changing_table. Poly Haven (522 models), KayKit Furniture Bits 1.0 and the Kenney Furniture Kit
+#   have none. A flat-screen TV exists only as Kenney's televisionModern (Poly Haven has two CRTs).
+# Filled since (furniture v3): three cribs from FurniMesh and two team-made flat-screen TVs whose screen is
+# a separate mesh with material "tv_screen" (the web client can play a video on it). Neither has a stable
+# download URL, so their source files are committed in worldgen/furniture_src/ and the items name them with
+# `local:` (path under worldgen/) instead of `url:`. changing_table is still missing.
+# Optional per item: mount_y_m (wall-mounted pieces: origin height above the floor, copied to the catalog).
+
+# Kenney Furniture Kit "televisionModern" (published by Kenney on Poly Pizza as "Television").
+# Flat panel on a pedestal foot, no logo. Kit units are arbitrary (0.68 m wide raw), so each variant is
+# the same mesh scaled to a real overall width for a 43, 55 and 65 inch 16:9 set.
+# The screen quad faces -Z in the source, so yaw 180.
+kenney_tv: &kenney_tv
+  category: tv
+  name: Flat-screen TV
+  dataset: Kenney
+  item_id: 9trLeWoBek
+  product_name: Television (Furniture Kit, televisionModern)
+  page: https://poly.pizza/m/9trLeWoBek
+  url: https://static.poly.pizza/1ddcd36c-ac9e-4dc2-a056-846cea033c02.glb
+  sha256: 9faacaba2b76f8b5582cd00a567ca5d1703933478c55fa53219fc8043525383c
+  file: kenney/televisionModern.glb
+  license: CC0 1.0
+  credit: Kenney, kenney.nl
+  yaw_deg: 180
+  tags: [living_room, movie_night, screen, electronics]
+  placement: on_surface
+  clearance_m: {front: 0.0}
+
+# FurniMesh cribs (free license: commercial use, no attribution required; AI-generated models). They arrive
+# already normalized by the team (meters, Y up, front +Z, origin bottom center, meshopt), so yaw 0 and no
+# fit_m. style and color are as the team recorded them for each model.
+furnimesh_crib: &furnimesh_crib
+  category: crib
+  dataset: FurniMesh
+  license: "FurniMesh free license: commercial use, no attribution required"
+  credit: FurniMesh
+  material: wood
+  yaw_deg: 0
+  placement: wall
+  clearance_m: {front: 0.6}
+
+# Team-made 55 in 16:9 flat-screen TV (procedural, CC0; generator make_tv.py, not in this repo), one on a
+# pedestal stand (sits on a tv_stand) and one wall-mounted (origin 0.75 m above the floor). The glossy
+# black "tv_screen" material is the off state.
+team_tv: &team_tv
+  category: tv
+  dataset: Team
+  license: CC0 1.0
+  credit: HackPrinceton team
+  style: modern
+  color: black
+  material: plastic
+  yaw_deg: 0
+  tags: [living_room, tv, movie_night, screen, electronics]
+  clearance_m: {front: 1.0}
+
+items:
+  - <<: *kenney_tv
+    id: tv_kenney_television43
+    fit_m: {w: 0.97}
+  - <<: *kenney_tv
+    id: tv_kenney_television55
+    fit_m: {w: 1.24}
+  - <<: *kenney_tv
+    id: tv_kenney_television65
+    fit_m: {w: 1.45}
+  - <<: *furnimesh_crib
+    id: crib_fm_01
+    name: Wooden spindle crib
+    item_id: s-NXrCQ6drTG6c721LoS2
+    product_name: Wooden spindle crib
+    style: traditional
+    color: whitewashed wood
+    local: furniture_src/furnimesh/crib_fm_01.glb
+    file: furnimesh/crib_fm_01.glb
+    sha256: d846916d873c52873d8246a94c4c097abc440b70c37a1429f8f04bf2c25e1291
+    tags: [nursery, infant, sleep, bedroom, full_size]
+  - <<: *furnimesh_crib
+    id: crib_fm_02
+    name: Compact crib on casters
+    item_id: c8YFQIkSc7g2ygm1Gw5em
+    product_name: Compact crib on casters
+    style: compact
+    color: natural wood
+    local: furniture_src/furnimesh/crib_fm_02.glb
+    file: furnimesh/crib_fm_02.glb
+    sha256: cb7cb7e11e5dcf17a33f901dad5f57b957513be2b8abc719d766eb73e3d1ae20
+    tags: [nursery, infant, sleep, bedroom, compact, wheels, small_room]
+  - <<: *furnimesh_crib
+    id: crib_fm_03
+    name: Modern wood crib
+    item_id: faDYmoxqBSw4OlEVvfPrR
+    product_name: Modern wood crib
+    style: modern
+    color: warm wood
+    local: furniture_src/furnimesh/crib_fm_03.glb
+    file: furnimesh/crib_fm_03.glb
+    sha256: 19522d06fb55f50c3b34cb8d5d332e2461947ac220678e630628f254f34689a8
+    tags: [nursery, infant, sleep, bedroom, full_size]
+  - <<: *team_tv
+    id: tv_team_stand
+    name: Flat-screen TV on stand
+    item_id: tv_55_stand
+    product_name: 55 in flat-screen TV on stand (team-made, make_tv.py)
+    placement: on_surface
+    local: furniture_src/team/tv_team_stand.glb
+    file: team/tv_team_stand.glb
+    sha256: 181c639a417ca05189e319de272955fa4c4e892c5681a86a52c8c77ec50283fa
+  - <<: *team_tv
+    id: tv_team_wall
+    name: Wall-mounted flat-screen TV
+    item_id: tv_55_wall
+    product_name: 55 in flat-screen TV, wall-mounted (team-made, make_tv.py)
+    placement: wall
+    mount_y_m: 0.75
+    local: furniture_src/team/tv_team_wall.glb
+    file: team/tv_team_wall.glb
+    sha256: 2e80b71a49bc81a3f25c8e130c112d58fa78c9af42d437db5d81639ddc87146f

@@ -56,8 +56,8 @@ def files(monkeypatch):
 def game(monkeypatch):
     calls = []
 
-    async def post_plan(block_id, player_id, plan):
-        calls.append(("plan", block_id, player_id, plan))
+    async def post_plan(block_id, player_id, plan, room_label=None):
+        calls.append(("plan", block_id, player_id, plan, room_label))
         return {"placed": len(plan["objects"])}
 
     async def post_focus(block_id, player_id, listing_id):
@@ -198,6 +198,21 @@ def test_move_and_remove(files):
     assert "error" in call(tools.remove_asset, room_id=ROOM, instance_id="o2")
 
 
+def test_place_on_blocked_pose_moves_blockers_out(files, monkeypatch):
+    from tests.test_layout import BENCH
+
+    monkeypatch.setitem(ASSETS, "bench", BENCH)
+    furnish_tv_and_sofa()
+    out = call(tools.propose_poses, room_id=ROOM, asset_id="bench", rule="against_wall", runtime=RT)
+    assert out["poses"] == [] and "score" not in out["blocked"][0]
+    b1 = out["blocked"][0]
+    placed = call(tools.place_asset, room_id=ROOM, asset_id="bench", pose_id="b1", runtime=RT)
+    assert [r["instance_id"] for r in placed["removed"]] == b1["blocked_by"]
+    ids = {o["instance_id"] for o in placed["plan"]["objects"]}
+    assert placed["placed"] in ids and not ids & set(b1["blocked_by"])
+    assert call(tools.validate_layout, room_id=ROOM, runtime=RT)["status"] == "validated"
+
+
 def test_reason_is_cut_to_12_words(files):
     call(tools.start_plan, room_id=ROOM, runtime=RT)
     call(tools.propose_poses, room_id=ROOM, asset_id="side", rule="corner", runtime=RT)
@@ -234,8 +249,8 @@ async def test_commit_refuses_conflicts_then_places(files, game):
     call(tools.remove_asset, room_id=ROOM, instance_id="o3")
     out = await acall(tools.commit_placement, room_id=ROOM, runtime=RT)
     assert out["placed"] == 2
-    kind, block, player, sent = game[0]
-    assert (kind, block, player) == ("plan", "hou_navidad_01", "p1")
+    kind, block, player, sent, room_label = game[0]
+    assert (kind, block, player, room_label) == ("plan", "hou_navidad_01", "p1", "living_room")
     assert sent["status"] == "placed" and sent["conflicts"] == [] and sent["listing_id"] == "hou_000123"
     assert files.read_json(f"/plans/{ROOM}.json")["status"] == "placed"
 

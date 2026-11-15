@@ -1,0 +1,73 @@
+{
+ "block_id": "hou_navidad_01",
+ "version": 3,
+ "origin": {
+  "lat": 29.70113,
+  "lon": -95.670841
+ },
+ "block": {
+  "render": "block/render.glb",
+  "collision": "block/collision.glb"
+ },
+ "houses": [
+  {
+   "listing_id": "hou_236595179",
+   "interior": "houses/hou_236595179/interior.glb",
+   "collision": "houses/hou_236595179/collision.glb",
+   "rooms": "houses/hou_236595179/rooms.json",
+   "graph": "houses/hou_236595179/graph.json",
+   "audit": "houses/hou_236595179/audit.json"
+  },
+  {
+   "listing_id": "hou_237901269",
+   "interior": "houses/hou_237901269/interior.glb",
+   "collision": "houses/hou_237901269/collision.glb",
+   "rooms": "houses/hou_237901269/rooms.json",
+   "graph": "houses/hou_237901269/graph.json",
+   "audit": "houses/hou_237901269/audit.json"
+  }
+ ],
+ "spawns": [
+  [
+   -2.88,
+   0.288,
+   89.19
+  ],
+  [
+   -3.38,
+   0.268,
+   85.19
+  ],
+  [
+   -3.88,
+   0.248,
+   81.69
+  ],
+  [
+   -4.38,
+   0.226,
+   78.19
+  ],
+  [
+   -1.38,
+   0.272,
+   107.19
+  ],
+  [
+   -1.38,
+   0.265,
+   110.19
+  ],
+  [
+   -5.38,
+   0.181,
+   71.19
+  ],
+  [
+   11.12,
+   0.296,
+   91.69
+  ]
+ ],
+ "furniture_catalog": "furniture/v3/catalog.json"
+}

@@ -1,0 +1,4905 @@
+[
+  {
+    "id": "sofa_abo_B072C8Q9RF",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": "Transitional",
+    "color": "Charcoal",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B072C8Q9RF.glb",
+    "size_m": {
+      "w": 2.312,
+      "d": 0.969,
+      "h": 0.792
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072C8Q9RF",
+      "product_name": "Amazon Brand – Rivet Midtown Contemporary Upholstered Sofa Couch, 92.1\"W, Charcoal",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sofa_abo_B07B4M6CN1",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": null,
+    "color": "Grey",
+    "material": "Fabric",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B07B4M6CN1.glb",
+    "size_m": {
+      "w": 2.022,
+      "d": 0.809,
+      "h": 0.833
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4M6CN1",
+      "product_name": "Amazon Brand – Rivet Berkshire Mid-Century Modern Sofa Couch, 82.6\"W, Grey",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sofa_abo_B07HZ5PF5S",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": "Sofa",
+    "color": "Handloom Ecru",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B07HZ5PF5S.glb",
+    "size_m": {
+      "w": 2.47,
+      "d": 1.009,
+      "h": 1.022
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HZ5PF5S",
+      "product_name": "Amazon Brand – Stone & Beam Calhoun Sofa Couch, 91\"W, Ecru",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sofa_abo_B07HYY8ZGY",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": "Transitional",
+    "color": "Haze",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B07HYY8ZGY.glb",
+    "size_m": {
+      "w": 2.415,
+      "d": 0.969,
+      "h": 0.867
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HYY8ZGY",
+      "product_name": "Amazon Brand – Stone & Beam Westcott Contemporary 93\" Sofa, Fabric, 93\"W, Haze",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sofa_abo_B07B4ML473",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": "Industrial",
+    "color": "Slate Brown",
+    "material": "Polyester",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B07B4ML473.glb",
+    "size_m": {
+      "w": 2.253,
+      "d": 0.876,
+      "h": 0.882
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4ML473",
+      "product_name": "Amazon Brand – Rivet Edgewest Low Back Mid-Century Modern Couch Sofa, 87\"W, Slate Brown",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sofa_abo_B075X4F5DG",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": "Industrial",
+    "color": "Blue Eclipse",
+    "material": "Madera Noble",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B075X4F5DG.glb",
+    "size_m": {
+      "w": 1.976,
+      "d": 0.875,
+      "h": 0.846
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075X4F5DG",
+      "product_name": "Amazon Brand – Rivet Lawson Modern Angled Sofa, 78\"W, Blue Eclipse",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sofa_abo_B072C8Q9S8",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": null,
+    "color": "Denim",
+    "material": "Polyester fabric, sturdy hardwood frame and solid beech wood legs",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B072C8Q9S8.glb",
+    "size_m": {
+      "w": 1.659,
+      "d": 0.999,
+      "h": 0.907
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072C8Q9S8",
+      "product_name": "Amazon Brand - Rivet Revolve Modern Upholstered Sofa Bed, 70\"W, Denim Blue",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sofa_abo_B072PZC1KS",
+    "name": "Sofa",
+    "category": "sofa",
+    "style": "Mid-Century modern",
+    "color": "Shell",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sofa_abo_B072PZC1KS.glb",
+    "size_m": {
+      "w": 2.137,
+      "d": 0.98,
+      "h": 0.892
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072PZC1KS",
+      "product_name": "Amazon Brand – Rivet Sloane Mid-Century Modern Sofa with Tufted Back, 79.9\"W, Shell",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sectional_abo_B07B4GVQ57",
+    "name": "Sectional sofa",
+    "category": "sectional",
+    "style": null,
+    "color": "Sand",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sectional_abo_B07B4GVQ57.glb",
+    "size_m": {
+      "w": 3.471,
+      "d": 1.599,
+      "h": 0.954
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4GVQ57",
+      "product_name": "Amazon Brand – Stone & Beam Andover Modern Right Chaise Sofa Sectional, 126\"W, Sand",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sectional_abo_B07CB5GSZ2",
+    "name": "Sectional sofa",
+    "category": "sectional",
+    "style": null,
+    "color": "Pewter",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sectional_abo_B07CB5GSZ2.glb",
+    "size_m": {
+      "w": 3.471,
+      "d": 1.606,
+      "h": 0.954
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07CB5GSZ2",
+      "product_name": "Amazon Brand – Stone & Beam Andover Modern Left Chaise Sofa Sectional, 126\"W, Pewter",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sectional_abo_B07B4MH6QH",
+    "name": "Sectional sofa",
+    "category": "sectional",
+    "style": null,
+    "color": "Dark Tan",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sectional_abo_B07B4MH6QH.glb",
+    "size_m": {
+      "w": 2.593,
+      "d": 3.302,
+      "h": 0.947
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4MH6QH",
+      "product_name": "Amazon Brand – Stone & Beam Andover Modern Right L-Sectional Sofa, 124\"W, Dark Tan",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sectional_abo_B07BWMSQ38",
+    "name": "Sectional sofa",
+    "category": "sectional",
+    "style": null,
+    "color": "Charcoal",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sectional_abo_B07BWMSQ38.glb",
+    "size_m": {
+      "w": 2.593,
+      "d": 3.302,
+      "h": 0.947
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07BWMSQ38",
+      "product_name": "Amazon Brand – Stone & Beam Andover Modern Left L-Sectional Sofa, 124\"W, Charcoal",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "sectional_abo_B071SLGYB3",
+    "name": "Sectional sofa",
+    "category": "sectional",
+    "style": "Transitional",
+    "color": "Sand",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/sectional_abo_B071SLGYB3.glb",
+    "size_m": {
+      "w": 2.088,
+      "d": 0.935,
+      "h": 0.862
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B071SLGYB3",
+      "product_name": "Amazon Brand – Stone & Beam Dalton Sectional Sofa Couch, 91.5\"W, Sand",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "loveseat_abo_B071FMSY5M",
+    "name": "Loveseat",
+    "category": "loveseat",
+    "style": "Transitional",
+    "color": "Charcoal",
+    "material": "Wood frame; Fabric",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/loveseat_abo_B071FMSY5M.glb",
+    "size_m": {
+      "w": 1.751,
+      "d": 0.969,
+      "h": 0.92
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B071FMSY5M",
+      "product_name": "Amazon Brand – Rivet Midtown Contemporary Upholstered Loveseat Sofa, 68.5\"W, Charcoal",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "loveseat_abo_B073G6GTK7",
+    "name": "Loveseat",
+    "category": "loveseat",
+    "style": null,
+    "color": "Navy",
+    "material": "Stone",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/loveseat_abo_B073G6GTK7.glb",
+    "size_m": {
+      "w": 1.297,
+      "d": 0.779,
+      "h": 0.867
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B073G6GTK7",
+      "product_name": "Amazon Brand – Stone & Beam Modern Sweeping Arm Settee, 51\"W, Damask Navy",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "loveseat_abo_B072PZVY6C",
+    "name": "Loveseat",
+    "category": "loveseat",
+    "style": "Mid-Century modern",
+    "color": "Shell",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/loveseat_abo_B072PZVY6C.glb",
+    "size_m": {
+      "w": 1.655,
+      "d": 0.98,
+      "h": 0.892
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072PZVY6C",
+      "product_name": "Amazon Brand – Rivet Sloane Mid-Century Modern Loveseat with Tufted Back, 64.2\"W, Shell",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "loveseat_abo_B07HZ57QH1",
+    "name": "Loveseat",
+    "category": "loveseat",
+    "style": "Loveseat",
+    "color": "Handloom Ecru",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/loveseat_abo_B07HZ57QH1.glb",
+    "size_m": {
+      "w": 1.744,
+      "d": 1.04,
+      "h": 1.047
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HZ57QH1",
+      "product_name": "Amazon Brand – Stone & Beam Calhoun Loveseat Sofa, 62.5\"W, Ecru",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "armchair_abo_B07BWKFNDK",
+    "name": "Armchair",
+    "category": "armchair",
+    "style": "Transitional",
+    "color": "Storm Grey",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/armchair_abo_B07BWKFNDK.glb",
+    "size_m": {
+      "w": 0.513,
+      "d": 0.592,
+      "h": 0.804
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07BWKFNDK",
+      "product_name": "Amazon Brand – Stone & Beam Lummi Modern Armless Living Room Accent Chair, 21.6\" W, Storm Grey",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "armchair_abo_B07DBH52YB",
+    "name": "Armchair",
+    "category": "armchair",
+    "style": "Transitional",
+    "color": "Light Grey",
+    "material": "Polyester",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/armchair_abo_B07DBH52YB.glb",
+    "size_m": {
+      "w": 0.689,
+      "d": 0.806,
+      "h": 0.886
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07DBH52YB",
+      "product_name": "Amazon Brand – Ravenna Home Eddison Modern Slope Accent Chair, 32\"W, Light Grey",
+      "brand": "Ravenna Home",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "armchair_abo_B07B4MRLRJ",
+    "name": "Armchair",
+    "category": "armchair",
+    "style": "Modern",
+    "color": "Dark Grey",
+    "material": "Textile",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/armchair_abo_B07B4MRLRJ.glb",
+    "size_m": {
+      "w": 1.004,
+      "d": 0.805,
+      "h": 0.842
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4MRLRJ",
+      "product_name": "Amazon Brand – Rivet Berkshire Modern Living Room Accent Chair, 37\"W, Dark Grey",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "armchair_abo_B072PZK12R",
+    "name": "Armchair",
+    "category": "armchair",
+    "style": "Mid-Century modern",
+    "color": "Shell",
+    "material": "Polyester; Wood frame and legs",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/armchair_abo_B072PZK12R.glb",
+    "size_m": {
+      "w": 0.897,
+      "d": 1.128,
+      "h": 0.965
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072PZK12R",
+      "product_name": "Amazon Brand – Rivet Sloane Mid-Century Modern Armchair with Tapered Legs, 32.7\"W, Shell",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "armchair_abo_B0746H4BNS",
+    "name": "Armchair",
+    "category": "armchair",
+    "style": "Glam",
+    "color": "Light Blue",
+    "material": "Brass",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/armchair_abo_B0746H4BNS.glb",
+    "size_m": {
+      "w": 0.758,
+      "d": 0.813,
+      "h": 0.956
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B0746H4BNS",
+      "product_name": "Amazon Brand – Rivet Charlotte Mid-Century Modern Upholstered Gold Accent Chair, 29\"W, Light Blue",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "armchair_abo_B072PZJZY3",
+    "name": "Armchair",
+    "category": "armchair",
+    "style": "Transitional",
+    "color": "Smoky Teal",
+    "material": "solid beech wood/ Velvet",
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/armchair_abo_B072PZJZY3.glb",
+    "size_m": {
+      "w": 0.521,
+      "d": 0.554,
+      "h": 0.806
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072PZJZY3",
+      "product_name": "Amazon Brand – Rivet Ashworth Armless Velvet Accent Chair, 21.6\"W, Smoky Teal",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "armchair_abo_B07HZ9K9PG",
+    "name": "Armchair",
+    "category": "armchair",
+    "style": "Living Room Chair",
+    "color": "Handloom Ecru",
+    "material": null,
+    "tags": [
+      "living_room",
+      "seating",
+      "cover"
+    ],
+    "file": "furniture/v3/armchair_abo_B07HZ9K9PG.glb",
+    "size_m": {
+      "w": 1.178,
+      "d": 1.009,
+      "h": 1.016
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HZ9K9PG",
+      "product_name": "Amazon Brand – Stone & Beam Calhoun Living Room Accent Chair, 42\"W, Ecru",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "coffee_table_abo_B07DBFFG9Z",
+    "name": "Coffee table",
+    "category": "coffee_table",
+    "style": "Coffee Table",
+    "color": "Dark Brown",
+    "material": "wood",
+    "tags": [
+      "living_room",
+      "table",
+      "movie_night"
+    ],
+    "file": "furniture/v3/coffee_table_abo_B07DBFFG9Z.glb",
+    "size_m": {
+      "w": 1.197,
+      "d": 0.594,
+      "h": 0.459
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.45
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07DBFFG9Z",
+      "product_name": "Amazon Brand – Ravenna Home Flush Mount Wood Cross Coffee Table, 23.6\"W, Dark Brown Walnut",
+      "brand": "Ravenna Home",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "coffee_table_abo_B07HSG8DPR",
+    "name": "Coffee table",
+    "category": "coffee_table",
+    "style": "Industrial",
+    "color": null,
+    "material": "Stone",
+    "tags": [
+      "living_room",
+      "table",
+      "movie_night"
+    ],
+    "file": "furniture/v3/coffee_table_abo_B07HSG8DPR.glb",
+    "size_m": {
+      "w": 1.264,
+      "d": 1.264,
+      "h": 0.516
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.45
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSG8DPR",
+      "product_name": "Amazon Brand – Stone & Beam Industrial Round Coffee Table, 48\"W, Wood & Dark Metal",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "coffee_table_abo_B07B7NYQLK",
+    "name": "Coffee table",
+    "category": "coffee_table",
+    "style": "Coffee Table",
+    "color": "Natural/Black",
+    "material": "wood",
+    "tags": [
+      "living_room",
+      "table",
+      "movie_night"
+    ],
+    "file": "furniture/v3/coffee_table_abo_B07B7NYQLK.glb",
+    "size_m": {
+      "w": 1.238,
+      "d": 0.877,
+      "h": 0.492
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.45
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B7NYQLK",
+      "product_name": "Amazon Brand – Stone & Beam Bernice Industrial Reclaimed Parquet Wood Coffee Table, 42\"W, Natural and Black",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "coffee_table_abo_B075Z85K2F",
+    "name": "Coffee table",
+    "category": "coffee_table",
+    "style": "Coffee Table",
+    "color": "Grey and Silver",
+    "material": "reclaimed wood",
+    "tags": [
+      "living_room",
+      "table",
+      "movie_night"
+    ],
+    "file": "furniture/v3/coffee_table_abo_B075Z85K2F.glb",
+    "size_m": {
+      "w": 1.4,
+      "d": 0.8,
+      "h": 0.44
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.45
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075Z85K2F",
+      "product_name": "Amazon Brand – Stone & Beam Culver Reclaimed Industrial Wood Coffee Table, 55.1\"W, Natural and Steel",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "coffee_table_abo_B07B7GQ1J2",
+    "name": "Coffee table",
+    "category": "coffee_table",
+    "style": "Transitional",
+    "color": "Natural/Golden",
+    "material": "wood",
+    "tags": [
+      "living_room",
+      "table",
+      "movie_night"
+    ],
+    "file": "furniture/v3/coffee_table_abo_B07B7GQ1J2.glb",
+    "size_m": {
+      "w": 1.0,
+      "d": 1.154,
+      "h": 0.456
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.45
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B7GQ1J2",
+      "product_name": "Amazon Brand – Rivet Rustic Reclaimed Fir Wood Coffee Table, 39\"W, Natural and Gold",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "coffee_table_abo_B07B8HYSLD",
+    "name": "Coffee table",
+    "category": "coffee_table",
+    "style": "Modern farm_House",
+    "color": "Brown",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "table",
+      "movie_night"
+    ],
+    "file": "furniture/v3/coffee_table_abo_B07B8HYSLD.glb",
+    "size_m": {
+      "w": 1.27,
+      "d": 0.711,
+      "h": 0.507
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.45
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B8HYSLD",
+      "product_name": "Amazon Brand – Stone & Beam Bruckner Casual Wood Coffee Table, 50\"W, Brown",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "side_table_abo_B07B7H9VMM",
+    "name": "Side table",
+    "category": "side_table",
+    "style": null,
+    "color": "Natural",
+    "material": "wood",
+    "tags": [
+      "living_room",
+      "table"
+    ],
+    "file": "furniture/v3/side_table_abo_B07B7H9VMM.glb",
+    "size_m": {
+      "w": 0.425,
+      "d": 0.441,
+      "h": 0.604
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B7H9VMM",
+      "product_name": "Amazon Brand – Rivet Rustic Reclaimed Fir Wood Side End Table, 16.5\"W, Natural",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "side_table_abo_B07GFG117Y",
+    "name": "Side table",
+    "category": "side_table",
+    "style": "Beside Table",
+    "color": "Grey",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "table"
+    ],
+    "file": "furniture/v3/side_table_abo_B07GFG117Y.glb",
+    "size_m": {
+      "w": 0.441,
+      "d": 0.325,
+      "h": 0.46
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFG117Y",
+      "product_name": "Amazon Brand - Movian Kolva 2-Drawer Bedside Table, 45 x 38 x 47cm, Dark Grey/White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "side_table_abo_B07H8JN9KN",
+    "name": "Side table",
+    "category": "side_table",
+    "style": "Bedside Table (Set of 2)",
+    "color": "Alpine White",
+    "material": "silver",
+    "tags": [
+      "living_room",
+      "table"
+    ],
+    "file": "furniture/v3/side_table_abo_B07H8JN9KN.glb",
+    "size_m": {
+      "w": 0.517,
+      "d": 0.399,
+      "h": 0.357
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07H8JN9KN",
+      "product_name": "Amazon Brand - Movian Lagan 2-Drawer Beside Tables, Set of 2, 50 x 36 x 40cm, White/Grey",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "side_table_abo_B075ZBW1S4",
+    "name": "Side table",
+    "category": "side_table",
+    "style": "Tray Table",
+    "color": "Walnut + Metal",
+    "material": "wood",
+    "tags": [
+      "living_room",
+      "table"
+    ],
+    "file": "furniture/v3/side_table_abo_B075ZBW1S4.glb",
+    "size_m": {
+      "w": 0.323,
+      "d": 0.414,
+      "h": 0.718
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075ZBW1S4",
+      "product_name": "Amazon Brand – Stone & Beam Larson Industrial Wood & Metal Side End Table, 22\"W, Walnut",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "tv_stand_abo_B079YW5F4Y",
+    "name": "TV stand",
+    "category": "tv_stand",
+    "style": "Contemporary",
+    "color": "Grey",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "storage",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/tv_stand_abo_B079YW5F4Y.glb",
+    "size_m": {
+      "w": 1.084,
+      "d": 0.406,
+      "h": 0.432
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B079YW5F4Y",
+      "product_name": "Amazon Brand - Movian Ba-se 1-Door 1-Shelf TV Stand, 110 x 39.8 x 43.7cm, Grey/Brown",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "tv_stand_abo_B07B7DMPX7",
+    "name": "TV stand",
+    "category": "tv_stand",
+    "style": null,
+    "color": null,
+    "material": "wood",
+    "tags": [
+      "living_room",
+      "storage",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/tv_stand_abo_B07B7DMPX7.glb",
+    "size_m": {
+      "w": 1.5,
+      "d": 0.508,
+      "h": 0.769
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B7DMPX7",
+      "product_name": "Amazon Brand – Rivet Mid-Century Modern Wood Media TV Console Stand Table, 59\"H, White &amp; Gray",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "tv_stand_abo_B07GFFPKBG",
+    "name": "TV stand",
+    "category": "tv_stand",
+    "style": "TV Stand",
+    "color": "Oak",
+    "material": "Wood",
+    "tags": [
+      "living_room",
+      "storage",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/tv_stand_abo_B07GFFPKBG.glb",
+    "size_m": {
+      "w": 1.6,
+      "d": 0.418,
+      "h": 0.52
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFFPKBG",
+      "product_name": "Amazon Brand - Movian Aggol 2-Door 2-Drawer TV Stand, 160 x 40 x 52cm, White/Brown Oak-Effect",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "tv_stand_abo_B07HSG8DPZ",
+    "name": "TV stand",
+    "category": "tv_stand",
+    "style": null,
+    "color": null,
+    "material": null,
+    "tags": [
+      "living_room",
+      "storage",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/tv_stand_abo_B07HSG8DPZ.glb",
+    "size_m": {
+      "w": 1.448,
+      "d": 0.349,
+      "h": 0.528
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSG8DPZ",
+      "product_name": "Amazon Brand – Rivet Emerly Contemporary Media Console Center Storage Cabinet, 57\"W, Wood",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "tv_stand_abo_B07HSG5DGP",
+    "name": "TV stand",
+    "category": "tv_stand",
+    "style": "Media Cabinet",
+    "color": null,
+    "material": null,
+    "tags": [
+      "living_room",
+      "storage",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/tv_stand_abo_B07HSG5DGP.glb",
+    "size_m": {
+      "w": 1.48,
+      "d": 0.454,
+      "h": 0.506
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSG5DGP",
+      "product_name": "Amazon Brand – Rivet Roxmere Mid-Century Modern TV Media Console Center Stand, 59\"W, Acacia Wood &amp; Dark Metal",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "tv_stand_abo_B072ZNBWM7",
+    "name": "TV stand",
+    "category": "tv_stand",
+    "style": "Modern",
+    "color": "Grey",
+    "material": "Engineered Wood",
+    "tags": [
+      "living_room",
+      "storage",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/tv_stand_abo_B072ZNBWM7.glb",
+    "size_m": {
+      "w": 1.336,
+      "d": 0.329,
+      "h": 0.591
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072ZNBWM7",
+      "product_name": "Amazon Brand – Rivet District Mid-Century Expandable TV Media Console, Walnut and Grey Lacquer",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rug_abo_B075ZBJL1T",
+    "name": "Rug",
+    "category": "rug",
+    "style": "Modern",
+    "color": "Denim Blue",
+    "material": "wool",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "floor"
+    ],
+    "file": "furniture/v3/rug_abo_B075ZBJL1T.glb",
+    "size_m": {
+      "w": 2.33,
+      "d": 1.478,
+      "h": 0.017
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075ZBJL1T",
+      "product_name": "Amazon Brand – Rivet Motion Modern Patterned Wool Area Rug, 5' x 7' 6\", Denim Blue",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rug_abo_B07B4ZPCSS",
+    "name": "Rug",
+    "category": "rug",
+    "style": null,
+    "color": "Sunset",
+    "material": "wool",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "floor"
+    ],
+    "file": "furniture/v3/rug_abo_B07B4ZPCSS.glb",
+    "size_m": {
+      "w": 2.285,
+      "d": 1.524,
+      "h": 0.006
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4ZPCSS",
+      "product_name": "Amazon Brand – Stone & Beam Casual Geometric Wool Area Rug, 7' 6\" x 5', Sunset",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rug_abo_B072PW7DXQ",
+    "name": "Rug",
+    "category": "rug",
+    "style": "Transitional",
+    "color": "Aqua",
+    "material": "fiber",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "floor"
+    ],
+    "file": "furniture/v3/rug_abo_B072PW7DXQ.glb",
+    "size_m": {
+      "w": 2.363,
+      "d": 1.566,
+      "h": 0.004
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072PW7DXQ",
+      "product_name": "Amazon Brand – Rivet Distressed Floral Medallion Rug, 5'3\" x 7'7\", Aqua",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rug_abo_B0735W9DMT",
+    "name": "Rug",
+    "category": "rug",
+    "style": "Transitional",
+    "color": "Blue",
+    "material": "wool",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "floor"
+    ],
+    "file": "furniture/v3/rug_abo_B0735W9DMT.glb",
+    "size_m": {
+      "w": 1.824,
+      "d": 1.22,
+      "h": 0.008
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B0735W9DMT",
+      "product_name": "Amazon Brand – Rivet Modern Geometric Wool Area Rug, 4 x 6 Foot, Blue",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rug_abo_B0735THVQH",
+    "name": "Rug",
+    "category": "rug",
+    "style": "Modern",
+    "color": "Blue",
+    "material": "wool",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "floor"
+    ],
+    "file": "furniture/v3/rug_abo_B0735THVQH.glb",
+    "size_m": {
+      "w": 2.441,
+      "d": 1.526,
+      "h": 0.008
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B0735THVQH",
+      "product_name": "Amazon Brand – Rivet Modern Geometric Wool Area Rug, 5 x 8 Foot, Blue",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rug_abo_B071W31P67",
+    "name": "Rug",
+    "category": "rug",
+    "style": "Modern",
+    "color": "Light Blue",
+    "material": "wool",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "floor"
+    ],
+    "file": "furniture/v3/rug_abo_B071W31P67.glb",
+    "size_m": {
+      "w": 1.749,
+      "d": 1.141,
+      "h": 0.015
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B071W31P67",
+      "product_name": "Amazon Brand – Stone & Beam Contemporary Hourglass Wool Area Rug, 3' 9\" x 5' 9\", Light Blue",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bookshelf_abo_B07H8SQ2NZ",
+    "name": "Bookshelf",
+    "category": "bookshelf",
+    "style": "Cabinet/Bookcase",
+    "color": "Oak Sonoma/Alpine White",
+    "material": null,
+    "tags": [
+      "living_room",
+      "office",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/bookshelf_abo_B07H8SQ2NZ.glb",
+    "size_m": {
+      "w": 0.995,
+      "d": 0.434,
+      "h": 1.405
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07H8SQ2NZ",
+      "product_name": "Amazon Brand - Movian Oker 2-Door Cabinet/Bookcase with 8 Shelves, 100 x 140cm, Light Brown Oak-Effect/White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bookshelf_abo_B07HSGBB2D",
+    "name": "Bookshelf",
+    "category": "bookshelf",
+    "style": "Bookcase",
+    "color": null,
+    "material": null,
+    "tags": [
+      "living_room",
+      "office",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/bookshelf_abo_B07HSGBB2D.glb",
+    "size_m": {
+      "w": 0.491,
+      "d": 0.267,
+      "h": 1.342
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSGBB2D",
+      "product_name": "Stone & Beam Rylee Modern Bookcase 27.6\"W x 76.8”H, Mixed Gray",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bookshelf_abo_B075Z7SQND",
+    "name": "Bookshelf",
+    "category": "bookshelf",
+    "style": null,
+    "color": "Light Wood",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "office",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/bookshelf_abo_B075Z7SQND.glb",
+    "size_m": {
+      "w": 1.746,
+      "d": 0.508,
+      "h": 1.808
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075Z7SQND",
+      "product_name": "Amazon Brand – Stone & Beam Bryson A-Frame Bookcase Shelf Stand, 70.7\"W, Wood and Iron",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bookshelf_abo_B07HSCNKCT",
+    "name": "Bookshelf",
+    "category": "bookshelf",
+    "style": "Large Bookcase",
+    "color": null,
+    "material": null,
+    "tags": [
+      "living_room",
+      "office",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/bookshelf_abo_B07HSCNKCT.glb",
+    "size_m": {
+      "w": 0.748,
+      "d": 0.308,
+      "h": 1.471
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSCNKCT",
+      "product_name": "Stone & Beam Rylee Modern Bookcase 39.4\"Wx76.8”H, Mixed Gray",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bookshelf_abo_B075Z6YS1Z",
+    "name": "Bookshelf",
+    "category": "bookshelf",
+    "style": "73\" Bookcase",
+    "color": "Walnut + Metal",
+    "material": null,
+    "tags": [
+      "living_room",
+      "office",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/bookshelf_abo_B075Z6YS1Z.glb",
+    "size_m": {
+      "w": 0.874,
+      "d": 0.359,
+      "h": 1.86
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075Z6YS1Z",
+      "product_name": "Amazon Brand – Stone & Beam Larson Industrial Wood and Metal 4-Shelf Bookcase, 73\"H, Walnut",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bookshelf_abo_B07HSLTLGP",
+    "name": "Bookshelf",
+    "category": "bookshelf",
+    "style": "0",
+    "color": null,
+    "material": "wood",
+    "tags": [
+      "living_room",
+      "office",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/bookshelf_abo_B07HSLTLGP.glb",
+    "size_m": {
+      "w": 1.371,
+      "d": 0.379,
+      "h": 1.826
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSLTLGP",
+      "product_name": "Amazon Brand – Stone & Beam Industrial Bookcase, 72 Inch Height, Natural Wood, Black Metal Frame",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "floor_lamp_abo_B073751DMK",
+    "name": "Floor lamp",
+    "category": "floor_lamp",
+    "style": "Moderno/elegante",
+    "color": "Black",
+    "material": "Metal",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "lighting"
+    ],
+    "file": "furniture/v3/floor_lamp_abo_B073751DMK.glb",
+    "size_m": {
+      "w": 0.475,
+      "d": 0.233,
+      "h": 1.469
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B073751DMK",
+      "product_name": "Amazon Brand – Stone & Beam Modern Metal Cut-Out Living Room Standing Floor Lamp With Light Bulb - 19 x 8 x 59.5 Inches, Earth Tone Shade",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "floor_lamp_abo_B073755HVS",
+    "name": "Floor lamp",
+    "category": "floor_lamp",
+    "style": null,
+    "color": "Black",
+    "material": "Metal",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "lighting"
+    ],
+    "file": "furniture/v3/floor_lamp_abo_B073755HVS.glb",
+    "size_m": {
+      "w": 0.493,
+      "d": 1.424,
+      "h": 1.927
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B073755HVS",
+      "product_name": "Amazon Brand – Stone & Beam Modern Arc Living Room Floor Lamp With Light Bulb And White Shade - 10 x 56 x 76 Inches, Black",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "floor_lamp_abo_B0742DNY41",
+    "name": "Floor lamp",
+    "category": "floor_lamp",
+    "style": "Floor Lamp",
+    "color": "Antique Brass",
+    "material": "Metal+Marble",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "lighting"
+    ],
+    "file": "furniture/v3/floor_lamp_abo_B0742DNY41.glb",
+    "size_m": {
+      "w": 0.194,
+      "d": 0.653,
+      "h": 1.594
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B0742DNY41",
+      "product_name": "Rivet Marble and Brass Floor Lamp, Avery, 63\"H, With Bulb",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "floor_lamp_abo_B07HK85S6P",
+    "name": "Floor lamp",
+    "category": "floor_lamp",
+    "style": "Floor Lamp",
+    "color": "Grey",
+    "material": "Linen",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "lighting"
+    ],
+    "file": "furniture/v3/floor_lamp_abo_B07HK85S6P.glb",
+    "size_m": {
+      "w": 0.372,
+      "d": 0.405,
+      "h": 1.465
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HK85S6P",
+      "product_name": "Amazon Brand – Rivet Mid-Century Floor Lamp with Shelves and Bulb, 62\"H, Matte White",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "floor_lamp_abo_B073772DH1",
+    "name": "Floor lamp",
+    "category": "floor_lamp",
+    "style": "Floor Lamp",
+    "color": "Antique Brass",
+    "material": "Metal",
+    "tags": [
+      "living_room",
+      "bedroom",
+      "lighting"
+    ],
+    "file": "furniture/v3/floor_lamp_abo_B073772DH1.glb",
+    "size_m": {
+      "w": 0.493,
+      "d": 1.434,
+      "h": 1.927
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B073772DH1",
+      "product_name": "Amazon Brand – Rivet Brass Arc Mid-Century Modern Living Room Standing Floor Lamp with Bulb, 76\"H, Brass with Linen Shade",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "table_lamp_abo_B073751DMM",
+    "name": "Table lamp",
+    "category": "table_lamp",
+    "style": null,
+    "color": "Silver",
+    "material": "Polyresin+Metal+Fabric",
+    "tags": [
+      "bedroom",
+      "office",
+      "lighting"
+    ],
+    "file": "furniture/v3/table_lamp_abo_B073751DMM.glb",
+    "size_m": {
+      "w": 0.33,
+      "d": 0.33,
+      "h": 0.521
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B073751DMM",
+      "product_name": "Amazon Brand – Stone & Beam Textured Teardrop Table Lamp With Light Bulb And White Shade- 11.5 x 11.5 x 20 Inches, Silver",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "table_lamp_abo_B075X2LLWF",
+    "name": "Table lamp",
+    "category": "table_lamp",
+    "style": "现代款",
+    "color": "Brass",
+    "material": "Metal",
+    "tags": [
+      "bedroom",
+      "office",
+      "lighting"
+    ],
+    "file": "furniture/v3/table_lamp_abo_B075X2LLWF.glb",
+    "size_m": {
+      "w": 0.152,
+      "d": 0.141,
+      "h": 0.25
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075X2LLWF",
+      "product_name": "Amazon Brand – Rivet Modern Glass Globe Living Room Table Desk Lamp With LED Light Bulb - 7 x 10 Inches, Brass Finish",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "table_lamp_abo_B07HKGHSR7",
+    "name": "Table lamp",
+    "category": "table_lamp",
+    "style": "15.88\" Table Lamp",
+    "color": "Matte Black and Antique Brass",
+    "material": null,
+    "tags": [
+      "bedroom",
+      "office",
+      "lighting"
+    ],
+    "file": "furniture/v3/table_lamp_abo_B07HKGHSR7.glb",
+    "size_m": {
+      "w": 0.304,
+      "d": 0.304,
+      "h": 0.573
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HKGHSR7",
+      "product_name": "Amazon Brand – Rivet Modern Two Tone Table Desk Lamp with LED Light Bulb and Drum Shade - 12 x 12 x 15.88 Inches, Matte Black and Antique Brass",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "table_lamp_abo_B07B4YVX7P",
+    "name": "Table lamp",
+    "category": "table_lamp",
+    "style": null,
+    "color": "Black",
+    "material": null,
+    "tags": [
+      "bedroom",
+      "office",
+      "lighting"
+    ],
+    "file": "furniture/v3/table_lamp_abo_B07B4YVX7P.glb",
+    "size_m": {
+      "w": 0.279,
+      "d": 0.279,
+      "h": 0.508
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4YVX7P",
+      "product_name": "Amazon Brand – Stone & Beam Modern Metal Frame Living Room Table Lamp With Light Bulb - 7.5 x 5 x 20.5 Inches, Black with White Shade",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "ottoman_abo_B07B4L9C4P",
+    "name": "Ottoman",
+    "category": "ottoman",
+    "style": null,
+    "color": "Charcoal",
+    "material": null,
+    "tags": [
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/ottoman_abo_B07B4L9C4P.glb",
+    "size_m": {
+      "w": 1.187,
+      "d": 0.967,
+      "h": 0.696
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4L9C4P",
+      "product_name": "Amazon Brand – Rivet Edgewest Modern Ottoman, Leather, 32\"W, Charcoal",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "ottoman_abo_B073ZRS8VF",
+    "name": "Ottoman",
+    "category": "ottoman",
+    "style": null,
+    "color": "Navy",
+    "material": "metal",
+    "tags": [
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/ottoman_abo_B073ZRS8VF.glb",
+    "size_m": {
+      "w": 0.835,
+      "d": 0.587,
+      "h": 0.498
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B073ZRS8VF",
+      "product_name": "Amazon Brand – Rivet Emerly Modern Ottoman, 33\" W, Navy",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "ottoman_abo_B075X463MJ",
+    "name": "Ottoman",
+    "category": "ottoman",
+    "style": null,
+    "color": "Platinum",
+    "material": "polyester fabric",
+    "tags": [
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/ottoman_abo_B075X463MJ.glb",
+    "size_m": {
+      "w": 0.973,
+      "d": 0.982,
+      "h": 0.381
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075X463MJ",
+      "product_name": "Amazon Brand – Rivet Modern Oversized Upholstered Square Ottoman, 38\"W, Platinum",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "ottoman_abo_B072JG3W4M",
+    "name": "Ottoman",
+    "category": "ottoman",
+    "style": null,
+    "color": "Sand",
+    "material": "stone",
+    "tags": [
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/ottoman_abo_B072JG3W4M.glb",
+    "size_m": {
+      "w": 0.846,
+      "d": 0.617,
+      "h": 0.503
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072JG3W4M",
+      "product_name": "Amazon Brand – Stone & Beam Kristin Ottoman, 33\"W, Sand",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "plant_abo_B07BZB3HMH",
+    "name": "Potted plant",
+    "category": "plant",
+    "style": null,
+    "color": "Dark Brown",
+    "material": "Ceramic",
+    "tags": [
+      "living_room",
+      "decor"
+    ],
+    "file": "furniture/v3/plant_abo_B07BZB3HMH.glb",
+    "size_m": {
+      "w": 0.26,
+      "d": 0.25,
+      "h": 0.353
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07BZB3HMH",
+      "product_name": "Amazon Brand – Rivet Mid-Century Ceramic Planter with Stand, 17\"H, Dark Brown",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "plant_abo_B07HSLG6WN",
+    "name": "Potted plant",
+    "category": "plant",
+    "style": "Planter",
+    "color": null,
+    "material": "Stone",
+    "tags": [
+      "living_room",
+      "decor"
+    ],
+    "file": "furniture/v3/plant_abo_B07HSLG6WN.glb",
+    "size_m": {
+      "w": 0.316,
+      "d": 0.317,
+      "h": 0.303
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSLG6WN",
+      "product_name": "Amazon Brand – Stone & Beam Emerick Rustic Stoneware Planter Pot - 6 Inch, Brown and White",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "plant_abo_B078JK89KM",
+    "name": "Potted plant",
+    "category": "plant",
+    "style": null,
+    "color": "Coral/Orange",
+    "material": "Ceramic",
+    "tags": [
+      "living_room",
+      "decor"
+    ],
+    "file": "furniture/v3/plant_abo_B078JK89KM.glb",
+    "size_m": {
+      "w": 0.269,
+      "d": 0.269,
+      "h": 0.379
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B078JK89KM",
+      "product_name": "Amazon Brand – Rivet Mid-Century Modern Ceramic and Bamboo Planter Flower Pot with Stand,14.5\"H, Red and Orange",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "plant_abo_B078JGHZSZ",
+    "name": "Potted plant",
+    "category": "plant",
+    "style": "Wide",
+    "color": "Blue",
+    "material": "Ceramic",
+    "tags": [
+      "living_room",
+      "decor"
+    ],
+    "file": "furniture/v3/plant_abo_B078JGHZSZ.glb",
+    "size_m": {
+      "w": 0.166,
+      "d": 0.166,
+      "h": 0.751
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B078JGHZSZ",
+      "product_name": "Amazon Brand – Rivet Ceramic Planter with Leather Strap, 3.5\"H, Modern, Blue and Ivory",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B07B4W2MFW",
+    "name": "Bed",
+    "category": "bed",
+    "style": "King Bed",
+    "color": "Natural Rattan",
+    "material": "rattan",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B07B4W2MFW.glb",
+    "size_m": {
+      "w": 2.003,
+      "d": 2.184,
+      "h": 1.387
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4W2MFW",
+      "product_name": "Amazon Brand – Stone & Beam Chase Casual Wood and Rattan King Bed with Headboard, 79\"W, Natural",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B07B4VY11Z",
+    "name": "Bed",
+    "category": "bed",
+    "style": "King Bed",
+    "color": "Weathered Oak",
+    "material": "oak",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B07B4VY11Z.glb",
+    "size_m": {
+      "w": 1.606,
+      "d": 2.189,
+      "h": 1.369
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4VY11Z",
+      "product_name": "Amazon Brand – Stone & Beam Bishop Modern Wood King Bed, 79\"W, Weathered Oak",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B075XZMMG7",
+    "name": "Bed",
+    "category": "bed",
+    "style": null,
+    "color": "Black",
+    "material": "faux_leather",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B075XZMMG7.glb",
+    "size_m": {
+      "w": 2.018,
+      "d": 2.152,
+      "h": 1.046
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075XZMMG7",
+      "product_name": "AmazonBasics Upholstered Platform Bed, King, Black",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B075Y184L3",
+    "name": "Bed",
+    "category": "bed",
+    "style": null,
+    "color": "Black",
+    "material": "faux_leather",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B075Y184L3.glb",
+    "size_m": {
+      "w": 1.038,
+      "d": 2.152,
+      "h": 1.046
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075Y184L3",
+      "product_name": "AmazonBasics Faux Leather Upholstered Platform Bed Frame with Wooden Slats, Twin",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B075X29QYK",
+    "name": "Bed",
+    "category": "bed",
+    "style": "Queen Bed",
+    "color": "Brown",
+    "material": "Oak",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B075X29QYK.glb",
+    "size_m": {
+      "w": 1.612,
+      "d": 2.38,
+      "h": 1.25
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075X29QYK",
+      "product_name": "Amazon Brand – Stone & Beam Newport Arced Headboard Queen Bed, 63\"W, Oak",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B0718WYQ8D",
+    "name": "Bed",
+    "category": "bed",
+    "style": "Single Bed",
+    "color": "Pink",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B0718WYQ8D.glb",
+    "size_m": {
+      "w": 0.998,
+      "d": 1.963,
+      "h": 0.805
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B0718WYQ8D",
+      "product_name": "Amazon Brand - Movian Aveyron Single Bed Frame, 195 x 100 x 80cm, Pink",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B07B4ZFC57",
+    "name": "Bed",
+    "category": "bed",
+    "style": "Queen Bed",
+    "color": "Natural Rattan",
+    "material": "rattan",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B07B4ZFC57.glb",
+    "size_m": {
+      "w": 1.606,
+      "d": 2.184,
+      "h": 1.387
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B4ZFC57",
+      "product_name": "Amazon Brand – Stone & Beam Chase Casual Wood and Rattan Queen Bed with Headboard, 63\"W, Natural",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bed_abo_B075Z8767S",
+    "name": "Bed",
+    "category": "bed",
+    "style": "King Bed",
+    "color": "Brown",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "primary_bedroom",
+      "sleeping",
+      "cover"
+    ],
+    "file": "furniture/v3/bed_abo_B075Z8767S.glb",
+    "size_m": {
+      "w": 1.696,
+      "d": 2.276,
+      "h": 1.417
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075Z8767S",
+      "product_name": "Amazon Brand – Stone & Beam Bateman Casual Rustic Wood Platform Bed Frame with Tall Headboard, King, 81\"W, Brown",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "nightstand_abo_B07GFWF2CX",
+    "name": "Nightstand",
+    "category": "nightstand",
+    "style": "Beside Table",
+    "color": "White",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "storage"
+    ],
+    "file": "furniture/v3/nightstand_abo_B07GFWF2CX.glb",
+    "size_m": {
+      "w": 0.441,
+      "d": 0.325,
+      "h": 0.46
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFWF2CX",
+      "product_name": "Amazon Brand - Movian Kolva 2-Drawer Bedside Table, 45 x 38 x 47cm, White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "nightstand_abo_B07D42T6CX",
+    "name": "Nightstand",
+    "category": "nightstand",
+    "style": "Beside Table",
+    "color": "Oak",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "storage"
+    ],
+    "file": "furniture/v3/nightstand_abo_B07D42T6CX.glb",
+    "size_m": {
+      "w": 0.427,
+      "d": 0.347,
+      "h": 0.448
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07D42T6CX",
+      "product_name": "Amazon Brand - Movian Havel 2-Drawer Bedside Table, 35 x 43 x 45cm, Light Brown Oak-Effect/White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "nightstand_abo_B07H8V49GP",
+    "name": "Nightstand",
+    "category": "nightstand",
+    "style": "Nightstand (Set of 2)",
+    "color": "Alpine White/High Gloss White",
+    "material": null,
+    "tags": [
+      "bedroom",
+      "storage"
+    ],
+    "file": "furniture/v3/nightstand_abo_B07H8V49GP.glb",
+    "size_m": {
+      "w": 0.47,
+      "d": 0.408,
+      "h": 0.351
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07H8V49GP",
+      "product_name": "Amazon Brand - Movian Desna Nightstand (Set of 2), High Gloss White Colour",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "nightstand_abo_B07177355J",
+    "name": "Nightstand",
+    "category": "nightstand",
+    "style": "Nightstand",
+    "color": "Brown",
+    "material": "Solid hardwood",
+    "tags": [
+      "bedroom",
+      "storage"
+    ],
+    "file": "furniture/v3/nightstand_abo_B07177355J.glb",
+    "size_m": {
+      "w": 0.56,
+      "d": 0.439,
+      "h": 0.585
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07177355J",
+      "product_name": "Amazon Brand – Rivet West, Mid-Century, Oak Nightstand Bedside, 1-Drawer Table, 22\"W, Dark Oak Finish",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "nightstand_abo_B07HSH278Q",
+    "name": "Nightstand",
+    "category": "nightstand",
+    "style": null,
+    "color": "Beige",
+    "material": "stone",
+    "tags": [
+      "bedroom",
+      "storage"
+    ],
+    "file": "furniture/v3/nightstand_abo_B07HSH278Q.glb",
+    "size_m": {
+      "w": 0.552,
+      "d": 0.396,
+      "h": 0.589
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSH278Q",
+      "product_name": "Amazon Brand – Stone & Beam Rylee Modern Acacia Wood Nightstand, 22\"W, Gray-Wash Acacia",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dresser_abo_B07GFRP9RY",
+    "name": "Dresser",
+    "category": "dresser",
+    "style": "Chest of Drawers",
+    "color": "Oak",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/dresser_abo_B07GFRP9RY.glb",
+    "size_m": {
+      "w": 0.809,
+      "d": 0.529,
+      "h": 0.762
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFRP9RY",
+      "product_name": "Amazon Brand - Movian Belaya Chest of 3 Drawers with Extendable Dresser Top, 83/121 x 44 x 76cm, Light Brown Oak-Effect/White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dresser_abo_B07GFL6W68",
+    "name": "Dresser",
+    "category": "dresser",
+    "style": "Chest of Drawers",
+    "color": "White",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/dresser_abo_B07GFL6W68.glb",
+    "size_m": {
+      "w": 1.535,
+      "d": 0.333,
+      "h": 0.79
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFL6W68",
+      "product_name": "Amazon Brand - Movian Kolva Chest of 6 Drawers, 40 x 160 x 76.5cm, White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dresser_abo_B07GFDPB2V",
+    "name": "Dresser",
+    "category": "dresser",
+    "style": "Chest of Drawers",
+    "color": "Grey",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/dresser_abo_B07GFDPB2V.glb",
+    "size_m": {
+      "w": 0.994,
+      "d": 0.404,
+      "h": 0.816
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFDPB2V",
+      "product_name": "Amazon Brand - Movian Havel Chest of 4 Drawers, 40 x 100 x 82cm, White/Dark Grey",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dresser_abo_B07HSNQW37",
+    "name": "Dresser",
+    "category": "dresser",
+    "style": null,
+    "color": "Beige",
+    "material": "stone",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/dresser_abo_B07HSNQW37.glb",
+    "size_m": {
+      "w": 1.554,
+      "d": 0.455,
+      "h": 0.805
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSNQW37",
+      "product_name": "Amazon Brand – Stone & Beam Rylee Modern Acacia Wood 6-Drawer Bedroom Dresser, 61\"W, Gray-Wash Acacia",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dresser_abo_B07HSH4WFB",
+    "name": "Dresser",
+    "category": "dresser",
+    "style": "Modern",
+    "color": null,
+    "material": "Birch",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/dresser_abo_B07HSH4WFB.glb",
+    "size_m": {
+      "w": 0.923,
+      "d": 0.453,
+      "h": 0.801
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSH4WFB",
+      "product_name": "Amazon Brand – Rivet Modern Chest of Drawers with Diamond Pattern, 17.7 Inch Width, Natural",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "wardrobe_abo_B07H8JN9QF",
+    "name": "Wardrobe",
+    "category": "wardrobe",
+    "style": "4-Door Wardrobe With Mirror",
+    "color": "Oak Sonoma",
+    "material": "silver",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/wardrobe_abo_B07H8JN9QF.glb",
+    "size_m": {
+      "w": 1.998,
+      "d": 0.598,
+      "h": 2.159
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07H8JN9QF",
+      "product_name": "Amazon Brand - Movian Morava 4-Door 2-Drawer Wardrobe with Mirrors, 200 x 59 x 212cm, Light Brown Oak-Effect",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "wardrobe_abo_B07GFSJ69T",
+    "name": "Wardrobe",
+    "category": "wardrobe",
+    "style": "Wardrobe",
+    "color": "White",
+    "material": "Wood",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/wardrobe_abo_B07GFSJ69T.glb",
+    "size_m": {
+      "w": 1.78,
+      "d": 0.629,
+      "h": 1.96
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFSJ69T",
+      "product_name": "Amazon Brand - Movian Kolva Sliding 2-Door Wardrobe, 180 x 61 x 197cm, White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "wardrobe_abo_B07H8PWFDF",
+    "name": "Wardrobe",
+    "category": "wardrobe",
+    "style": "1-Door Wardrobe",
+    "color": "Oak Sonoma",
+    "material": "silver",
+    "tags": [
+      "bedroom",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/wardrobe_abo_B07H8PWFDF.glb",
+    "size_m": {
+      "w": 0.496,
+      "d": 0.588,
+      "h": 2.117
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.75
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07H8PWFDF",
+      "product_name": "Amazon Brand - Movian Morava 1-Door Wardrobe, 50 x 212 x 59cm, Light Brown Oak-Effect",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "desk_abo_B07GFWF2GM",
+    "name": "Desk",
+    "category": "desk",
+    "style": "Desk",
+    "color": "Grey",
+    "material": "Wood",
+    "tags": [
+      "office",
+      "bedroom",
+      "table"
+    ],
+    "file": "furniture/v3/desk_abo_B07GFWF2GM.glb",
+    "size_m": {
+      "w": 1.099,
+      "d": 0.557,
+      "h": 0.729
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFWF2GM",
+      "product_name": "Amazon Brand - Movian Indre Classic 1-Drawer Desk, 56 x 110 x 73cm, Dark Grey",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "desk_abo_B07GFWLSS4",
+    "name": "Desk",
+    "category": "desk",
+    "style": "Desk",
+    "color": "Oak",
+    "material": "Wood",
+    "tags": [
+      "office",
+      "bedroom",
+      "table"
+    ],
+    "file": "furniture/v3/desk_abo_B07GFWLSS4.glb",
+    "size_m": {
+      "w": 0.893,
+      "d": 0.498,
+      "h": 0.724
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFWLSS4",
+      "product_name": "Amazon Brand - Movian Inari 1-Drawer Desk, 50 x 90 x 73 cm, Light Brown/Oak Foil Finish",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "desk_abo_B07GFWW5JZ",
+    "name": "Desk",
+    "category": "desk",
+    "style": "Curved Desk",
+    "color": "White",
+    "material": "Wood",
+    "tags": [
+      "office",
+      "bedroom",
+      "table"
+    ],
+    "file": "furniture/v3/desk_abo_B07GFWW5JZ.glb",
+    "size_m": {
+      "w": 1.6,
+      "d": 0.802,
+      "h": 0.75
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFWW5JZ",
+      "product_name": "Amazon Brand - Movian Belaya Classic Desk with Curved Top, 80 x 160 x 75cm, White",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "desk_abo_B07HSJDN75",
+    "name": "Desk",
+    "category": "desk",
+    "style": "0",
+    "color": "White",
+    "material": "Engineered Wood",
+    "tags": [
+      "office",
+      "bedroom",
+      "table"
+    ],
+    "file": "furniture/v3/desk_abo_B07HSJDN75.glb",
+    "size_m": {
+      "w": 1.069,
+      "d": 0.409,
+      "h": 0.761
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSJDN75",
+      "product_name": "Amazon Brand – Rivet Modern Computer Desk, 30\"H, Walnut and White",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "desk_abo_B07GFQ4D3J",
+    "name": "Desk",
+    "category": "desk",
+    "style": "Desk",
+    "color": "Printing",
+    "material": "Wood",
+    "tags": [
+      "office",
+      "bedroom",
+      "table"
+    ],
+    "file": "furniture/v3/desk_abo_B07GFQ4D3J.glb",
+    "size_m": {
+      "w": 0.898,
+      "d": 0.482,
+      "h": 0.73
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07GFQ4D3J",
+      "product_name": "Amazon Brand - Movian Aveyron 1-Drawer 1-Door Desk, 55 x 110 x 73.5cm, White & Print",
+      "brand": "Movian",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "office_chair_abo_B072Y6Y96S",
+    "name": "Office chair",
+    "category": "office_chair",
+    "style": "Transitional",
+    "color": "Black",
+    "material": "Caressoft upholstery; Mahogany wood finish legs",
+    "tags": [
+      "office",
+      "seating"
+    ],
+    "file": "furniture/v3/office_chair_abo_B072Y6Y96S.glb",
+    "size_m": {
+      "w": 0.683,
+      "d": 0.772,
+      "h": 0.951
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072Y6Y96S",
+      "product_name": "AmazonBasics Classic Reception Office Chair with Mahogany Wood Finish Legs - Black",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "office_chair_abo_B075YP336C",
+    "name": "Office chair",
+    "category": "office_chair",
+    "style": null,
+    "color": "Light Brown",
+    "material": "Leather",
+    "tags": [
+      "office",
+      "seating"
+    ],
+    "file": "furniture/v3/office_chair_abo_B075YP336C.glb",
+    "size_m": {
+      "w": 0.527,
+      "d": 0.64,
+      "h": 0.929
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075YP336C",
+      "product_name": "Amazon Brand – Rivet Rachel Set of 2 Space-Age Mid-Century Modern Swivel Dining Room Kitchen Desk Chairs, 35.2 Inch Height, Synthetic Leather, Light Brown",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "office_chair_abo_B075Z8M22B",
+    "name": "Office chair",
+    "category": "office_chair",
+    "style": null,
+    "color": "Dark Grey",
+    "material": "90% Polyester, 10% Linen; Wood base",
+    "tags": [
+      "office",
+      "seating"
+    ],
+    "file": "furniture/v3/office_chair_abo_B075Z8M22B.glb",
+    "size_m": {
+      "w": 0.608,
+      "d": 0.629,
+      "h": 0.875
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075Z8M22B",
+      "product_name": "Amazon Brand – Rivet Mid-Century Open Back Swivel Office Desk Chair, 24\"W, Marble",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "office_chair_abo_B075ZBW1PX",
+    "name": "Office chair",
+    "category": "office_chair",
+    "style": null,
+    "color": "Brown Leather",
+    "material": "Leather; Matel base",
+    "tags": [
+      "office",
+      "seating"
+    ],
+    "file": "furniture/v3/office_chair_abo_B075ZBW1PX.glb",
+    "size_m": {
+      "w": 0.588,
+      "d": 0.625,
+      "h": 0.76
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075ZBW1PX",
+      "product_name": "Amazon Brand – Rivet Vibe Swivel Leather Office Chair, 25.2\"W, Medium Brown",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_table_abo_B075Z8629N",
+    "name": "Dining table",
+    "category": "dining_table",
+    "style": null,
+    "color": "Natural",
+    "material": "elm",
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "table",
+      "cover"
+    ],
+    "file": "furniture/v3/dining_table_abo_B075Z8629N.glb",
+    "size_m": {
+      "w": 1.134,
+      "d": 1.186,
+      "h": 0.752
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075Z8629N",
+      "product_name": "Amazon Brand – Rivet Modern Global Hexagonal Elm Dining Table, 47.2\"W, Natural Wood",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_table_abo_B07B7BGXN9",
+    "name": "Dining table",
+    "category": "dining_table",
+    "style": "78 - 98\" Extendable Table",
+    "color": "Brown",
+    "material": "wood",
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "table",
+      "cover"
+    ],
+    "file": "furniture/v3/dining_table_abo_B07B7BGXN9.glb",
+    "size_m": {
+      "w": 1.966,
+      "d": 1.071,
+      "h": 0.793
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B7BGXN9",
+      "product_name": "Amazon Brand – Stone & Beam Alejandra Casual Wood Dining Kitchen Table, 78\"-98\"L, Brown",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_table_abo_B075YQXRJM",
+    "name": "Dining table",
+    "category": "dining_table",
+    "style": null,
+    "color": "Brown",
+    "material": "Hardwood",
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "table",
+      "cover"
+    ],
+    "file": "furniture/v3/dining_table_abo_B075YQXRJM.glb",
+    "size_m": {
+      "w": 1.349,
+      "d": 0.801,
+      "h": 0.724
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075YQXRJM",
+      "product_name": "Amazon Brand – Rivet Mid-Century Modern Minimalist Dining Kitchen Table, 53.1\"L, Walnut Wood",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_table_abo_B07HSJJF2X",
+    "name": "Dining table",
+    "category": "dining_table",
+    "style": null,
+    "color": null,
+    "material": "stone",
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "table",
+      "cover"
+    ],
+    "file": "furniture/v3/dining_table_abo_B07HSJJF2X.glb",
+    "size_m": {
+      "w": 1.805,
+      "d": 0.893,
+      "h": 0.767
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSJJF2X",
+      "product_name": "Amazon Brand – Stone & Beam Industrial Mango Wood Rectangle Dining Table, 71\"L, Black Metal Legs",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_table_abo_B075YMXWZC",
+    "name": "Dining table",
+    "category": "dining_table",
+    "style": "Mid-Century Modern Style",
+    "color": "Walnut",
+    "material": "Oak",
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "table",
+      "cover"
+    ],
+    "file": "furniture/v3/dining_table_abo_B075YMXWZC.glb",
+    "size_m": {
+      "w": 1.609,
+      "d": 0.811,
+      "h": 0.755
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075YMXWZC",
+      "product_name": "Amazon Brand – Rivet Mid-Century Modern Oak Dining Table, 63\"L, Walnut Finish",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_chair_abo_B07B7BFP97",
+    "name": "Dining chair",
+    "category": "dining_chair",
+    "style": null,
+    "color": "Grey",
+    "material": null,
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/dining_chair_abo_B07B7BFP97.glb",
+    "size_m": {
+      "w": 0.508,
+      "d": 0.655,
+      "h": 0.952
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B7BFP97",
+      "product_name": "Amazon Brand – Stone & Beam Alaina Upholstered Dining Room Kitchen Chairs, 20\"W, Set of 2, Grey",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_chair_abo_B07HSBJ7J9",
+    "name": "Dining chair",
+    "category": "dining_chair",
+    "style": null,
+    "color": "Navy",
+    "material": null,
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/dining_chair_abo_B07HSBJ7J9.glb",
+    "size_m": {
+      "w": 0.45,
+      "d": 0.61,
+      "h": 1.029
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSBJ7J9",
+      "product_name": "Amazon Brand – Stone & Beam Woodley Modern Kitchen Dining Room Chairs, Set of 2, 40\"H, Navy Blue",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_chair_abo_B07HSJX7YW",
+    "name": "Dining chair",
+    "category": "dining_chair",
+    "style": null,
+    "color": "Gray",
+    "material": null,
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/dining_chair_abo_B07HSJX7YW.glb",
+    "size_m": {
+      "w": 0.45,
+      "d": 0.611,
+      "h": 1.033
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSJX7YW",
+      "product_name": "Amazon Brand – Stone & Beam Woodley Modern Dining Room Kitchen Chairs, Set of 2, 40\"H, Grey",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_chair_abo_B07B78LX2J",
+    "name": "Dining chair",
+    "category": "dining_chair",
+    "style": null,
+    "color": "Grey",
+    "material": "Wood",
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/dining_chair_abo_B07B78LX2J.glb",
+    "size_m": {
+      "w": 0.496,
+      "d": 0.585,
+      "h": 0.94
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B78LX2J",
+      "product_name": "Amazon Brand – Stone & Beam Hughes Casual Upholstered Dining Room Kitchen Chairs, Set of 2, Grey, Wood",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "dining_chair_abo_B07B79SZV1",
+    "name": "Dining chair",
+    "category": "dining_chair",
+    "style": null,
+    "color": "Beige",
+    "material": "Wood",
+    "tags": [
+      "dining_room",
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/dining_chair_abo_B07B79SZV1.glb",
+    "size_m": {
+      "w": 0.497,
+      "d": 0.61,
+      "h": 0.939
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B79SZV1",
+      "product_name": "Stone & Beam Hughes Casual Wood Dining Room Kitchen Chairs, Beige, Set of 2",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bar_stool_abo_B07B7B94NC",
+    "name": "Bar stool",
+    "category": "bar_stool",
+    "style": null,
+    "color": "Red",
+    "material": "wood",
+    "tags": [
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/bar_stool_abo_B07B7B94NC.glb",
+    "size_m": {
+      "w": 0.457,
+      "d": 0.476,
+      "h": 0.737
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B7B94NC",
+      "product_name": "Amazon Brand – Stone & Beam Cottage Wood Bar Stool, 24\"H, Red",
+      "brand": "Hillsdale Furniture",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bar_stool_abo_B07HSDPS35",
+    "name": "Bar stool",
+    "category": "bar_stool",
+    "style": null,
+    "color": "Chalk",
+    "material": null,
+    "tags": [
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/bar_stool_abo_B07HSDPS35.glb",
+    "size_m": {
+      "w": 0.507,
+      "d": 0.576,
+      "h": 0.973
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSDPS35",
+      "product_name": "Amazon Brand – Rivet Vermont Modern Diamond-Stitched Kitchen Counter-Height Stool, 38\"H, Chalk White and Brass",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bar_stool_abo_B07HSB4WV6",
+    "name": "Bar stool",
+    "category": "bar_stool",
+    "style": null,
+    "color": "Chalk",
+    "material": null,
+    "tags": [
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/bar_stool_abo_B07HSB4WV6.glb",
+    "size_m": {
+      "w": 0.462,
+      "d": 0.546,
+      "h": 1.084
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSB4WV6",
+      "product_name": "Amazon Brand – Rivet Vermont Modern Diamond-Stitched Kitchen Counter Bar Stool, 42\"H, Chalk White and Brass",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bar_stool_abo_B075YP3C53",
+    "name": "Bar stool",
+    "category": "bar_stool",
+    "style": null,
+    "color": "Aqua Blue",
+    "material": "Synthetic leather; Hardwood frame; Metal legs",
+    "tags": [
+      "kitchen",
+      "seating"
+    ],
+    "file": "furniture/v3/bar_stool_abo_B075YP3C53.glb",
+    "size_m": {
+      "w": 0.489,
+      "d": 0.524,
+      "h": 0.866
+    },
+    "placement": "beside",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075YP3C53",
+      "product_name": "Amazon Brand – Rivet Julian Minimalist Modern Tufted Dining Room Counter Height Bar Stools, Set of 2, 34.3 Inch Height, Synthetic Leather, Aqua Blue",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kitchen_island_abo_B07B78LXZ1",
+    "name": "Kitchen island",
+    "category": "kitchen_island",
+    "style": "Kitchen Cart",
+    "color": "Brown",
+    "material": "Stone",
+    "tags": [
+      "kitchen",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/kitchen_island_abo_B07B78LXZ1.glb",
+    "size_m": {
+      "w": 1.065,
+      "d": 0.445,
+      "h": 0.83
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B78LXZ1",
+      "product_name": "Amazon Brand – Stone & Beam Alejandra Unfinished Wood Kitchen Island Bar Cart with Wheels, Brown",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kitchen_island_abo_B07B8CX5W5",
+    "name": "Kitchen island",
+    "category": "kitchen_island",
+    "style": "0",
+    "color": "Gold",
+    "material": null,
+    "tags": [
+      "kitchen",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/kitchen_island_abo_B07B8CX5W5.glb",
+    "size_m": {
+      "w": 0.483,
+      "d": 0.332,
+      "h": 0.761
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07B8CX5W5",
+      "product_name": "Amazon Brand – Rivet Modern Metal Kitchen Rolling Bar Cart with Wheels, 30\" Inch Height, Gold",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kitchen_island_abo_B075YQ46MP",
+    "name": "Kitchen island",
+    "category": "kitchen_island",
+    "style": null,
+    "color": "Natural",
+    "material": "Rubberwood trays; metal frame",
+    "tags": [
+      "kitchen",
+      "storage",
+      "cover"
+    ],
+    "file": "furniture/v3/kitchen_island_abo_B075YQ46MP.glb",
+    "size_m": {
+      "w": 0.723,
+      "d": 0.313,
+      "h": 0.805
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.9
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B075YQ46MP",
+      "product_name": "Amazon Brand – Rivet Mid-Century Modern Wood and Metal 3-Tiered Kitchen Bar Cart with Wheels, 27.9\"W, Natural and Gold Finish",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bench_abo_B07HSBDCX8",
+    "name": "Bench",
+    "category": "bench",
+    "style": "Modern",
+    "color": "Gray",
+    "material": "Stone",
+    "tags": [
+      "dining_room",
+      "hallway",
+      "seating"
+    ],
+    "file": "furniture/v3/bench_abo_B07HSBDCX8.glb",
+    "size_m": {
+      "w": 1.698,
+      "d": 0.378,
+      "h": 0.431
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07HSBDCX8",
+      "product_name": "Amazon Brand – Stone & Beam Rylee Modern Farmhouse Acacia Wood Dining Bench, 71\"W, Gray-Wash Acacia",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bench_abo_B07DBHFDSQ",
+    "name": "Bench",
+    "category": "bench",
+    "style": "Transitional",
+    "color": "Black",
+    "material": "Pine",
+    "tags": [
+      "dining_room",
+      "hallway",
+      "seating"
+    ],
+    "file": "furniture/v3/bench_abo_B07DBHFDSQ.glb",
+    "size_m": {
+      "w": 0.973,
+      "d": 0.345,
+      "h": 0.561
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07DBHFDSQ",
+      "product_name": "Amazon Brand – Ravenna Home Radcliffe Upholstered Storage Bench, 40\"W, Black",
+      "brand": "Ravenna Home",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "bench_abo_B07DBB7FN6",
+    "name": "Bench",
+    "category": "bench",
+    "style": "Transitional",
+    "color": "Dark Espresso",
+    "material": "Wood",
+    "tags": [
+      "dining_room",
+      "hallway",
+      "seating"
+    ],
+    "file": "furniture/v3/bench_abo_B07DBB7FN6.glb",
+    "size_m": {
+      "w": 0.987,
+      "d": 0.369,
+      "h": 0.646
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.4
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07DBB7FN6",
+      "product_name": "Amazon Brand – Ravenna Home Radcliffe Upholstered Wood Storage Bench, 40\"W, Dark Espresso",
+      "brand": "Ravenna Home",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rocking_chair_abo_B07DBF73HJ",
+    "name": "Rocking chair",
+    "category": "rocking_chair",
+    "style": "Swivel Glider",
+    "color": "Grey",
+    "material": "Textile",
+    "tags": [
+      "nursery",
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/rocking_chair_abo_B07DBF73HJ.glb",
+    "size_m": {
+      "w": 0.83,
+      "d": 1.009,
+      "h": 1.036
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07DBF73HJ",
+      "product_name": "Amazon Brand – Ravenna Home Pull Recliner with 360 Rotating Swivel Glider, Living Room Chair, 39\"W, Grey",
+      "brand": "Ravenna Home",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rocking_chair_abo_B07QBMQG49",
+    "name": "Rocking chair",
+    "category": "rocking_chair",
+    "style": null,
+    "color": "Amber",
+    "material": null,
+    "tags": [
+      "nursery",
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/rocking_chair_abo_B07QBMQG49.glb",
+    "size_m": {
+      "w": 0.787,
+      "d": 0.939,
+      "h": 1.016
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07QBMQG49",
+      "product_name": "Amazon Brand – Ravenna Home Cornell Power Headrest Rocker Recliner, 40\"H, Leather, Amber",
+      "brand": "Ravenna Home",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rocking_chair_abo_B0853N7D4G",
+    "name": "Rocking chair",
+    "category": "rocking_chair",
+    "style": null,
+    "color": "Forest",
+    "material": "Polyester",
+    "tags": [
+      "nursery",
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/rocking_chair_abo_B0853N7D4G.glb",
+    "size_m": {
+      "w": 0.747,
+      "d": 0.875,
+      "h": 0.799
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B0853N7D4G",
+      "product_name": "Amazon Brand – Rivet Stowell Modern Low-Profile Glider Chair with Sloping Back and Arms, 29.5\"W, Velvet Forest",
+      "brand": "Rivet",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "rocking_chair_abo_B07QDL43KZ",
+    "name": "Rocking chair",
+    "category": "rocking_chair",
+    "style": "Modern",
+    "color": "Light Grey",
+    "material": "Wood",
+    "tags": [
+      "nursery",
+      "living_room",
+      "seating"
+    ],
+    "file": "furniture/v3/rocking_chair_abo_B07QDL43KZ.glb",
+    "size_m": {
+      "w": 0.622,
+      "d": 0.857,
+      "h": 0.79
+    },
+    "placement": "corner",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07QDL43KZ",
+      "product_name": "Amazon Brand – Stone & Beam Modern Hardwood Rocking Chair, 24.5\"W, Light Gray",
+      "brand": "Stone & Beam",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "toy_storage_abo_B07PJTHFFW",
+    "name": "Toy storage",
+    "category": "toy_storage",
+    "style": null,
+    "color": "White",
+    "material": null,
+    "tags": [
+      "nursery",
+      "playroom",
+      "storage"
+    ],
+    "file": "furniture/v3/toy_storage_abo_B07PJTHFFW.glb",
+    "size_m": {
+      "w": 0.792,
+      "d": 0.376,
+      "h": 0.625
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07PJTHFFW",
+      "product_name": "AmazonBasics Children's Multi-Functional Bookcase and Toy Storage Bin - White",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "toy_storage_abo_B073PB3FXD",
+    "name": "Toy storage",
+    "category": "toy_storage",
+    "style": "Single",
+    "color": "Navy",
+    "material": null,
+    "tags": [
+      "nursery",
+      "playroom",
+      "storage"
+    ],
+    "file": "furniture/v3/toy_storage_abo_B073PB3FXD.glb",
+    "size_m": {
+      "w": 0.27,
+      "d": 0.27,
+      "h": 0.28
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B073PB3FXD",
+      "product_name": "AmazonBasics Foldable Storage Cubes (6 Pack), Navy",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "toy_storage_abo_B0711RQMNF",
+    "name": "Toy storage",
+    "category": "toy_storage",
+    "style": null,
+    "color": "Beige",
+    "material": "布料",
+    "tags": [
+      "nursery",
+      "playroom",
+      "storage"
+    ],
+    "file": "furniture/v3/toy_storage_abo_B0711RQMNF.glb",
+    "size_m": {
+      "w": 0.27,
+      "d": 0.27,
+      "h": 0.28
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B0711RQMNF",
+      "product_name": "AmazonBasics Collapsible Fabric Storage Cubes Organizer with Handles, Beige - Pack of 6",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "toy_storage_abo_B07PGK6H8M",
+    "name": "Toy storage",
+    "category": "toy_storage",
+    "style": null,
+    "color": "Grey",
+    "material": null,
+    "tags": [
+      "nursery",
+      "playroom",
+      "storage"
+    ],
+    "file": "furniture/v3/toy_storage_abo_B07PGK6H8M.glb",
+    "size_m": {
+      "w": 0.78,
+      "d": 0.35,
+      "h": 0.6
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07PGK6H8M",
+      "product_name": "AmazonBasics Children's Multi-Functional Bookcase and Toy Storage Bin - Grey",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kids_table_abo_B07YBHC881",
+    "name": "Kids table",
+    "category": "kids_table",
+    "style": "Rubberwood Furniture",
+    "color": "Blue",
+    "material": null,
+    "tags": [
+      "playroom",
+      "nursery",
+      "table"
+    ],
+    "file": "furniture/v3/kids_table_abo_B07YBHC881.glb",
+    "size_m": {
+      "w": 0.639,
+      "d": 0.633,
+      "h": 0.503
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07YBHC881",
+      "product_name": "AmazonBasics Kid Table Set with Dry Erasable Table Top",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kids_table_abo_B07YBHB9QS",
+    "name": "Kids table",
+    "category": "kids_table",
+    "style": "Rubberwood Furniture",
+    "color": "White",
+    "material": null,
+    "tags": [
+      "playroom",
+      "nursery",
+      "table"
+    ],
+    "file": "furniture/v3/kids_table_abo_B07YBHB9QS.glb",
+    "size_m": {
+      "w": 0.65,
+      "d": 0.672,
+      "h": 0.503
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07YBHB9QS",
+      "product_name": "AmazonBasics Solid Wood Kiddie Table Set with Two Chairs, White",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kids_table_abo_B07YBHVN3Y",
+    "name": "Kids table",
+    "category": "kids_table",
+    "style": "Rubberwood Furniture",
+    "color": "Espresso",
+    "material": null,
+    "tags": [
+      "playroom",
+      "nursery",
+      "table"
+    ],
+    "file": "furniture/v3/kids_table_abo_B07YBHVN3Y.glb",
+    "size_m": {
+      "w": 0.599,
+      "d": 0.463,
+      "h": 0.673
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07YBHVN3Y",
+      "product_name": "AmazonBasics Solid Wood Kid Desk and Chair, Espresso",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kids_chair_abo_B07YBHB9RL",
+    "name": "Kids chair",
+    "category": "kids_chair",
+    "style": "Rubberwood Furniture",
+    "color": "Espresso",
+    "material": null,
+    "tags": [
+      "playroom",
+      "nursery",
+      "seating"
+    ],
+    "file": "furniture/v3/kids_chair_abo_B07YBHB9RL.glb",
+    "size_m": {
+      "w": 0.285,
+      "d": 0.285,
+      "h": 0.505
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07YBHB9RL",
+      "product_name": "AmazonBasics Kid Chair Set with Dry Erasable Seat Top, Espresso, 17.85 inch, 2-Pack",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kids_chair_abo_B07YBH2SR3",
+    "name": "Kids chair",
+    "category": "kids_chair",
+    "style": "Rubberwood Furniture",
+    "color": "White",
+    "material": null,
+    "tags": [
+      "playroom",
+      "nursery",
+      "seating"
+    ],
+    "file": "furniture/v3/kids_chair_abo_B07YBH2SR3.glb",
+    "size_m": {
+      "w": 0.367,
+      "d": 0.361,
+      "h": 0.668
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07YBH2SR3",
+      "product_name": "AmazonBasics Solid Wood Kid Chair Set, White, 26.5 inch, 2-Pack",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "kids_chair_abo_B07Y32Z4LS",
+    "name": "Kids chair",
+    "category": "kids_chair",
+    "style": "MODERN",
+    "color": "Blue",
+    "material": null,
+    "tags": [
+      "playroom",
+      "nursery",
+      "seating"
+    ],
+    "file": "furniture/v3/kids_chair_abo_B07Y32Z4LS.glb",
+    "size_m": {
+      "w": 0.364,
+      "d": 0.619,
+      "h": 0.423
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07Y32Z4LS",
+      "product_name": "AmazonBasics Plastic Stackable Kids Chairs, Blue Pig, 2-Pack",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "play_mat_abo_B01LP0V4JY",
+    "name": "Play mat",
+    "category": "play_mat",
+    "style": null,
+    "color": "Blue",
+    "material": "Synthetic",
+    "tags": [
+      "playroom",
+      "nursery",
+      "floor"
+    ],
+    "file": "furniture/v3/play_mat_abo_B01LP0V4JY.glb",
+    "size_m": {
+      "w": 1.869,
+      "d": 0.616,
+      "h": 0.021
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B01LP0V4JY",
+      "product_name": "AmazonBasics Extra Thick Exercise Yoga Gym Floor Mat with Carrying Strap - 74 x 24 x .5 Inches, Blue",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "play_mat_abo_B01LP0VI3G",
+    "name": "Play mat",
+    "category": "play_mat",
+    "style": null,
+    "color": "Grey",
+    "material": "foam",
+    "tags": [
+      "playroom",
+      "nursery",
+      "floor"
+    ],
+    "file": "furniture/v3/play_mat_abo_B01LP0VI3G.glb",
+    "size_m": {
+      "w": 1.884,
+      "d": 0.616,
+      "h": 0.021
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B01LP0VI3G",
+      "product_name": "AmazonBasics Extra Thick Exercise Yoga Gym Floor Mat with Carrying Strap - 74 x 24 x .5 Inches, Grey",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "play_mat_abo_B01LP0UX9G",
+    "name": "Play mat",
+    "category": "play_mat",
+    "style": null,
+    "color": "Pink",
+    "material": "foam",
+    "tags": [
+      "playroom",
+      "nursery",
+      "floor"
+    ],
+    "file": "furniture/v3/play_mat_abo_B01LP0UX9G.glb",
+    "size_m": {
+      "w": 1.884,
+      "d": 0.616,
+      "h": 0.021
+    },
+    "placement": "center",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B01LP0UX9G",
+      "product_name": "AmazonBasics Extra Thick Exercise Yoga Gym Floor Mat with Carrying Strap - 74 x 24 x .5 Inches, Pink",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "beanbag_abo_B07TP4SPQ9",
+    "name": "Beanbag",
+    "category": "beanbag",
+    "style": null,
+    "color": "Red",
+    "material": null,
+    "tags": [
+      "playroom",
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/beanbag_abo_B07TP4SPQ9.glb",
+    "size_m": {
+      "w": 2.293,
+      "d": 1.216,
+      "h": 0.867
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07TP4SPQ9",
+      "product_name": "AmazonBasics Memory Foam Filled Bean Bag Lounger with Microfiber Cover - 7', Red",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "beanbag_abo_B07TN1X4D2",
+    "name": "Beanbag",
+    "category": "beanbag",
+    "style": null,
+    "color": "Black",
+    "material": null,
+    "tags": [
+      "playroom",
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/beanbag_abo_B07TN1X4D2.glb",
+    "size_m": {
+      "w": 0.918,
+      "d": 0.913,
+      "h": 0.605
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07TN1X4D2",
+      "product_name": "AmazonBasics Memory Foam Filled Bean Bag Chair with Microfiber Cover - 3', Black",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "beanbag_abo_B07TN1ZSX8",
+    "name": "Beanbag",
+    "category": "beanbag",
+    "style": null,
+    "color": "Gray",
+    "material": null,
+    "tags": [
+      "playroom",
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/beanbag_abo_B07TN1ZSX8.glb",
+    "size_m": {
+      "w": 0.918,
+      "d": 0.913,
+      "h": 0.605
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07TN1ZSX8",
+      "product_name": "AmazonBasics Memory Foam Filled Bean Bag Chair with Microfiber Cover - 3', Gray",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "beanbag_abo_B07TP4S5SZ",
+    "name": "Beanbag",
+    "category": "beanbag",
+    "style": null,
+    "color": "Brown",
+    "material": null,
+    "tags": [
+      "playroom",
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/beanbag_abo_B07TP4S5SZ.glb",
+    "size_m": {
+      "w": 0.918,
+      "d": 0.914,
+      "h": 0.616
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07TP4S5SZ",
+      "product_name": "AmazonBasics Memory Foam Filled Bean Bag Chair with Microfiber Cover - 3', Espresso",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "beanbag_abo_B07TQ89MMN",
+    "name": "Beanbag",
+    "category": "beanbag",
+    "style": null,
+    "color": "Blue",
+    "material": null,
+    "tags": [
+      "playroom",
+      "living_room",
+      "seating",
+      "movie_night",
+      "cover"
+    ],
+    "file": "furniture/v3/beanbag_abo_B07TQ89MMN.glb",
+    "size_m": {
+      "w": 0.918,
+      "d": 0.914,
+      "h": 0.616
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07TQ89MMN",
+      "product_name": "AmazonBasics Memory Foam Filled Bean Bag Chair with Microfiber Cover - 3', Blue",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "play_equipment_abo_B072Z1WN4S",
+    "name": "Play equipment",
+    "category": "play_equipment",
+    "style": null,
+    "color": null,
+    "material": "Steel",
+    "tags": [
+      "playroom",
+      "yard",
+      "play"
+    ],
+    "file": "furniture/v3/play_equipment_abo_B072Z1WN4S.glb",
+    "size_m": {
+      "w": 0.439,
+      "d": 1.072,
+      "h": 0.453
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "none",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B072Z1WN4S",
+      "product_name": "AmazonBasics Flat Weight Workout Exercise Bench - 41 x 20 x 11 Inches, Black",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "play_equipment_abo_B07WDYVQCP",
+    "name": "Play equipment",
+    "category": "play_equipment",
+    "style": null,
+    "color": null,
+    "material": null,
+    "tags": [
+      "playroom",
+      "yard",
+      "play"
+    ],
+    "file": "furniture/v3/play_equipment_abo_B07WDYVQCP.glb",
+    "size_m": {
+      "w": 0.559,
+      "d": 0.559,
+      "h": 1.067
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.5
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07WDYVQCP",
+      "product_name": "AmazonBasics Batting Tee",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "canopy_tent_abo_B07YM1FJ1M",
+    "name": "Play tent",
+    "category": "canopy_tent",
+    "style": "One-Push Pop Up",
+    "color": "White",
+    "material": "fabric",
+    "tags": [
+      "yard",
+      "play",
+      "cover"
+    ],
+    "file": "furniture/v3/canopy_tent_abo_B07YM1FJ1M.glb",
+    "size_m": {
+      "w": 2.85,
+      "d": 2.849,
+      "h": 2.85
+    },
+    "placement": "free",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "full",
+    "source": {
+      "dataset": "ABO",
+      "item_id": "B07YM1FJ1M",
+      "product_name": "AmazonBasics Outdoor One-push Pop Up Canopy, 8ft x 8ft Top Slant Leg with Wheeled Carry, White",
+      "brand": "AmazonBasics",
+      "license": "CC BY 4.0",
+      "credit": "Amazon Berkeley Objects, Amazon.com"
+    }
+  },
+  {
+    "id": "tv_kenney_television43",
+    "name": "Flat-screen TV",
+    "category": "tv",
+    "style": null,
+    "color": null,
+    "material": null,
+    "tags": [
+      "living_room",
+      "movie_night",
+      "screen",
+      "electronics"
+    ],
+    "file": "furniture/v3/tv_kenney_television43.glb",
+    "size_m": {
+      "w": 0.97,
+      "d": 0.182,
+      "h": 0.644
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "Kenney",
+      "item_id": "9trLeWoBek",
+      "product_name": "Television (Furniture Kit, televisionModern)",
+      "brand": null,
+      "license": "CC0 1.0",
+      "credit": "Kenney, kenney.nl"
+    }
+  },
+  {
+    "id": "tv_kenney_television55",
+    "name": "Flat-screen TV",
+    "category": "tv",
+    "style": null,
+    "color": null,
+    "material": null,
+    "tags": [
+      "living_room",
+      "movie_night",
+      "screen",
+      "electronics"
+    ],
+    "file": "furniture/v3/tv_kenney_television55.glb",
+    "size_m": {
+      "w": 1.24,
+      "d": 0.232,
+      "h": 0.823
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "Kenney",
+      "item_id": "9trLeWoBek",
+      "product_name": "Television (Furniture Kit, televisionModern)",
+      "brand": null,
+      "license": "CC0 1.0",
+      "credit": "Kenney, kenney.nl"
+    }
+  },
+  {
+    "id": "tv_kenney_television65",
+    "name": "Flat-screen TV",
+    "category": "tv",
+    "style": null,
+    "color": null,
+    "material": null,
+    "tags": [
+      "living_room",
+      "movie_night",
+      "screen",
+      "electronics"
+    ],
+    "file": "furniture/v3/tv_kenney_television65.glb",
+    "size_m": {
+      "w": 1.45,
+      "d": 0.272,
+      "h": 0.963
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 0.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "Kenney",
+      "item_id": "9trLeWoBek",
+      "product_name": "Television (Furniture Kit, televisionModern)",
+      "brand": null,
+      "license": "CC0 1.0",
+      "credit": "Kenney, kenney.nl"
+    }
+  },
+  {
+    "id": "crib_fm_01",
+    "name": "Wooden spindle crib",
+    "category": "crib",
+    "style": "traditional",
+    "color": "whitewashed wood",
+    "material": "wood",
+    "tags": [
+      "nursery",
+      "infant",
+      "sleep",
+      "bedroom",
+      "full_size"
+    ],
+    "file": "furniture/v3/crib_fm_01.glb",
+    "size_m": {
+      "w": 1.368,
+      "d": 0.687,
+      "h": 0.951
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "FurniMesh",
+      "item_id": "s-NXrCQ6drTG6c721LoS2",
+      "product_name": "Wooden spindle crib",
+      "brand": null,
+      "license": "FurniMesh free license: commercial use, no attribution required",
+      "credit": "FurniMesh"
+    }
+  },
+  {
+    "id": "crib_fm_02",
+    "name": "Compact crib on casters",
+    "category": "crib",
+    "style": "compact",
+    "color": "natural wood",
+    "material": "wood",
+    "tags": [
+      "nursery",
+      "infant",
+      "sleep",
+      "bedroom",
+      "compact",
+      "wheels",
+      "small_room"
+    ],
+    "file": "furniture/v3/crib_fm_02.glb",
+    "size_m": {
+      "w": 0.97,
+      "d": 0.708,
+      "h": 0.967
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "FurniMesh",
+      "item_id": "c8YFQIkSc7g2ygm1Gw5em",
+      "product_name": "Compact crib on casters",
+      "brand": null,
+      "license": "FurniMesh free license: commercial use, no attribution required",
+      "credit": "FurniMesh"
+    }
+  },
+  {
+    "id": "crib_fm_03",
+    "name": "Modern wood crib",
+    "category": "crib",
+    "style": "modern",
+    "color": "warm wood",
+    "material": "wood",
+    "tags": [
+      "nursery",
+      "infant",
+      "sleep",
+      "bedroom",
+      "full_size"
+    ],
+    "file": "furniture/v3/crib_fm_03.glb",
+    "size_m": {
+      "w": 1.37,
+      "d": 0.699,
+      "h": 0.893
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 0.6
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "FurniMesh",
+      "item_id": "faDYmoxqBSw4OlEVvfPrR",
+      "product_name": "Modern wood crib",
+      "brand": null,
+      "license": "FurniMesh free license: commercial use, no attribution required",
+      "credit": "FurniMesh"
+    }
+  },
+  {
+    "id": "tv_team_stand",
+    "name": "Flat-screen TV on stand",
+    "category": "tv",
+    "style": "modern",
+    "color": "black",
+    "material": "plastic",
+    "tags": [
+      "living_room",
+      "tv",
+      "movie_night",
+      "screen",
+      "electronics"
+    ],
+    "file": "furniture/v3/tv_team_stand.glb",
+    "size_m": {
+      "w": 1.236,
+      "d": 0.24,
+      "h": 0.778
+    },
+    "placement": "on_surface",
+    "clearance_m": {
+      "front": 1.0
+    },
+    "cover": "half",
+    "source": {
+      "dataset": "Team",
+      "item_id": "tv_55_stand",
+      "product_name": "55 in flat-screen TV on stand (team-made, make_tv.py)",
+      "brand": null,
+      "license": "CC0 1.0",
+      "credit": "HackPrinceton team"
+    }
+  },
+  {
+    "id": "tv_team_wall",
+    "name": "Wall-mounted flat-screen TV",
+    "category": "tv",
+    "style": "modern",
+    "color": "black",
+    "material": "plastic",
+    "tags": [
+      "living_room",
+      "tv",
+      "movie_night",
+      "screen",
+      "electronics"
+    ],
+    "file": "furniture/v3/tv_team_wall.glb",
+    "size_m": {
+      "w": 1.236,
+      "d": 0.065,
+      "h": 0.703
+    },
+    "placement": "wall",
+    "clearance_m": {
+      "front": 1.0
+    },
+    "cover": "none",
+    "mount_y_m": 0.75,
+    "source": {
+      "dataset": "Team",
+      "item_id": "tv_55_wall",
+      "product_name": "55 in flat-screen TV, wall-mounted (team-made, make_tv.py)",
+      "brand": null,
+      "license": "CC0 1.0",
+      "credit": "HackPrinceton team"
+    }
+  }
+]

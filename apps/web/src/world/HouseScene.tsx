@@ -10,6 +10,7 @@ import { Shape } from "three";
 
 import type { Point2, Room } from "../contracts.gen";
 import { FurnitureLayer } from "./FurnitureLayer";
+import { disableToneMapping } from "./interiorMaterials";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, type Door, type LoadedPack } from "./pack";
@@ -48,6 +49,8 @@ export function HouseScene({ pack, listingId }: Props) {
         kind="render"
         url={base && packUrl(base, house.interior)}
         label={house.interior}
+        // Finished photo textures: no second tone-mapping pass (interiorMaterials.ts).
+        prepare={disableToneMapping}
         placeholder={<PlaceholderHouseRender rooms={rooms} door={door} />}
       />
       <GlbOrPlaceholder

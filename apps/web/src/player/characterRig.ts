@@ -183,7 +183,8 @@ export function buildRig(source: Object3D, rawClips: AnimationClip[]): Rig {
 }
 
 /** Show the held weapon's prop, hide the other. */
-export function setWeapon(rig: Rig, weapon: Weapon): void {
+/** Show the held weapon's prop and hide the rest; null (explore mode) hides them all. */
+export function setWeapon(rig: Rig, weapon: Weapon | null): void {
   for (const [w, prop] of Object.entries(rig.props)) if (prop) prop.visible = w === weapon;
 }
 

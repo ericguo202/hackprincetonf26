@@ -55,9 +55,15 @@ def test_publish_only_ships_the_live_version(tmp_path, monkeypatch):
     assert publish.live_pack(out, BLOCK).name == "v1"
     with pytest.raises(SystemExit, match="not the live version"):
         publish.live_pack(out, BLOCK, version=98)
+    (out / "furniture" / "v1").mkdir(parents=True)
+    (out / "furniture" / "v1" / "catalog.json").write_text("[]")
+    (out / "listings").mkdir()
+    (out / "listings" / "index.json").write_text("[]")
     dest = tmp_path / "public"
+    (dest / "packs" / BLOCK / "v98").mkdir(parents=True)  # a stale local copy must be removed
     assert publish.publish_local(BLOCK, out, dest) == f"/packs/packs/{BLOCK}/v1"
     assert [p.name for p in (dest / "packs" / BLOCK).iterdir()] == ["v1"]
+    assert sorted(p.name for p in dest.iterdir()) == ["furniture", "listings", "packs"]
 
 
 def test_pin_needs_a_complete_version_and_a_comparison(tmp_path):

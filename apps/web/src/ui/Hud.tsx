@@ -1,7 +1,8 @@
-// Lane D: foam-mode toggle, local score, Tab scoreboard.
+// Lane D: foam-mode toggle, local score, Tab scoreboard, game broadcasts (toasts, kill feed, damage flash).
 import { useEffect, useState } from "react";
 import { setMode } from "../net/game";
 import { useStore } from "../store";
+import { Broadcasts } from "./Broadcasts";
 
 export function Hud() {
   const mode = useStore((s) => s.mode);
@@ -53,6 +54,7 @@ export function Hud() {
           </ol>
         </div>
       ) : null}
+      <Broadcasts />
     </>
   );
 }

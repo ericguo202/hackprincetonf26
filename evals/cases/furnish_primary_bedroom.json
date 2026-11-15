@@ -1,0 +1,19 @@
+{
+  "id": "furnish_primary_bedroom",
+  "description": "Bedroom skill: bed head against a wall, nightstands",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Furnish the primary bedroom for a couple",
+      "expect": {
+        "max_words": 45,
+        "committed": true,
+        "room_label": "primary_bedroom",
+        "categories_all": ["bed"],
+        "categories_any": ["nightstand", "dresser"],
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}

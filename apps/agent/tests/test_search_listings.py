@@ -70,6 +70,41 @@ def test_search_listings_tool_only_searches_this_block(files, monkeypatch):  # n
     out = json.loads(tools.search_listings.func(needs=INFANT, runtime=RT, max_price_usd=450000))
     assert [m["listing_id"] for m in out["matches"]] == ["hou_here"] and out["considered"] == 1
     assert files.read_json(tools.SEARCH_PATH)["matches"][0]["listing_id"] == "hou_here"
+    assert out["market"]["listings"] == 3 and out["market"]["passed_hard"] == 3  # whole index, counts only
+
+
+def test_market_counts_the_whole_index_and_prices_matches():
+    homes = [
+        listing("a", price_usd=200000, area_m2=100),  # 2000 $/m2
+        listing("b", price_usd=300000, area_m2=200),  # 1500
+        listing("c", price_usd=400000, area_m2=400),  # 1000
+        listing("pricey", price_usd=900000, area_m2=300),
+        listing("unpriced", price_usd=None, area_m2=120),
+    ]
+    m = search.market(homes, {"max_price_usd": 450000})
+    assert (m["listings"], m["passed_hard"], m["unknown_hard"]) == (5, 3, 1)
+    assert m["median_price_usd"] == 300000 and m["median_price_per_m2_usd"] == 1500
+    assert m["median_price_per_sqft_usd"] == round(1500 * search.M2_PER_SQFT)
+    matches = [{"listing_id": "a"}, {"listing_id": "unpriced"}]
+    search.add_pricing(matches, {x["id"]: x for x in homes}, m["median_price_per_m2_usd"])
+    assert matches[0]["price_per_m2_usd"] == 2000 and matches[0]["vs_market_pct"] == 33
+    assert matches[1]["price_per_m2_usd"] is None and matches[1]["vs_market_pct"] is None
+
+
+def test_market_on_the_real_index_is_fast():
+    import time
+
+    from data import packs
+
+    try:
+        every = packs.listings()
+    except Exception:
+        pytest.skip("no listings index on this machine")
+    hard = {"status": "for_sale", "property_type": "single_family", "max_price_usd": 450000, "min_beds": 3}
+    t = time.perf_counter()
+    m = search.market(every, hard)
+    assert time.perf_counter() - t < 0.1
+    assert m["passed_hard"] <= m["listings"] == len(every)
 
 
 def test_save_picks_checks_catalog_and_size(files):  # noqa: F811

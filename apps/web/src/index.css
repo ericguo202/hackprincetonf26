@@ -10,6 +10,10 @@ body { background: #10141a; color: #e8eaed; font-family: system-ui, sans-serif; 
   font-size: 13px; line-height: 1.4;
   box-shadow: 0 12px 40px rgba(0,0,0,0.35);
 }
+.chat-panel .trace-link {
+  display: block; margin-top: 4px; font-size: 12px; color: #8ab4f8; text-decoration: none;
+}
+.chat-panel .trace-link:hover { text-decoration: underline; }
 .chat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .chat-close {
   font: inherit; font-size: 11px; color: #9aa3b2; background: transparent; border: 0;
@@ -32,13 +36,25 @@ body { background: #10141a; color: #e8eaed; font-family: system-ui, sans-serif; 
 .listing-card {
   margin: 8px 0; padding: 8px; background: rgba(255,255,255,0.04); border-radius: 6px;
 }
-.listing-card h3 { margin: 0 0 6px; font-size: 13px; display: flex; justify-content: space-between; }
+.listing-card h3 { margin: 0 0 6px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+.listing-sub { margin: -4px 0 6px; font-size: 11px; color: #a7aebb; }
+.listing-card .match-label { font-weight: 500; color: #8fd19e; white-space: nowrap; }
 .listing-card ul { list-style: none; margin: 0; padding: 0; }
-.listing-card li[data-ok="true"] { color: #8fd19e; }
-.listing-card li[data-ok="false"] { color: #e8a0a0; }
-.finding { margin: 6px 0 0; font-size: 12px; }
-.finding.warn { color: #e0c070; }
-.finding.conflict { color: #e8a0a0; }
+.listing-card li { display: flex; gap: 6px; font-size: 12px; line-height: 1.5; }
+.listing-card .mark { width: 1em; flex: none; text-align: center; font-weight: 700; }
+.listing-card li[data-mark="yes"] .mark { color: #8fd19e; }
+.listing-card li[data-mark="partial"] .mark { color: #e0c070; }
+.listing-card li[data-mark="no"] .mark { color: #e8a0a0; }
+.listing-card li[data-mark="unknown"] { color: #a7aebb; }
+.worth-checking { margin-top: 8px; padding: 6px 8px; border-left: 2px solid #e0c070; background: rgba(224,192,112,0.08); }
+.worth-title { margin: 0 0 2px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #e0c070; }
+.finding { margin: 2px 0 0; font-size: 12px; }
+.finding.warn { color: #f0dca8; }
+.finding.conflict { color: #f2b8b8; }
+.raw-data { margin-top: 6px; font-size: 11px; color: #8b93a1; }
+.raw-data summary { cursor: pointer; }
+.raw-data li { display: block; font-size: 11px; word-break: break-word; }
+.raw-data p { margin: 4px 0; }
 
 .suggest { display: flex; flex-direction: column; gap: 6px; }
 .suggest-label {
@@ -109,3 +125,38 @@ body { background: #10141a; color: #e8eaed; font-family: system-ui, sans-serif; 
 }
 .scoreboard h2 { margin: 0 0 8px; font-size: 16px; }
 .scoreboard ol { margin: 0; padding-left: 20px; }
+
+.toasts {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  max-width: min(480px, calc(100% - 32px)); pointer-events: none;
+}
+.toast {
+  margin: 0; padding: 6px 12px; border-radius: 14px; font-size: 13px; text-align: center;
+  background: rgba(16, 20, 26, 0.85); color: #e8eaed; box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  animation: fade-life var(--life, 4000ms) ease forwards;
+}
+.kill-feed {
+  position: absolute; top: 16px; right: 16px; z-index: 2; margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none;
+  font-size: 12px;
+}
+.kill-feed li {
+  display: flex; gap: 6px; padding: 4px 10px; border-radius: 8px;
+  background: rgba(16, 20, 26, 0.8); animation: fade-life var(--life, 8000ms) ease forwards;
+}
+.kill-feed strong { font-weight: 600; }
+.kill-feed strong.me { color: #c5d4f0; }
+.kill-verb { color: #9aa3b2; }
+@keyframes fade-life {
+  0% { opacity: 0; transform: translateY(-4px); }
+  6% { opacity: 1; transform: none; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.damage-flash {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  box-shadow: inset 0 0 120px 30px rgba(220, 60, 60, 0.55);
+  animation: damage-flash 0.45s ease-out forwards;
+}
+@keyframes damage-flash { from { opacity: 1; } to { opacity: 0; } }

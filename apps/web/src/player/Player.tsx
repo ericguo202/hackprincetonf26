@@ -38,6 +38,7 @@ import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
 import { useMeshState } from "../world/meshProbe";
 import { registerPlayer } from "./playerControl";
 import { useWeaponState } from "./weaponState";
+import { heldWeaponProp, useFoamMode } from "./foamMode";
 
 /** Lane D sends `move` at 20 Hz, so there is no point writing faster. */
 const WRITE_HZ = 20;
@@ -72,6 +73,8 @@ const KEYS = {
 type Props = {
   /** Where to drop the player in the current zone's frame. */
   spawn?: [number, number, number];
+  /** Camera yaw (radians, armMath convention) at mount; default 0. Lane D: the focus teleport faces the house. */
+  spawnYaw?: number;
   /** "block" or a listing_id. Indoors the camera starts in first person. */
   zone?: string;
   /**
@@ -92,6 +95,7 @@ type Props = {
 
 export function Player({
   spawn = [0, 1, 0],
+  spawnYaw,
   zone = "block",
   followCamera = true,
   getHitboxes,
@@ -111,7 +115,8 @@ export function Player({
   // Crouch changes the capsule, so it is React state (an Ecctrl prop); the ref
   // is for the frame loop.
   const [crouched, setCrouched] = useState(false);
-  const weapon = useWeaponState((s) => s.weapon);
+  // Explore mode: the model holds nothing (foamMode.ts); foam: the selected weapon.
+  const weapon = heldWeaponProp(useFoamMode(), useWeaponState((s) => s.weapon));
   const crouchedRef = useRef(false);
   useEffect(() => {
     crouchedRef.current = crouched;
@@ -194,8 +199,21 @@ export function Player({
     const handle = ecctrl.current;
     if (!handle) return;
 
+    // Lane D: eliminated in the foam fight (server state) = no input until the respawn,
+    // and the `eliminated` pose holds (RespawnWatcher moves us when we are back).
+    const st = useStore.getState();
+    const out = st.me.id !== null && st.players[st.me.id]?.alive === false;
+    if (out) {
+      action.current = "eliminated";
+      actionUntil.current = Infinity;
+    } else if (action.current === "eliminated") {
+      action.current = null;
+      actionUntil.current = 0;
+    }
+
     // Crouched: walk only, no run, no jump (CROUCH.maxVel caps the speed too).
-    handle.setMovement(crouchedRef.current ? { ...keys.current, run: false, jump: false } : { ...keys.current });
+    if (out) handle.setMovement({ ...KEYS });
+    else handle.setMovement(crouchedRef.current ? { ...keys.current, run: false, jump: false } : { ...keys.current });
 
     // Expire a one-shot action (shoot, hit). `eliminated` holds until respawn.
     if (action.current && state.clock.elapsedTime >= actionUntil.current) {
@@ -255,6 +273,7 @@ export function Player({
           ecctrl={ecctrl}
           body={bodyMesh}
           zone={zone}
+          initialYaw={spawnYaw}
           crouchedRef={crouchedRef}
           onBodyHidden={(hidden) => {
             if (bodyMesh.current) bodyMesh.current.visible = !hidden;

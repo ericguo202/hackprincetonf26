@@ -307,6 +307,36 @@ def test_center_follows_main_walls_of_off_axis_room():
         assert abs(off) < 0.6, p
 
 
+BENCH = {  # only the two 6 m walls fit it
+    "id": "bench",
+    "name": "Long bench",
+    "category": "bench",
+    "size_m": {"w": 4.5, "d": 0.5, "h": 0.5},
+    "placement": "wall",
+    "clearance_m": {"front": 0.5},
+}
+
+
+def test_blocked_poses_name_their_blockers(room, plan):
+    out = propose_poses(room_geometry(room), BENCH, "against_wall", None, placed(plan, "o1", "o2"))
+    assert out["poses"] == [] and "blocked_by" in out["note"]
+    assert 1 <= len(out["blocked"]) <= 3
+    assert [p["pose_id"] for p in out["blocked"]] == [f"b{i + 1}" for i in range(len(out["blocked"]))]
+    for p in out["blocked"]:
+        assert p["blocked_by"] in (["o1"], ["o2"])
+        rest = {**plan, "objects": [o for o in plan["objects"] if o["instance_id"] not in p["blocked_by"]]}
+        trial = {**rest, "objects": [*rest["objects"], obj("o9", "bench", p["x"], p["z"], p["rot_deg"])]}
+        assert validate_layout(trial, room, {**ASSETS, "bench": BENCH})["conflicts"] == [], p
+
+
+def test_blocked_never_moves_the_relative_to_piece(room, plan):
+    # The sofa facing the TV with the sofa's own spot taken by a bench: never offers to move the TV.
+    plan["objects"].append(obj("o3", "bench", 3.0, 0.27))
+    pl = [(o, {**ASSETS, "bench": BENCH}[o["asset_id"]]) for o in plan["objects"] if o["instance_id"] != "o1"]
+    out = propose_poses(room_geometry(room), ASSETS["sofa_abo_B072C8Q9RF"], "facing", "o2", pl)
+    assert all("o2" not in p["blocked_by"] for p in out.get("blocked", []))
+
+
 def test_nothing_fits_says_why(room):
     out = propose_poses(room_geometry(room), ASSETS["huge"], "against_wall")
     assert out["poses"] == [] and "no free wall segment fits 7.00 m" in out["note"]
@@ -320,3 +350,67 @@ def test_rule_argument_errors(room, plan):
         propose_poses(geo, ASSETS["side"], "beside", "o7", placed(plan, "o1"))
     with pytest.raises(ValueError):
         propose_poses(geo, ASSETS["side"], "floating")
+
+
+WALL_TV = {  # furniture/v3 tv_team_wall
+    "id": "tv_team_wall",
+    "name": "Wall-mounted flat-screen TV",
+    "category": "tv",
+    "size_m": {"w": 1.236, "d": 0.065, "h": 0.703},
+    "placement": "wall",
+    "clearance_m": {"front": 1.0},
+    "mount_y_m": 0.75,
+}
+
+
+def test_wall_tv_hangs_at_its_mount_height(room):
+    out = propose_poses(room_geometry(room), WALL_TV, "against_wall")
+    assert out["poses"]
+    floor_y = float(room.get("floor_y", 0.0))
+    assert all(p["y"] == pytest.approx(floor_y + 0.75) for p in out["poses"])
+
+
+def test_wall_tv_counts_its_mount_height_against_windows(room, plan):
+    # 0.703 m tall alone is under WINDOW_MAX_H_M; hung at 0.75 m its top is at 1.45 m and covers the window
+    assets = {**ASSETS, "tv_team_wall": WALL_TV, "tv_low": {**WALL_TV, "id": "tv_low", "mount_y_m": None}}
+    plan["objects"].append(obj("o3", "tv_team_wall", 0.05, 3.2, rot=90))
+    assert "blocks_opening" in types(validate_layout(plan, room, assets))
+    plan["objects"][-1] = obj("o3", "tv_low", 0.05, 3.2, rot=90)
+    assert "blocks_opening" not in types(validate_layout(plan, room, assets))
+
+
+CRIB = {  # furniture/v3 crib_fm_02 (compact): 0.97 m tall, under WINDOW_MAX_H_M
+    "id": "crib_fm_02",
+    "name": "Compact crib on casters",
+    "category": "crib",
+    "size_m": {"w": 0.97, "d": 0.708, "h": 0.967},
+    "placement": "wall",
+    "clearance_m": {"front": 0.6},
+}
+
+
+def test_crib_never_under_a_window_however_low(room, plan):
+    assets = {**ASSETS, "crib_fm_02": CRIB}
+    plan["objects"].append(obj("o3", "crib_fm_02", 0.38, 3.2, rot=90))
+    result = validate_layout(plan, room, assets)
+    assert any(c["type"] == "blocks_opening" and "window" in c["detail"] for c in result["conflicts"])
+    # same height, another category: allowed under the window
+    plan["objects"][-1] = obj("o3", "side", 0.27, 3.2, rot=90)
+    assert validate_layout(plan, room, ASSETS)["conflicts"] == []
+
+
+def test_crib_poses_skip_window_walls(room):
+    geo = room_geometry(room)
+    out = propose_poses(geo, CRIB, "against_wall")
+    assert out["poses"]
+    for p in out["poses"]:
+        o = {"instance_id": "o9", "asset_id": "crib_fm_02", "reason": "t", **p}
+        plan = {
+            "plan_id": "t",
+            "listing_id": "x",
+            "room_id": room["id"],
+            "status": "draft",
+            "objects": [o],
+            "conflicts": [],
+        }
+        assert validate_layout(plan, room, {"crib_fm_02": CRIB})["conflicts"] == []

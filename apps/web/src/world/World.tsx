@@ -9,13 +9,14 @@
 // is in that zone's own frame. Only one zone's geometry is mounted at a time.
 // net/game.ts sees me.zone change and sends enter_zone.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { Sky } from "@react-three/drei";
 
 import { useStore } from "../store";
 import { Crosshair } from "../player/Crosshair";
+import { WeaponBar } from "../player/WeaponBar";
 import { Player } from "../player/Player";
 import { BlockScene } from "./BlockScene";
 import { PHYSICS_PRIORITY } from "./frameOrder";
@@ -30,19 +31,27 @@ import {
   type ZoneState,
 } from "./pack";
 import { usePack } from "./usePack";
+import { bodyCentreAt } from "./landing";
+import { SUN_DIR_BLOCK, sunPosition } from "./sun";
+import { SunLight } from "./SunLight";
 import { DevPlan, DevProbe } from "./DevPlan";
+import { DevModeToggle } from "./DevModeToggle";
 import { DevRemotes } from "./DevRemotes";
 import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
 import { RemotePlayers } from "./RemotePlayers";
+import { RespawnWatcher } from "./RespawnWatcher";
+import { type FocusState, focusArrival, stepFocus } from "./focusTeleport";
+import { sendFire } from "../net/game";
 import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
-import { DEV_PLAN_ON, START_ROOM } from "./devFlags";
+import { DEV_MODE_TOGGLE_ON, DEV_PLAN_ON, START_ROOM } from "./devFlags";
 import { FIXTURE_RAW } from "./fixtures";
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
-/** Drop the body from a little above the floor so it never starts inside it. */
-const SPAWN_LIFT_M = 1;
-const lift = (p: Vec3): Vec3 => [p[0], p[1] + SPAWN_LIFT_M, p[2]];
+/** Sky's sun, far out along the baked sun direction (it only reads the direction). */
+const SKY_SUN = sunPosition([0, 0, 0], SUN_DIR_BLOCK, 100);
+/** A floor point (spawn, door landing, dev room) to the body centre: landing.ts. */
+const lift = bodyCentreAt;
 
 /**
  * Dev switch: VITE_START_ROOM=<room_id> starts inside that room's house at the
@@ -59,9 +68,9 @@ export function World() {
   return (
     <>
       <Canvas shadows camera={{ position: [0, 3.4, 9], fov: 50 }}>
-        <Sky sunPosition={[100, 40, 100]} />
+        {/* Sky and live sun both from the baked sun (sun.ts, Lane A HANDOFF 22:20). */}
+        <Sky sunPosition={SKY_SUN} />
         <ambientLight intensity={0.45} />
-        <directionalLight position={[20, 30, 10]} intensity={1.2} castShadow />
         {/* Fixed 1/60 s step with interpolation (the defaults) suits 60-144 Hz displays;
             the camera must follow the interpolated body, see CameraArm. */}
         <Physics updatePriority={PHYSICS_PRIORITY} timeStep={1 / 60} interpolate>
@@ -69,6 +78,7 @@ export function World() {
         </Physics>
       </Canvas>
       <Crosshair />
+      <WeaponBar />
       <PackBadge status={pack} />
     </>
   );
@@ -93,11 +103,15 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
   );
   const setMe = useStore((s) => s.setMe);
   const [start] = useState(() => initialPlacement(pack));
+  // Lane D: where a foam-fight respawn lands on the block (indoors uses indoorSpawns).
+  const blockSpawn = useMemo(() => (start.zone === "block" ? lift(start.pos) : null), [start]);
   // The zone we render. Owned here and copied into the store, not read back from
   // it: on the first render the store still holds its default ("block"), and
   // reading that would mount the block for a frame and fetch its meshes.
   const [zone, setZone] = useState(start.zone);
   const [spawn, setSpawn] = useState<Vec3>(() => lift(start.pos));
+  // Camera yaw for the next Player mount (focus teleport faces the house); undefined = default.
+  const [spawnYaw, setSpawnYaw] = useState<number | undefined>(undefined);
   // Bumped on every zone change: remounts the Player at the new spawn, in the new frame.
   const [epoch, setEpoch] = useState(0);
   const zoneState = useRef<ZoneState>({ zone: start.zone, armed: true });
@@ -109,6 +123,20 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
     setMe(start);
   }, [start, setMe]);
 
+  // Put the player in `zone` at `at` (that zone's frame, floor height): store first,
+  // then remount the Player there. Used by the door trigger and the focus teleport.
+  const goTo = useCallback(
+    (to: string, at: Vec3, yaw?: number) => {
+      const rooms = pack.roomsByHouse[to] ?? [];
+      setMe({ zone: to, pos: at, roomId: to === "block" ? null : roomIdAt(at, rooms) });
+      setZone(to);
+      setSpawn(lift(at));
+      setSpawnYaw(yaw);
+      setEpoch((e) => e + 1);
+    },
+    [pack, setMe],
+  );
+
   // Door trigger and room tracking, on every position the Player writes (20 Hz).
   useEffect(
     () =>
@@ -117,15 +145,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
         const { state, change } = stepZone(zoneState.current, s.me.pos, pack.doors);
         zoneState.current = state;
         if (change) {
-          const rooms = pack.roomsByHouse[change.zone] ?? [];
-          setMe({
-            zone: change.zone,
-            pos: change.spawn,
-            roomId: change.zone === "block" ? null : roomIdAt(change.spawn, rooms),
-          });
-          setZone(change.zone);
-          setSpawn(lift(change.spawn));
-          setEpoch((e) => e + 1);
+          goTo(change.zone, change.spawn);
           return;
         }
         if (s.me.zone !== "block") {
@@ -133,24 +153,50 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
           if (roomId !== s.me.roomId) setMe({ roomId });
         }
       }),
-    [pack, setMe],
+    [pack, setMe, goTo],
+  );
+
+  // Lane D: focus teleport (HANDOFF lane-b 16:45). When the agent's focus_listing
+  // changes MY beacon, land outside that house's door on the block, facing it.
+  // The first value seen is a starting point, not a jump (focusTeleport.ts).
+  const focusState = useRef<FocusState>({ seen: false, listing: undefined });
+  useEffect(
+    () =>
+      useStore.subscribe((s) => {
+        const id = s.me.id;
+        if (!s.connected || !id) return;
+        const { state, goTo: listing } = stepFocus(focusState.current, s.focus[id]);
+        focusState.current = state;
+        if (!listing || s.players[id]?.alive === false) return;
+        const door = pack.doors.find((d) => d.listing_id === listing);
+        if (!door) return; // not a house on this block
+        const arrival = focusArrival(door, 0);
+        // Right outside the door: the trigger stays disarmed until we walk clear.
+        zoneState.current = { zone: "block", armed: false };
+        goTo("block", arrival.pos, arrival.yaw);
+      }),
+    [pack, goTo],
   );
 
   const inHouse = zone !== "block" && pack.manifest.houses.some((h) => h.listing_id === zone);
   return (
     <>
       {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
+      <SunLight headingDeg={inHouse ? (pack.doors.find((d) => d.listing_id === zone)?.world.heading_deg ?? 0) : 0} />
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}
+      {DEV_MODE_TOGGLE_ON ? <DevModeToggle /> : null}
       <RemotePlayers zone={zone} />
+      <RespawnWatcher zone={zone} blockSpawn={blockSpawn} />
       {DEV_REMOTES_ON ? <DevRemotes pack={pack} zone={zone} /> : null}
       {/* getHitboxes: remote players as drawn this frame. onFire: Lane D sends `fire`; in dev-remotes mode, the stand-in. */}
       <Player
         key={epoch}
         spawn={spawn}
+        spawnYaw={spawnYaw}
         zone={zone}
         getHitboxes={remoteHitboxes}
-        onFire={DEV_REMOTES_ON ? devFire : undefined}
+        onFire={DEV_REMOTES_ON ? devFire : sendFire}
       />
     </>
   );

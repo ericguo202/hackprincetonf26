@@ -40,8 +40,10 @@ import {
   type Ray,
 } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
-import { WEAPON_KEYS, canAttack, noodlePayload, noodleSwing } from "./weapons";
+import { canAttack, noodlePayload, noodleSwing } from "./weapons";
+import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
+import { markAttack } from "./attackClock";
 
 type Props = {
   ecctrl: RefObject<EcctrlHandle | null>;
@@ -106,7 +108,8 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     };
     // Keys 1 and 2 pick the weapon (weapons.ts WEAPON_KEYS).
     const onKey = (e: KeyboardEvent) => {
-      const w = WEAPON_KEYS[e.code];
+      // Explore mode: keys 1/2 do nothing (foamMode.weaponForKey).
+      const w = weaponForKey(e.code, foamModeNow());
       const el = document.activeElement;
       if (!w || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
       setWeapon(w);
@@ -207,11 +210,17 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     const step = Math.min(dt, 0.1);
     const handle = ecctrl.current;
 
+    // Explore mode or eliminated: nothing fires and nothing is sent; read
+    // live every frame, so a mode switch or a death lands within a frame.
+    // Darts already in flight finish. Holding the trigger through a respawn
+    // does not auto-fire: it must be pressed again.
+    if (!canAttackNow(foamModeNow(), meAliveNow())) triggerHeld.current = false;
     if (handle && triggerHeld.current) {
       const now = state.clock.elapsedTime;
       const weapon = useWeaponState.getState().weapon;
       if (canAttack(weapon, lastShotAt.current, now)) {
         lastShotAt.current = now;
+        markAttack(weapon); // for the weapon bar's cooldown sweep only
         const cam = state.camera;
         cam.getWorldDirection(tmpDir.current);
         const centre = body.current ? body.current.getWorldPosition(tmpBody.current) : handle.currPos;

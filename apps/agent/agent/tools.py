@@ -30,7 +30,7 @@ from langchain.tools import ToolRuntime, tool
 from pydantic import BaseModel, Field
 
 import settings
-from agent import game_api, search
+from agent import game_api, plain, search
 from agent.context import AgentContext
 from data import packs
 from layout import DEFAULT_RULE, RULES, room_geometry
@@ -201,6 +201,10 @@ def next_instance_id(plan: dict) -> str:
     return f"o{max(used, default=0) + 1}"
 
 
+def _no_score(pose: dict) -> dict:
+    return {k: v for k, v in pose.items() if k != "score"}
+
+
 def compact_asset(a: dict) -> dict:
     keys = ("id", "name", "category", "style", "color", "size_m", "cover", "placement")
     return {k: a.get(k) for k in keys}
@@ -264,10 +268,12 @@ def get_house_graph(listing_id: str) -> str:
 def get_audit(listing_id: str) -> str:
     """Get the data audit of a house: contradictions between the listing, the scan and the aerial data.
 
+    Each warn or conflict finding carries `say`, a plain sentence in square feet to quote to the buyer.
+
     Args:
         listing_id: Listing id.
     """
-    return _run(lambda: packs.get_audit(listing_id))
+    return _run(lambda: plain.with_sentences(packs.get_audit(listing_id), packs.get_listing(listing_id)))
 
 
 @tool(parse_docstring=True)
@@ -351,8 +357,10 @@ def search_listings(
 ) -> str:
     """Search homes the player can walk into on this block: hard criteria filter, soft needs rank.
 
-    Only listings with a scanned interior on the player's block are searched. A field the data does not have
-    is reported as passed=null (unknown), never as failed. Also saved to /search/results.json for auditors.
+    Only listings with a scanned interior on the player's block are ranked. `market` counts the whole
+    listings index under the same hard criteria (passed_hard, median price and price per m2 / sq ft), and
+    each match has price_per_sqft_usd and vs_market_pct against that median. A field the data does not
+    have is reported as passed=null (unknown), never as failed. Saved to /search/results.json for auditors.
 
     Args:
         needs: Soft needs with weights, e.g. [{"need": "single_story", "weight": "high"}].
@@ -375,20 +383,40 @@ def search_listings(
 
     def run() -> dict:
         block = runtime.context.block_id
-        homes = [x for x in packs.listings() if x.get("block_id") == block and x.get("has_interior")]
+        every = packs.listings()
+        homes = [x for x in every if x.get("block_id") == block and x.get("has_interior")]
         if not homes:
             raise ToolError(f"no listings with a scanned interior on block {block}")
+        hard_set = {k: v for k, v in hard.items() if v is not None}
         out = search.search(
             homes,
-            {k: v for k, v in hard.items() if v is not None},
+            hard_set,
             [n.model_dump() if isinstance(n, BaseModel) else dict(n) for n in needs],
             _house_data,
             limit=max(1, min(int(limit), 5)),
         )
+        # Whole-index context as counts and medians only: the model never sees more than the walkable matches.
+        out["market"] = search.market(every, hard_set)
+        search.add_pricing(
+            out["matches"], {x["id"]: x for x in homes}, out["market"]["median_price_per_m2_usd"]
+        )
+        for m in out["matches"]:
+            m["contradictions"] = _contradictions(m["listing_id"])
         FILES.write_json(SEARCH_PATH, out)
         return out
 
     return _run(run)
+
+
+def _contradictions(listing_id: str) -> list[str]:
+    """Audit `say` sentences for one home, conflicts first; [] when every check is consistent or no audit."""
+    try:
+        audit = plain.with_sentences(packs.get_audit(listing_id), packs.get_listing(listing_id))
+    except Exception:  # noqa: BLE001  a house without an audit file has nothing to report
+        return []
+    rank = {"conflict": 0, "warn": 1}
+    flagged = sorted((f for f in audit["findings"] if "say" in f), key=lambda f: rank.get(f["severity"], 2))
+    return [f["say"] for f in flagged]
 
 
 def _house_data(listing_id: str) -> tuple[dict | None, list[dict] | None]:
@@ -596,7 +624,9 @@ def propose_poses(
 
     Rules: against_wall (back to a wall), corner, center (open floor; with relative_to: in front of that
     piece, or on top of it for table lamps), facing (front toward relative_to), beside (next to relative_to).
-    Every returned pose already passes validation against the room and the placed pieces.
+    Every returned pose already passes validation against the room and the placed pieces. When none does,
+    "blocked" lists poses that fit the room but not the pieces in their blocked_by; place_asset on one
+    takes those pieces out of the plan first, so you can put them back elsewhere.
 
     Args:
         room_id: Room id with a started plan.
@@ -615,10 +645,18 @@ def propose_poses(
         geo = room_geometry(load_room(room_id))
         out = _propose(geo, a, r, relative_to, placed_pairs(plan, skip=moving))
         stored = FILES.read_json(poses_path(room_id)) or {}
-        stored[asset_id] = {"rule": r, "relative_to": relative_to, "moving": moving, "poses": out["poses"]}
+        blocked = out.get("blocked", [])
+        stored[asset_id] = {
+            "rule": r,
+            "relative_to": relative_to,
+            "moving": moving,
+            "poses": out["poses"] + blocked,
+        }
         FILES.write_json(poses_path(room_id), stored)
-        poses = [{k: v for k, v in p.items() if k != "score"} for p in out["poses"]]
-        return {"asset_id": asset_id, "rule": r, "poses": poses, "note": out["note"]}
+        result = {"asset_id": asset_id, "rule": r, "poses": [_no_score(p) for p in out["poses"]]}
+        if blocked:
+            result["blocked"] = [_no_score(p) for p in blocked]
+        return {**result, "note": out["note"]}
 
     return _run(run)
 
@@ -633,6 +671,9 @@ def place_asset(
     instance_id: str | None = None,
 ) -> str:
     """Put an asset into the plan at a pose from the latest propose_poses call for that asset.
+
+    A blocked pose (b1, b2, ...) first removes the pieces in its blocked_by and returns them in "removed":
+    put each back with propose_poses and place_asset (new instance), or leave it out and say so.
 
     Args:
         room_id: Room id with a started plan.
@@ -650,6 +691,13 @@ def place_asset(
             raise ToolError(f"no pose {pose_id} for {asset_id}; call propose_poses for it first")
         if instance_id is not None and instance_id not in {o["instance_id"] for o in plan["objects"]}:
             raise ToolError(f"{instance_id} is not in the plan")
+        blockers = set(pose.get("blocked_by", [])) - {instance_id}
+        removed = [
+            {"instance_id": o["instance_id"], "asset_id": o["asset_id"], "name": asset(o["asset_id"])["name"]}
+            for o in plan["objects"]
+            if o["instance_id"] in blockers
+        ]
+        plan["objects"] = [o for o in plan["objects"] if o["instance_id"] not in blockers]
         obj = {
             "instance_id": instance_id or next_instance_id(plan),
             "asset_id": asset_id,
@@ -669,7 +717,8 @@ def place_asset(
         plan["objects"] = [o for o in plan["objects"] if o["instance_id"] != obj["instance_id"]] + [obj]
         plan["status"], plan["conflicts"] = "draft", []
         save_plan(plan)
-        return {"placed": obj["instance_id"], "plan": plan_view(plan)}
+        out = {"placed": obj["instance_id"], "plan": plan_view(plan)}
+        return {**out, "removed": removed} if removed else out
 
     return _run(run)
 
@@ -745,7 +794,7 @@ async def commit_placement(room_id: str, runtime: ToolRuntime[AgentContext]) -> 
                 "status": "placed",
                 "conflicts": [],
             }
-        result = await game_api.post_plan(ctx.block_id, ctx.player_id, sent)
+        result = await game_api.post_plan(ctx.block_id, ctx.player_id, sent, room_label=room.get("label"))
         plan["status"] = "placed"
         save_plan(plan)
         return {"plan_id": plan["plan_id"], "placed": result.get("placed", len(sent["objects"]))}
