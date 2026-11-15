@@ -27,4 +27,5 @@ exit code is 1 if any case failed. The check list and the case format are in the
 | `furnish_dining_room` | `furnish-dining-room`: table and chairs in the dining room (7014) |
 | `furnish_kids_room` | `furnish-kids-room`: two single beds in the spare bedroom (6915) |
 | `furnish_open_plan` | `furnish-open-plan`: lounge and dining groups in one living room (6915) |
+| `furnish_game_room` | `furnish-game-room`: screen, sofa and beanbags in the living room (6915) |
 | `home_search_infant` | 0:25 home search: parallel auditors, beacon on 7014 Navidad |

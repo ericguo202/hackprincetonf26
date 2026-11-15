@@ -1,0 +1,19 @@
+{
+  "id": "furnish_game_room",
+  "description": "furnish-game-room in 6915's living room (r4): screen, sofa and beanbags facing it; routed here, not to furnish-for-play",
+  "zone": "hou_237901269",
+  "turns": [
+    {
+      "prompt": "Turn the living room into a game room for teens",
+      "expect": {
+        "max_words": 45,
+        "committed": true,
+        "room_label": "living_room",
+        "categories_all": ["tv_stand"],
+        "categories_any": ["sectional", "sofa", "beanbag", "ottoman"],
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}
