@@ -6,8 +6,20 @@ import { Box3, LoopRepeat, Mesh, MeshStandardMaterial, Vector3, type AnimationCl
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
-import { actionFor, blendedLift, buildRig, crossfadeTo, setWeapon, usedClips } from "./characterRig";
-import { clipFor } from "./clips";
+import {
+  actionFor,
+  blendedLift,
+  buildRig,
+  crossfadeTo,
+  NOODLE_DROOP,
+  NOODLE_MAX_BEND,
+  NOODLE_SEGMENTS,
+  setWeapon,
+  updateNoodleJiggle,
+  usedClips,
+  type Rig,
+} from "./characterRig";
+import { CLIPS, clipFor } from "./clips";
 import { heldWeaponProp } from "./foamMode";
 import { CROUCH } from "./movement";
 import { LoopOnce } from "three";
@@ -199,5 +211,125 @@ describe("crossfadeTo: repeated states", () => {
 
   it("shoot is a loop (Idle_Shoot), so rapid fire keeps one continuous shoot clip", () => {
     expect(clipFor("shoot").once).toBe(false);
+  });
+});
+
+describe("floppy pool noodle", () => {
+  const DT = 1 / 60;
+  /** A rig holding the noodle, initialised (first update only records the tip). */
+  function noodleRig(): Rig {
+    const rig = buildRig(scene, clips);
+    setWeapon(rig, "noodle");
+    rig.root.updateMatrixWorld(true);
+    updateNoodleJiggle(rig, DT);
+    return rig;
+  }
+  /** Move the body sideways along a sine for `seconds` (amplitude m, frequency Hz), running the jiggle. */
+  function shake(rig: Rig, seconds: number, amp = 0.4, hz = 3, dt = DT, onStep?: () => void) {
+    for (let t = 0; t < seconds; t += dt) {
+      rig.root.position.x = amp * Math.sin(2 * Math.PI * hz * t);
+      rig.root.position.z = amp * Math.cos(2 * Math.PI * hz * t * 0.7);
+      rig.root.updateMatrixWorld(true);
+      updateNoodleJiggle(rig, dt);
+      onStep?.();
+    }
+  }
+  /** Walk sideways at `speed` m/s for `seconds`, running the jiggle. */
+  function walk(rig: Rig, seconds: number, speed: number, dt = DT) {
+    for (let t = 0; t < seconds; t += dt) {
+      rig.root.position.x += speed * dt;
+      rig.root.updateMatrixWorld(true);
+      updateNoodleJiggle(rig, dt);
+    }
+  }
+  /** Start the swing clip (rising edge for the whip). */
+  function swing(rig: Rig) {
+    rig.mixer.stopAllAction();
+    actionFor(rig, CLIPS.shoot)!.reset().play();
+    rig.mixer.update(DT);
+  }
+  const j = (rig: Rig) => rig.noodleJiggle!;
+  const offFromRest = (rig: Rig) => Math.hypot(j(rig).tipOffset.x - j(rig).rest.x, j(rig).tipOffset.z - j(rig).rest.z);
+
+  it("has 16 segments along its length", () => {
+    const rig = buildRig(scene, clips);
+    const g = j(rig).mesh.geometry as unknown as { parameters: { heightSegments: number } };
+    expect(g.parameters.heightSegments).toBe(NOODLE_SEGMENTS);
+    expect(NOODLE_SEGMENTS).toBe(16);
+  });
+
+  it("wobbles visibly after a stop, then settles back to its droop rest within 1.5 s", () => {
+    const rig = noodleRig();
+    walk(rig, 0.6, 3);
+    const h = j(rig).height;
+    // Still wobbling a bit right after the stop...
+    let maxEarly = 0;
+    let t = 0;
+    for (; t < 0.3; t += DT) {
+      updateNoodleJiggle(rig, DT);
+      maxEarly = Math.max(maxEarly, offFromRest(rig));
+    }
+    expect(maxEarly).toBeGreaterThan(0.05 * h);
+    for (; t < 1.5; t += DT) updateNoodleJiggle(rig, DT);
+    expect(offFromRest(rig)).toBeLessThan(0.05 * h);
+    expect(Math.hypot(j(rig).tipVel.x, j(rig).tipVel.z)).toBeLessThan(0.2 * h);
+  });
+
+  it("droops toward world down when still, by at most the droop fraction of the length", () => {
+    const rig = noodleRig();
+    // Tip the character over 60 degrees so the noodle leans and droops sideways.
+    rig.root.rotation.z = Math.PI / 3;
+    rig.root.updateMatrixWorld(true);
+    updateNoodleJiggle(rig, DT); // re-reads the tip; settle from there
+    for (let t = 0; t < 3; t += DT) updateNoodleJiggle(rig, DT);
+    const h = j(rig).height;
+    const rest = Math.hypot(j(rig).rest.x, j(rig).rest.z);
+    expect(rest).toBeGreaterThan(0.05 * h);
+    expect(rest).toBeLessThanOrEqual(NOODLE_DROOP * h + 1e-9);
+    expect(offFromRest(rig)).toBeLessThan(0.02 * h);
+    // The tip moved toward world down.
+    const m = j(rig).mesh;
+    const base = m.localToWorld(new Vector3(0, h / 2, 0));
+    const arr = m.geometry.attributes.position;
+    let top = 0;
+    for (let i = 1; i < arr.count; i++) if (arr.getY(i) > arr.getY(top)) top = i;
+    const tip = m.localToWorld(new Vector3(arr.getX(top), arr.getY(top), arr.getZ(top)));
+    expect(tip.y).toBeLessThan(base.y);
+  });
+
+  it("never bends past the cap, even when whipped around hard", () => {
+    const rig = noodleRig();
+    const cap = NOODLE_MAX_BEND * j(rig).height + 1e-6;
+    let max = 0;
+    const track = () => (max = Math.max(max, Math.hypot(j(rig).tipOffset.x, j(rig).tipOffset.z)));
+    for (let k = 0; k < 6; k++) {
+      swing(rig);
+      shake(rig, 0.25, 1.5, 1, DT, track);
+      rig.mixer.stopAllAction();
+      updateNoodleJiggle(rig, DT);
+      walk(rig, 0.2, k % 2 ? 4 : -4);
+      track();
+    }
+    expect(max).toBeLessThanOrEqual(cap);
+    expect(max).toBeGreaterThan(0.3 * j(rig).height); // it does flop, not just twitch
+  });
+
+  it("stays finite at dt 0 and dt 0.1", () => {
+    for (const dt of [0, 0.1]) {
+      const rig = noodleRig();
+      shake(rig, 1, 0.8, 4, dt === 0 ? DT : dt, () => updateNoodleJiggle(rig, dt));
+      const arr = j(rig).mesh.geometry.attributes.position.array as Float32Array;
+      expect(arr.every(Number.isFinite)).toBe(true);
+      expect([j(rig).tipOffset, j(rig).tipVel].every((v) => Number.isFinite(v.x + v.y + v.z))).toBe(true);
+    }
+  });
+
+  it("whips the tip once when a swing starts", () => {
+    const rig = noodleRig();
+    for (let t = 0; t < 2; t += DT) updateNoodleJiggle(rig, DT);
+    const before = Math.hypot(j(rig).tipVel.x, j(rig).tipVel.z);
+    swing(rig);
+    updateNoodleJiggle(rig, DT);
+    expect(Math.hypot(j(rig).tipVel.x, j(rig).tipVel.z)).toBeGreaterThan(before + j(rig).height);
   });
 });

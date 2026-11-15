@@ -38,9 +38,15 @@ export type NoodleJiggle = {
   mesh: Mesh;
   basePositions: Float32Array;
   height: number;
+  /** Mesh-space units per world metre (the rig is scaled), for the hand-motion delta. */
+  unitsPerM: number;
   prevTipWorld: Vector3;
   tipOffset: Vector3;
   tipVel: Vector3;
+  /** Where the tip settles when still (mesh space, lateral x/z): the gravity droop. Updated each frame. */
+  rest: Vector3;
+  /** The noodle swing (shoot clip) was playing last frame: a new swing whips the tip once. */
+  swinging: boolean;
   initialized: boolean;
 };
 
@@ -210,7 +216,7 @@ function attachNoodle(root: Object3D): { holder: Object3D; jiggle: NoodleJiggle 
   const k = 1 / holder.getWorldScale(new Vector3()).x;
   const height = n.lengthM * k;
   const radius = n.radiusM * k;
-  const geom = new CylinderGeometry(radius, radius, height, 10, 8);
+  const geom = new CylinderGeometry(radius, radius, height, 10, NOODLE_SEGMENTS);
   const basePositions = new Float32Array(geom.attributes.position.array);
 
   const mesh = new Mesh(
@@ -230,22 +236,61 @@ function attachNoodle(root: Object3D): { holder: Object3D; jiggle: NoodleJiggle 
     mesh,
     basePositions,
     height,
+    unitsPerM: height / n.lengthM,
     prevTipWorld: new Vector3(),
     tipOffset: new Vector3(),
     tipVel: new Vector3(),
+    rest: new Vector3(),
+    swinging: false,
     initialized: false,
   };
 
   return { holder, jiggle };
 }
 
+// Pool noodle flop tuning: a soft foam spring that lags the hand, droops under
+// gravity and whips on a swing. Lengths are fractions of the noodle's length.
+/** Cylinder segments along the length, so the t^3 bend curves instead of kinking. */
+export const NOODLE_SEGMENTS = 16;
+/** Spring stiffness (1/s^2) pulling the tip back to its droop rest. */
+export const NOODLE_SPRING_K = 40;
+/** Damping (1/s): with K 40 it rings about 1 Hz and dies out in about 1 s. */
+export const NOODLE_DAMPING = 4.5;
+/** Tip acceleration per unit of tip velocity from hand motion (the lag). */
+export const NOODLE_LAG_GAIN = 2.75;
+/** Cap on that lag acceleration (mesh-space units / s^2, as before). */
+export const NOODLE_ACCEL_LIMIT = 80;
+/** Largest tip offset, as a fraction of the length. */
+export const NOODLE_MAX_BEND = 0.6;
+/** Tip sag toward world down when still, as a fraction of the length (times the sideways part of down). */
+export const NOODLE_DROOP = 0.18;
+/** Tip speed added when a swing starts, in lengths per second. */
+export const NOODLE_WHIP = 4;
+/** Integration substep (s): keeps the spring stable at dt 0.1. */
+const NOODLE_SUBSTEP_S = 1 / 120;
+
 const tmpTipWorld = new Vector3();
 const tmpQuat = new Quaternion();
 const tmpDelta = new Vector3();
+const tmpDown = new Vector3();
+
+const NOODLE_SWING_CLIPS = [CLIPS.shoot, MOVING_SHOOT] as const;
+
+/** The swing clip (Idle_Shoot or Run_Shoot) is playing. existingAction: allocates nothing. */
+function noodleSwinging(rig: Rig): boolean {
+  for (const name of NOODLE_SWING_CLIPS) {
+    const clip = rig.clips.get(name);
+    const action = clip ? rig.mixer.existingAction(clip) : null;
+    if (action?.isRunning()) return true;
+  }
+  return false;
+}
 
 /**
- * Procedural floppy foam jiggle physics for the pool noodle (Option A).
- * Runs each frame on the visible noodle mesh without Rapier rigidbodies.
+ * Floppy foam pool noodle (procedural, no Rapier bodies). The tip is a damped
+ * spring in mesh space (lateral x/z): it lags the hand, rests at a gravity
+ * droop, whips once per swing, and is capped at NOODLE_MAX_BEND of the length.
+ * Vertices follow it along a t^3 curve. Allocation-free per frame.
  */
 export function updateNoodleJiggle(rig: Rig, dt: number): void {
   const j = rig.noodleJiggle;
@@ -261,6 +306,7 @@ export function updateNoodleJiggle(rig: Rig, dt: number): void {
     j.prevTipWorld.copy(tmpTipWorld);
     j.tipOffset.set(0, 0, 0);
     j.tipVel.set(0, 0, 0);
+    j.swinging = noodleSwinging(rig);
     j.initialized = true;
     return;
   }
@@ -268,34 +314,48 @@ export function updateNoodleJiggle(rig: Rig, dt: number): void {
   // World displacement of the tip this frame
   tmpDelta.subVectors(tmpTipWorld, j.prevTipWorld);
   j.prevTipWorld.copy(tmpTipWorld);
+  if (!(dt > 0)) return; // dt 0 (or NaN): nothing to integrate, and no divide by zero
 
-  // Convert world delta into mesh local coordinate space
+  // World delta (metres) and world down into mesh space: rotate, and scale the delta to mesh units.
   mesh.getWorldQuaternion(tmpQuat).invert();
-  tmpDelta.applyQuaternion(tmpQuat);
+  tmpDelta.applyQuaternion(tmpQuat).multiplyScalar(j.unitsPerM);
+  tmpDown.set(0, -1, 0).applyQuaternion(tmpQuat);
+  // Droop rest: the sideways part of world down, scaled (mesh-space units, like height).
+  j.rest.set(tmpDown.x * NOODLE_DROOP * j.height, 0, tmpDown.z * NOODLE_DROOP * j.height);
 
-  const step = Math.min(dt, 0.05);
-  // Damped spring oscillator (foam noodle)
-  const k = 150; // spring restoring stiffness
-  const c = 10; // damping
-  const accelLimit = 40;
-  const lagX = Math.max(-accelLimit, Math.min(accelLimit, -(tmpDelta.x / step) * 1.6));
-  const lagZ = Math.max(-accelLimit, Math.min(accelLimit, -(tmpDelta.z / step) * 1.6));
+  // A new swing whips the tip once, sideways across the swing.
+  const swinging = noodleSwinging(rig);
+  if (swinging && !j.swinging) j.tipVel.x += NOODLE_WHIP * j.height;
+  j.swinging = swinging;
 
-  const ax = -k * j.tipOffset.x - c * j.tipVel.x + lagX;
-  const az = -k * j.tipOffset.z - c * j.tipVel.z + lagZ;
+  const lim = NOODLE_ACCEL_LIMIT;
+  const lagX = Math.max(-lim, Math.min(lim, -(tmpDelta.x / dt) * NOODLE_LAG_GAIN));
+  const lagZ = Math.max(-lim, Math.min(lim, -(tmpDelta.z / dt) * NOODLE_LAG_GAIN));
 
-  j.tipVel.x += ax * step;
-  j.tipVel.z += az * step;
-  j.tipOffset.x += j.tipVel.x * step;
-  j.tipOffset.z += j.tipVel.z * step;
-
-  // Max bend: up to 35% of noodle length
-  const maxBend = j.height * 0.35;
-  const bendDist = Math.hypot(j.tipOffset.x, j.tipOffset.z);
-  if (bendDist > maxBend && bendDist > 1e-4) {
-    const scale = maxBend / bendDist;
-    j.tipOffset.x *= scale;
-    j.tipOffset.z *= scale;
+  const maxBend = j.height * NOODLE_MAX_BEND;
+  const n = Math.min(24, Math.ceil(dt / NOODLE_SUBSTEP_S));
+  const h = dt / n;
+  for (let s = 0; s < n; s++) {
+    const ax = -NOODLE_SPRING_K * (j.tipOffset.x - j.rest.x) - NOODLE_DAMPING * j.tipVel.x + lagX;
+    const az = -NOODLE_SPRING_K * (j.tipOffset.z - j.rest.z) - NOODLE_DAMPING * j.tipVel.z + lagZ;
+    j.tipVel.x += ax * h;
+    j.tipVel.z += az * h;
+    j.tipOffset.x += j.tipVel.x * h;
+    j.tipOffset.z += j.tipVel.z * h;
+    const bend = Math.hypot(j.tipOffset.x, j.tipOffset.z);
+    if (bend > maxBend) {
+      const f = maxBend / bend;
+      j.tipOffset.x *= f;
+      j.tipOffset.z *= f;
+      // Lose the outward speed at the cap, so it does not stick there.
+      const nx = j.tipOffset.x / maxBend;
+      const nz = j.tipOffset.z / maxBend;
+      const out = j.tipVel.x * nx + j.tipVel.z * nz;
+      if (out > 0) {
+        j.tipVel.x -= out * nx;
+        j.tipVel.z -= out * nz;
+      }
+    }
   }
 
   // Deform mesh vertices along the bend curve
@@ -309,7 +369,7 @@ export function updateNoodleJiggle(rig: Rig, dt: number): void {
     const origY = j.basePositions[i * 3 + 1];
     // t: 0 at base (-halfH), 1 at tip (+halfH)
     const t = Math.max(0, Math.min(1, (origY + halfH) / j.height));
-    const bendFactor = t * t; // quadratic curve
+    const bendFactor = t * t * t; // cubic: stiff near the hand, floppy at the tip
     pos.setX(i, j.basePositions[i * 3] + ox * bendFactor);
     pos.setZ(i, j.basePositions[i * 3 + 2] + oz * bendFactor);
   }
