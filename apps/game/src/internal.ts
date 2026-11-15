@@ -37,6 +37,8 @@ export function internalRouter(): Router {
     const room = roomsByBlock.get(req.params.block_id);
     if (!room) return void res.status(404).json({ error: "no room for block" });
     const { player_id, listing_id } = req.body as { player_id: string; listing_id: string };
+    // The client walks the player to this house's door on a focus change (HANDOFF 16:45), a jump.
+    if (room.state.focus.get(player_id) !== listing_id) room.allowTeleport(player_id);
     room.state.focus.set(player_id, listing_id);
     res.json({ ok: true });
   });

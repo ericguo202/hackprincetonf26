@@ -38,7 +38,8 @@ export async function joinBlock(blockId: string, name: string): Promise<void> {
   });
   room.onLeave(() => useStore.getState().set({ connected: false }));
 
-  let lastZone = s.me.zone;
+  // The server starts every player in "block"; if we join already inside a house, the first tick tells it.
+  let lastZone = "block";
   setInterval(() => {
     const me = useStore.getState().me;
     if (!room) return;
