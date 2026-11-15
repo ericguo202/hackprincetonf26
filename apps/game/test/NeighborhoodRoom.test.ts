@@ -142,6 +142,71 @@ describe("NeighborhoodRoom", () => {
     assert.ok(!text.includes("hou_236595179"));
   });
 
+  describe("per-room furniture", () => {
+    const HOUSE = "hou_236595179";
+    const obj = (instance_id: string, asset_id: string) => ({ instance_id, asset_id, x: 1, y: 0, z: 1, rot_deg: 0, reason: "t" });
+
+    /** POST one room's plan; resolves with the HTTP status (httpie throws on non-2xx). */
+    async function furnish(roomId: string, objects: ReturnType<typeof obj>[], planId = `p_${roomId}`, listing = HOUSE) {
+      const plan = { plan_id: planId, listing_id: listing, room_id: roomId, status: "placed", objects, conflicts: [] };
+      try {
+        const res = await colyseus.http.post(`/internal/rooms/${BLOCK}/houses/${listing}/plan`, {
+          headers: { "Content-Type": "application/json", "X-Internal-Secret": SECRET },
+          body: { player_id: "agent", plan },
+        });
+        return res.statusCode;
+      } catch (e) {
+        return (e as { statusCode: number }).statusCode;
+      }
+    }
+
+    async function setup() {
+      const room = await colyseus.createRoom("neighborhood", { block_id: BLOCK });
+      await colyseus.connectTo(room, { name: "ana" });
+      const ids = () => room.state.houses.get(HOUSE)?.objects.map((o) => o.instance_id) ?? [];
+      return { room, ids };
+    }
+
+    it("keeps the first room when a second room is furnished", async () => {
+      const { room, ids } = await setup();
+      assert.strictEqual(await furnish(`${HOUSE}.r1`, [obj("o1", "sofa"), obj("o2", "tv")]), 200);
+      assert.strictEqual(await furnish(`${HOUSE}.r2`, [obj("o1", "crib")], "p_nursery"), 200);
+      assert.deepStrictEqual(ids(), [`${HOUSE}.r1/o1`, `${HOUSE}.r1/o2`, `${HOUSE}.r2/o1`]);
+      assert.strictEqual(room.state.houses.get(HOUSE)?.plan_id, "p_nursery");
+    });
+
+    it("re-furnishing a room replaces only that room and keeps the order of rooms", async () => {
+      const { room, ids } = await setup();
+      await furnish(`${HOUSE}.r1`, [obj("o1", "sofa")]);
+      await furnish(`${HOUSE}.r2`, [obj("o1", "crib")]);
+      await furnish(`${HOUSE}.r1`, [obj("o1", "beanbag"), obj("o2", "play_mat")], "p_playroom");
+      assert.deepStrictEqual(ids(), [`${HOUSE}.r1/o1`, `${HOUSE}.r1/o2`, `${HOUSE}.r2/o1`]);
+      const assets = room.state.houses.get(HOUSE)?.objects.map((o) => o.asset_id);
+      assert.deepStrictEqual(assets, ["beanbag", "play_mat", "crib"]);
+    });
+
+    it("an empty plan clears that room only", async () => {
+      const { ids } = await setup();
+      await furnish(`${HOUSE}.r1`, [obj("o1", "sofa")]);
+      await furnish(`${HOUSE}.r2`, [obj("o1", "crib")]);
+      await furnish(`${HOUSE}.r1`, []);
+      assert.deepStrictEqual(ids(), [`${HOUSE}.r2/o1`]);
+    });
+
+    it("does not double-prefix an already prefixed instance_id", async () => {
+      const { ids } = await setup();
+      await furnish(`${HOUSE}.r1`, [obj(`${HOUSE}.r1/o1`, "sofa")]);
+      assert.deepStrictEqual(ids(), [`${HOUSE}.r1/o1`]);
+    });
+
+    it("rejects a room of another house or a missing room_id", async () => {
+      const { ids } = await setup();
+      assert.strictEqual(await furnish("hou_999.r1", [obj("o1", "sofa")]), 400);
+      assert.strictEqual(await furnish("", [obj("o1", "sofa")]), 400);
+      assert.deepStrictEqual(ids(), []);
+    });
+  });
+
   describe("fire", () => {
     const HEAD = 0.5; // the client fires from its head, above the body centre that move reports
     const BLAST_GAP = MIN_FIRE_INTERVAL_MS.blaster + 60;

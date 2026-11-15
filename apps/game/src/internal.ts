@@ -33,8 +33,13 @@ export function internalRouter(): Router {
     if (!plan || plan.listing_id !== req.params.listing_id) {
       return void res.status(400).json({ error: "plan.listing_id must match the path" });
     }
+    // Room ids are "<listing_id>.<n>" (contracts/room.schema.json); a room of another house is a bug.
+    if (typeof plan.room_id !== "string" || !plan.room_id.startsWith(`${plan.listing_id}.`)) {
+      return void res.status(400).json({ error: "plan.room_id must be a room of this listing" });
+    }
+    if (!Array.isArray(plan.objects)) return void res.status(400).json({ error: "plan.objects must be an array" });
     if (plan.conflicts?.length) return void res.status(409).json({ error: "plan has conflicts" });
-    room.applyPlan(plan.listing_id, plan.plan_id, plan.objects, player_id);
+    room.applyPlan(plan.listing_id, plan.room_id, plan.plan_id, plan.objects, player_id);
     const name = room.state.players.get(player_id)?.name ?? "Someone";
     room.broadcast("toast", { text: `${name}'s agent furnished ${roomPhrase(room_label)}` });
     res.json({ placed: plan.objects.length });

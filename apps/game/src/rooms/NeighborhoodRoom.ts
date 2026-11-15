@@ -35,6 +35,14 @@ type JoinOptions = { block_id?: string; name?: string };
 type MovePayload = { x: number; y: number; z: number; yaw: number; anim: string };
 type FirePayload = { origin?: unknown; dir?: unknown; target_id?: unknown; weapon?: unknown };
 
+/**
+ * Agents number pieces o1, o2... per plan, so ids collide across rooms of one house.
+ * The game prefixes them with the room: "hou_x.r3/o1" (idempotent).
+ */
+export function roomInstanceId(roomId: string, instanceId: string): string {
+  return instanceId.startsWith(`${roomId}/`) ? instanceId : `${roomId}/${instanceId}`;
+}
+
 export type PlanObject = {
   instance_id: string;
   asset_id: string;
@@ -52,6 +60,8 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
   private graceUntil = new Map<string, number>();
   /** sessionId -> Date.now() of the last accepted fire (any weapon). Server-only. */
   private lastFire = new Map<string, number>();
+  /** listing_id -> room_id -> that room's placed objects. Server-only; House.objects is rebuilt from it. */
+  private roomPlans = new Map<string, Map<string, (PlanObject & { by_player: string })[]>>();
   /** sessionId -> pending respawn timer. Server-only. */
   private respawns = new Map<string, Delayed>();
 
@@ -194,16 +204,38 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
     p.anim = "idle";
   }
 
-  /** Internal API: replace one house's furniture with a validated plan. */
-  applyPlan(listingId: string, planId: string, objects: PlanObject[], byPlayer: string) {
+  /**
+   * Internal API: replace ONE ROOM's furniture with a validated plan, keeping the
+   * house's other rooms. Plans are validated per room polygon, so rooms never overlap.
+   * Same room again = last write wins ("make it a playroom instead"); empty objects clear it.
+   */
+  applyPlan(listingId: string, roomId: string, planId: string, objects: PlanObject[], byPlayer: string) {
+    let rooms = this.roomPlans.get(listingId);
+    if (!rooms) this.roomPlans.set(listingId, (rooms = new Map()));
+    // Map.set on an existing key keeps its position, so House.objects order is stable.
+    rooms.set(
+      roomId,
+      objects.map((o) => ({ ...o, instance_id: roomInstanceId(roomId, o.instance_id), by_player: byPlayer })),
+    );
+
     const house = new House();
     house.listing_id = listingId;
-    house.plan_id = planId;
-    for (const o of objects) {
-      const placed = new Placed();
-      Object.assign(placed, o, { by_player: byPlayer });
-      house.objects.push(placed);
+    house.plan_id = planId; // latest plan for this house
+    for (const roomObjects of rooms.values()) {
+      for (const o of roomObjects) {
+        const placed = new Placed();
+        placed.instance_id = o.instance_id;
+        placed.asset_id = o.asset_id;
+        placed.x = o.x;
+        placed.y = o.y;
+        placed.z = o.z;
+        placed.rot_deg = o.rot_deg;
+        placed.reason = o.reason ?? "";
+        placed.by_player = o.by_player;
+        house.objects.push(placed);
+      }
     }
     this.state.houses.set(listingId, house);
   }
+
 }

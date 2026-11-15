@@ -1,4 +1,4 @@
-# Game service messages (contracts v2.4.3)
+# Game service messages (contracts v2.4.5)
 
 Colyseus 0.18, one room type `NeighborhoodRoom` keyed by `block_id`, up to 16 players.
 Shared state schema: `game-state.ts`. Positions are in the player's current zone frame
@@ -66,9 +66,19 @@ HTTP with header `X-Internal-Secret: $GAME_INTERNAL_SECRET`. Private network fir
 
 | Method | Path                                                  | Body                                                                 | Effect                                                                                     |
 | ------ | ----------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `POST` | `/internal/rooms/{block_id}/houses/{listing_id}/plan` | `{player_id, plan, room_label?}` (plan: `placement_plan.schema.json`, no conflicts) | Replace that house's furniture; broadcast `toast` "{name}'s agent furnished the {room}" |
+| `POST` | `/internal/rooms/{block_id}/houses/{listing_id}/plan` | `{player_id, plan, room_label?}` (plan: `placement_plan.schema.json`, no conflicts) | Replace that room's furniture (rules below); broadcast `toast` "{name}'s agent furnished the {room}" |
 | `POST` | `/internal/rooms/{block_id}/focus`                    | `{player_id, listing_id}`                                            | Beacon on a house; a changed beacon opens that player's teleport window                   |
 | `GET`  | `/internal/rooms/{block_id}/players/{player_id}`      | none                                                                 | `{zone, x, y, z}` for agent context                                                        |
+
+Per-room furniture (v2.4.5): the game keeps furniture per `plan.room_id` and
+rebuilds `House.objects` from every furnished room of the house, rooms in the
+order they were first furnished. A plan replaces only its own room, so
+furnishing a second room keeps the first; the same room again replaces it (last
+write wins); a plan with no objects clears that room. `plan.room_id` must be a
+room of the listing in the path (`<listing_id>.r<n>`), else 400. Each
+`instance_id` in `House.objects` is prefixed with its room id
+(`"hou_236595179.r3/o1"`), because agents number pieces `o1, o2...` per plan.
+`House.plan_id` is the latest plan's id for that house.
 
 `room_label` (v2.4.2, optional) is the room's `label` from `room.schema.json`
 (for example `living_room`). The toast shows it in words ("the living room");
