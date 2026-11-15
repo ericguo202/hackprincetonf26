@@ -211,7 +211,8 @@ class EventMapper:
         r = _json(m.content)
         if status == "finished" and isinstance(r, dict):
             if tool == "search_listings":
-                matches = [{k: x[k] for k in ("listing_id", "score", "evidence")} for x in r["matches"]]
+                keys = ("listing_id", "address", "price_usd", "score", "evidence")
+                matches = [{k: x.get(k) for k in keys} for x in r["matches"]]
                 out.append({"type": "listings.results", "data": {"matches": matches}})
             elif tool == "get_audit":
                 out.append({"type": "audit.findings", "data": strip_say(r)})

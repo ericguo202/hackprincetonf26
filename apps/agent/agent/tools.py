@@ -400,10 +400,23 @@ def search_listings(
         search.add_pricing(
             out["matches"], {x["id"]: x for x in homes}, out["market"]["median_price_per_m2_usd"]
         )
+        for m in out["matches"]:
+            m["contradictions"] = _contradictions(m["listing_id"])
         FILES.write_json(SEARCH_PATH, out)
         return out
 
     return _run(run)
+
+
+def _contradictions(listing_id: str) -> list[str]:
+    """Audit `say` sentences for one home, conflicts first; [] when every check is consistent or no audit."""
+    try:
+        audit = plain.with_sentences(packs.get_audit(listing_id), packs.get_listing(listing_id))
+    except Exception:  # noqa: BLE001  a house without an audit file has nothing to report
+        return []
+    rank = {"conflict": 0, "warn": 1}
+    flagged = sorted((f for f in audit["findings"] if "say" in f), key=lambda f: rank.get(f["severity"], 2))
+    return [f["say"] for f in flagged]
 
 
 def _house_data(listing_id: str) -> tuple[dict | None, list[dict] | None]:

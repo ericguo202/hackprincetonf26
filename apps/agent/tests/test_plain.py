@@ -37,3 +37,20 @@ def test_with_sentences_only_marks_warn_and_conflict():
 def test_audit_event_drops_say():
     audit = plain.with_sentences({"listing_id": "h", "findings": [f("area_vs_scan", 100, 80)]}, None)
     assert all("say" not in x for x in events.strip_say(audit)["findings"])
+
+
+def test_search_matches_carry_contradiction_sentences(monkeypatch):
+    from agent import tools
+    from data import packs
+
+    audit = {
+        "listing_id": "h",
+        "findings": [f("area_vs_scan", 122.4, 103.9), f("beds_vs_rooms", 3, 2, "conflict")],
+    }
+    monkeypatch.setattr(packs, "get_audit", lambda lid: audit)
+    monkeypatch.setattr(packs, "get_listing", lambda lid: LISTING)
+    said = tools._contradictions("h")
+    assert said[0] == "6915 Navidad Road is listed with 3 bedrooms, but the scan shows 2."  # conflict first
+    assert said[1].endswith("(15% smaller).")
+    monkeypatch.setattr(packs, "get_audit", lambda lid: (_ for _ in ()).throw(KeyError(lid)))
+    assert tools._contradictions("none") == []

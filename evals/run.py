@@ -31,6 +31,7 @@ Turns run in one session, so follow-ups see earlier turns. Checks (all optional,
     replaces_previous: true   same room as the previous turn's plan, different pieces or poses
     focus: "<listing_id>"     the beacon went on this listing
     answer_mentions: ["a|b"]  the final answer contains each item (any "|" alternative), case-insensitive
+    max_words: n              the final answer is at most n words (judges read it on screen)
     max_seconds: s            the turn finished within s seconds (also a hard timeout, default 300)
 """
 
@@ -55,7 +56,7 @@ DEFAULT_TIMEOUT_S = 300
 CHECKS = {
     "no_error", "planned", "subagents", "tools", "committed", "room_label", "categories_all",
     "categories_any", "min_objects", "min_cover", "valid", "replaces_previous", "focus",
-    "answer_mentions", "max_seconds",
+    "answer_mentions", "max_words", "max_seconds",
 }  # fmt: skip
 
 
@@ -181,6 +182,9 @@ def score_turn(
         text = turn.answer.lower()
         missing = [m for m in expect["answer_mentions"] if not any(a.lower() in text for a in m.split("|"))]
         add("answer_mentions", not missing, f"missing {missing}" if missing else "all mentioned")
+    if "max_words" in expect:
+        words = len(turn.answer.split())
+        add("max_words", words <= expect["max_words"], f"{words} words (max {expect['max_words']})")
     return out
 
 
@@ -214,7 +218,7 @@ class FakeGame:
         async def get_player(block_id, player_id):
             return {"id": player_id, "zone": self.zones.get(player_id, "block"), "x": 0.0, "y": 0.0, "z": 0.0}
 
-        async def post_plan(block_id, player_id, plan):
+        async def post_plan(block_id, player_id, plan, room_label=None):
             if plan.get("conflicts"):
                 raise ValueError("refusing to commit a plan with conflicts")
             self.plans.setdefault(player_id, []).append(plan)

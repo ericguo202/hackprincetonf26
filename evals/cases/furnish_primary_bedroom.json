@@ -6,6 +6,7 @@
     {
       "prompt": "Furnish the primary bedroom for a couple",
       "expect": {
+        "max_words": 45,
         "committed": true,
         "room_label": "primary_bedroom",
         "categories_all": ["bed"],

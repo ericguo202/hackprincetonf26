@@ -6,6 +6,7 @@
     {
       "prompt": "Furnish the living room for a family that watches movies together",
       "expect": {
+        "max_words": 45,
         "planned": true,
         "subagents": ["room-scout", "asset-curator", "layout-planner"],
         "tools": ["get_room_geometry", "search_assets", "place_picks", "commit_placement"],

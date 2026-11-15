@@ -6,6 +6,7 @@
     {
       "prompt": "We're new parents with an infant. Find us a home to buy under 450k.",
       "expect": {
+        "max_words": 60,
         "planned": true,
         "tools": ["search_listings"],
         "subagents": ["listing-auditor"],

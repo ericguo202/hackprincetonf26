@@ -6,6 +6,7 @@
     {
       "prompt": "Set up the living room for a nerf war",
       "expect": {
+        "max_words": 45,
         "committed": true,
         "room_label": "living_room",
         "min_cover": 2,
@@ -16,6 +17,7 @@
     {
       "prompt": "Make it a playroom instead",
       "expect": {
+        "max_words": 45,
         "committed": true,
         "room_label": "living_room",
         "categories_any": ["play_mat", "toy_storage", "kids_table", "kids_chair", "play_equipment", "beanbag"],

@@ -2,7 +2,7 @@
 // the raw evidence and audit values stay one click away under "Show the data".
 import type { Audit } from "../contracts.gen";
 import type { ListingMatch } from "../store";
-import { findingLine, matchLabel, needLine, priceText, type Mark } from "./listingCopy";
+import { findingLine, matchLabel, needLine, priceText, streetOf, type Mark } from "./listingCopy";
 
 const ICON: Record<Mark, string> = { yes: "✓", partial: "~", no: "✗", unknown: "?" };
 
@@ -22,15 +22,15 @@ export function ListingCard({ match, rank, audit }: { match: ListingMatch; rank:
   const lines = match.evidence.map(needLine).filter((l) => l !== null);
   const flagged = (audit?.findings ?? []).filter((f) => f.severity !== "info");
   const price = priceText(match);
+  const place = rank === 1 ? "Top pick" : `Option ${rank}`;
+  const street = streetOf(match);
   return (
     <article className="listing-card">
       <h3>
-        <span>
-          {rank === 1 ? "Top pick" : `Option ${rank}`}
-          {price ? ` · ${price}` : ""}
-        </span>
+        <span>{street ?? place}</span>
         <span className="match-label">{matchLabel(match.score)}</span>
       </h3>
+      <p className="listing-sub">{[street ? place : null, price].filter(Boolean).join(" · ")}</p>
       <ul>
         {lines.map((l) => (
           <li key={l.criterion} data-mark={l.mark}>

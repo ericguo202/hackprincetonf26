@@ -5,11 +5,12 @@
   "turns": [
     {
       "prompt": "Furnish the living room for movie nights",
-      "expect": { "committed": true, "room_label": "living_room", "valid": true }
+      "expect": { "max_words": 45, "committed": true, "room_label": "living_room", "valid": true }
     },
     {
       "prompt": "Move the couch to the other wall",
       "expect": {
+        "max_words": 45,
         "committed": true,
         "categories_any": ["sofa", "sectional", "loveseat"],
         "replaces_previous": true,

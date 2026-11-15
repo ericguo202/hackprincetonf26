@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findingLine, matchLabel, needLine, priceText } from "./listingCopy";
+import { findingLine, matchLabel, needLine, priceText, streetOf } from "./listingCopy";
 
 const ev = (criterion: string, passed: boolean | null, value: unknown = null) =>
   ({ criterion, passed, value, source: "x" }) as { criterion: string; passed: boolean; value: unknown; source: string };
@@ -38,5 +38,12 @@ describe("listing card wording", () => {
     expect(matchLabel(0.75)).toBe("Strong match");
     expect(matchLabel(0.562)).toBe("Good match");
     expect(priceText({ listing_id: "a", score: 1, evidence: [ev("max_price_usd", true, 220000)] })).toBe("$220,000");
+  });
+
+  it("names the home by its street when the payload has an address (contracts v2.4.4)", () => {
+    const m = { listing_id: "hou_236595179", address: "7014 Navidad Road, Houston, TX 77083", price_usd: 220000, score: 0.75, evidence: [] };
+    expect(streetOf(m)).toBe("7014 Navidad Road");
+    expect(priceText(m)).toBe("$220,000");
+    expect(streetOf({ listing_id: "old", score: 1, evidence: [] })).toBeNull();
   });
 });

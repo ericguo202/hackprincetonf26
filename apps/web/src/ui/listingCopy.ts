@@ -101,8 +101,15 @@ export function matchLabel(score: number): string {
   return "Partial match";
 }
 
-/** Listed price from the search evidence (present when the buyer gave a budget). */
+/** "7014 Navidad Road, Houston, TX 77083" -> "7014 Navidad Road"; null without an address. */
+export function streetOf(m: ListingMatch): string | null {
+  const street = m.address?.split(",")[0]?.trim();
+  return street ? street : null;
+}
+
+/** Listed price (contracts v2.4.4), else the budget evidence's value (present when the buyer gave a budget). */
 export function priceText(m: ListingMatch): string | null {
+  if (typeof m.price_usd === "number") return `$${n(m.price_usd)}`;
   const e = m.evidence.find((x) => x.criterion === "max_price_usd" || x.criterion === "max_rent_usd_month");
   if (typeof e?.value !== "number") return null;
   return e.criterion === "max_rent_usd_month" ? `$${n(e.value)}/month` : `$${n(e.value)}`;

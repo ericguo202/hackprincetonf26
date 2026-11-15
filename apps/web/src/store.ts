@@ -29,6 +29,9 @@ export type ToolLine = { agent: string; tool: string; status: string; summary: s
 export type ChatMessage = { role: "user" | "agent"; text: string; final: boolean; trace?: string };
 export type ListingMatch = {
   listing_id: string;
+  /** contracts v2.4.4; optional because older payloads do not carry them. */
+  address?: string | null;
+  price_usd?: number | null;
   score: number;
   evidence: { criterion: string; passed: boolean; value: unknown; source: string }[];
 };

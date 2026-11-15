@@ -240,6 +240,7 @@ async def test_home_search_runs_auditors_in_parallel(game, monkeypatch):  # noqa
     assert results["considered"] == 2 and results["excluded"][0]["listing_id"] == "hou_000456"
     listed = [e["data"] for e in events if e["type"] == "listings.results"]
     assert listed[0]["matches"][0]["listing_id"] == LISTING
+    assert {"address", "price_usd"} <= set(listed[0]["matches"][0])  # contracts v2.4.4
 
     subs = [(e["data"]["name"], e["data"]["status"]) for e in events if e["type"] == "agent.subagent"]
     assert (
