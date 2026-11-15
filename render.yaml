@@ -2,10 +2,13 @@
 # Region is immutable. Omitting it defaults to oregon; pin ohio (US East).
 # Static sites have no region (global CDN).
 #
-# After the first Blueprint apply, set these in the dashboard (sync: false):
+# After the first Blueprint apply, set these in the dashboard (sync: false).
+# Later Blueprint syncs ignore them and keep the dashboard value, so a sync
+# cannot roll a newer pack back to an older number in this file.
 #   agent: MODEL, ANTHROPIC_API_KEY or OPENROUTER_API_KEY, LANGSMITH_API_KEY
+#   agent: PACK_VERSION, FURNITURE_VERSION
 #   game + agent: PACK_BASE_URL (S3 or CDN of worldgen publish)
-#   web: VITE_PACK_BASE_URL (same URL), VITE_MATTERPORT_SDK_KEY
+#   web: VITE_PACK_BASE_URL, VITE_MATTERPORT_SDK_KEY
 # Then redeploy web so Vite bakes the pack URL into the bundle.
 # VITE_GAME_URL / VITE_AGENT_URL are filled from each service's public https URL
 # (Colyseus 0.18 accepts https:// and upgrades to wss).
@@ -82,9 +85,9 @@ projects:
               - key: PACK_BASE_URL
                 sync: false
               - key: PACK_VERSION
-                value: "3"
+                sync: false
               - key: FURNITURE_VERSION
-                value: "3"
+                sync: false
               - key: BLOCK_ID
                 value: hou_navidad_01
               - key: USE_FIXTURES
@@ -118,7 +121,7 @@ projects:
               - key: VITE_AGENT_URL
                 fromService: { type: web, name: agent, envVarKey: RENDER_EXTERNAL_URL }
               - key: VITE_PACK_BASE_URL
-                value: /packs/packs/hou_navidad_01/v3
+                sync: false
               - key: VITE_HERO_LISTING
                 value: hou_236595179
               - key: VITE_MATTERPORT_SDK_KEY
