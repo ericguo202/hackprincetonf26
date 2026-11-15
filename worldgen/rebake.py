@@ -25,6 +25,7 @@ import shapely
 import trimesh
 from PIL import Image
 from scipy import ndimage
+from shapely import affinity
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
@@ -113,6 +114,8 @@ class ShellRoom:
     wall_lines: list[tuple[LineString, float]]  # (centreline, thickness) of this room's wall edges
     flat_ceiling: bool = True
     wall_top: float | None = None  # walls reach this z when the ceiling is not flat
+    # Not flat: the scanned ceiling's height on a CEIL_STEP grid, (x0, y0, heights (nx, ny), NaN = no sample).
+    ceiling: tuple[float, float, np.ndarray] | None = None
     # Doorways to cut out of this room's walls regardless of what the scan shows (outside doors opened for
     # play): ((x0, y0), (x1, y1), z0, z1) along the wall's centreline. See exterior.py.
     cuts: list[tuple[tuple[float, float], tuple[float, float], float, float]] = field(default_factory=list)
@@ -154,6 +157,78 @@ def measure_ceiling(scan: Scan, room: ShellRoom) -> None:
         order = np.argsort(z)
         top = z[order][min(len(z) - 1, np.searchsorted(np.cumsum(a[order]), 0.995 * a.sum()))]
         room.wall_top = float(top) + 0.05
+        room.ceiling = _ceiling_grid(scan, room)
+
+
+CEIL_STEP = 0.2  # sample spacing of a vaulted room's ceiling heights (m)
+WALL_OVER_CEILING = 0.08  # a vaulted room's walls end this far above the ceiling next to them (m)
+
+
+def _ceiling_grid(scan: Scan, room: ShellRoom) -> tuple[float, float, np.ndarray]:
+    """The scanned ceiling's height over a room: per grid point, the first downward-facing surface more
+    than 1.9 m up that a ray going up from 1.5 m meets (stepping past cabinet tops and the like). Points
+    without one (a hole in the scan, the grid's corners outside the room) take the nearest point's height:
+    left empty they meant "as high as the room's highest point" to the walls and the roof, which put a
+    1.4 m ring around 7014's living room. All NaN when the scan has no ceiling at all."""
+    x0, y0, x1, y1 = room.poly.bounds
+    X, Y = np.meshgrid(
+        np.arange(x0, x1 + CEIL_STEP, CEIL_STEP), np.arange(y0, y1 + CEIL_STEP, CEIL_STEP), indexing="ij"
+    )
+    inside = shapely.contains_xy(room.poly, X, Y)
+    o = np.c_[X[inside], Y[inside], np.full(int(inside.sum()), room.floor_z + 1.5)]
+    z = np.full(len(o), np.nan)
+    todo = np.arange(len(o))
+    for _ in range(4):
+        if not len(todo):
+            break
+        t, prim = scan.rays.cast(o[todo], np.tile([0.0, 0.0, 1.0], (len(todo), 1)))
+        hit = (prim >= 0) & np.isfinite(t) & (t < 8.0)
+        todo, t, prim = todo[hit], t[hit], prim[hit]
+        zz = o[todo, 2] + t
+        ok = (scan.normals[prim, 2] < -0.3) & (zz > room.floor_z + 1.9)
+        z[todo[ok]] = zz[ok]
+        todo = todo[~ok]
+        o[todo, 2] = zz[~ok] + 1e-3
+    grid = np.full(X.shape, np.nan)
+    grid[inside] = z
+    if np.isfinite(grid).any():
+        idx = ndimage.distance_transform_edt(~np.isfinite(grid), return_distances=False, return_indices=True)
+        grid = grid[tuple(idx)]
+    return float(x0), float(y0), grid
+
+
+def ceiling_z(room: ShellRoom, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Ceiling height of a room at plan points: the listed height when it is flat, the scanned ceiling
+    (nearest sample, also just outside the room; NaN only when the scan has no ceiling) when it is not."""
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    if room.ceiling is None:
+        return np.full(x.shape, room.floor_z + room.height)
+    x0, y0, grid = room.ceiling
+    i = np.clip(np.rint((x - x0) / CEIL_STEP).astype(int), 0, grid.shape[0] - 1)
+    j = np.clip(np.rint((y - y0) / CEIL_STEP).astype(int), 0, grid.shape[1] - 1)
+    return grid[i, j]
+
+
+def _under_ceiling(r: ShellRoom, p0: np.ndarray, u: np.ndarray, n: np.ndarray, lo: float, hi: float):
+    """The part of a wall face (plane coordinates: s from `lo` along `u`, t up from the floor) at or below
+    the room's scanned ceiling, for rooms whose ceiling is not flat. Their walls used to be rectangles up to
+    the ceiling's highest point; the part above a sloping ceiling is never seen from inside, and from
+    outside it stood above the real roof at the eaves. The top follows the highest ceiling sample 0.1 to
+    0.5 m into the room and 0.3 m either way along the wall, plus WALL_OVER_CEILING; where the scan has no
+    ceiling the wall keeps its full height."""
+    full = room_top(r) - r.floor_z
+    s = np.append(np.arange(lo, hi, 0.1), hi)  # to the wall's very end: a short profile left a slit there
+    tops = []
+    for d in (0.1, 0.3, 0.5):
+        pts = p0[:2] + np.outer(s, u[:2]) + n[:2] * d
+        tops.append(ceiling_z(r, pts[:, 0], pts[:, 1]))
+    tops = np.stack(tops)
+    have = np.isfinite(tops).any(0)
+    top = np.where(have, np.nanmax(np.where(np.isfinite(tops), tops, -np.inf), axis=0), np.inf)
+    top = np.minimum(top + WALL_OVER_CEILING - r.floor_z, full)
+    top = ndimage.maximum_filter1d(top, 7, mode="nearest")
+    ring = [(0.0, 0.0), *zip(s - lo, top, strict=True), (float(s[-1] - lo), 0.0)]
+    return Polygon(ring).buffer(0)
 
 
 def _intervals(seg: LineString, geom) -> list[tuple[float, float]]:
@@ -334,6 +409,10 @@ def shell_planes(rooms: list[ShellRoom]) -> list[Plane]:
                 lo = min(0.0, min(a for a, _ in spans))
                 hi = max(length, max(b for _, b in spans))
                 region = unary_union([box(a - lo, 0, b - lo, height) for a, b in spans])
+                if r.ceiling is not None:
+                    region = region.intersection(_under_ceiling(r, p0, u, n, lo, hi))
+                    if region.geom_type == "GeometryCollection":  # drop lines left by the intersection
+                        region = unary_union([q for q in region.geoms if q.geom_type.endswith("Polygon")])
                 region = region.difference(_cut_boxes(r, p0, u, length, offset=-lo))
                 if region.area >= 0.01:
                     origin = np.array([p0[0] + u[0] * lo, p0[1] + u[1] * lo, r.floor_z])
@@ -350,7 +429,14 @@ def shell_planes(rooms: list[ShellRoom]) -> list[Plane]:
                 low = room_top(beyond[0])
                 step = room_top(r) - low
                 o = np.array([p0[0] + u[0] * a, p0[1] + u[1] * a, low])
-                planes.append(Plane("wall", o, u, ez, n, b - a, step, box(0, 0, b - a, step), carve=False))
+                shape = box(0, 0, b - a, step)
+                if r.ceiling is not None:  # as the walls: no higher than the scanned ceiling
+                    under = _under_ceiling(r, p0, u, n, a, b)
+                    shape = shape.intersection(affinity.translate(under, 0, r.floor_z - low))
+                    if shape.geom_type == "GeometryCollection":
+                        shape = unary_union([q for q in shape.geoms if q.geom_type.endswith("Polygon")])
+                if shape.area >= 0.01:
+                    planes.append(Plane("wall", o, u, ez, n, b - a, step, shape, carve=False))
         for p in planes[first:]:
             p.room = ri
     return planes
@@ -366,12 +452,16 @@ def bake_plane(
     res: float,
     behind: Polygon | None = None,
     fallback: bool = False,
+    relief: float = 0.06,
 ) -> tuple[dict[str, float], list[Plane]]:
     """Texture a plane from the panoramas. For walls with a room behind them (`behind` = union of room
     polygons), texels with no scanned wall that a camera sees through are cut out (alpha 0); openings are
     squared off and get jamb / lintel / sill planes (returned, not yet baked). With `fallback`, texels no
     camera sees take the scan's own texture where the scan has a surface there (used outdoors, where whole
-    side walls can be out of every camera's view), instead of a blur of their neighbours."""
+    side walls can be out of every camera's view), instead of a blur of their neighbours. `relief` is how
+    far in front of the plane a texel may be sampled at the real surface (default 6 cm; facades pass more: a
+    garage door sits in a recess, so the wall above it stands 20 cm in front of the plane fitted to the door
+    and hid the plane from every camera)."""
     res = min(res, (PAGE - 2 * PAD - 2) / max(p.w, p.h))
     W, H = max(2, math.ceil(p.w * res)), max(2, math.ceil(p.h * res))
     s = (np.arange(W) + 0.5) / res
@@ -389,10 +479,10 @@ def bake_plane(
     delta = reach - t_hit
     found = t_hit < 2 * reach
     base = float(np.median(delta[found])) if found.mean() > 0.2 else 0.0
-    near = found & (np.abs(delta - base) < 0.12)
+    near = found & (delta - base > -0.12) & (delta - base < max(0.12, relief + 0.02))
     off = np.zeros((H, W))
     hit = np.zeros((H, W))
-    off[mask] = np.where(near, np.clip(delta - base, -0.06, 0.06), 0.0)
+    off[mask] = np.where(near, np.clip(delta - base, -0.06, relief), 0.0)
     hit[mask] = near
     k = max(3, int(0.12 * res) | 1)
     smooth = base + ndimage.uniform_filter(off, k) / np.maximum(ndimage.uniform_filter(hit, k), 1e-6)
@@ -405,7 +495,10 @@ def bake_plane(
     if fallback and (near & ~valid).any():
         # Only scan faces that face the same way as the plane: where the outer surface was not scanned the
         # ray reaches the inside of the wall, whose texture is the room (a facade once showed the interior).
-        miss = near & ~valid & (scan.normals[prim] @ p.n > 0.3)
+        # ... and only a scan surface within 0.12 m of the plane, whatever `relief` allows for the photos:
+        # further out it is something standing in front (a chimney chase, a gutter), and its MatterPak
+        # texture printed black patches on 6915's back wall.
+        miss = near & ~valid & (np.abs(delta - base) < 0.12) & (scan.normals[prim] @ p.n > 0.3)
         q = pts[miss] + nrm[miss] * (reach - t_hit[miss, None])  # where the ray met the scan
         f = prim[miss]
         rgb[miss] = scan_colors(scan, f, _bary(scan.tris[f], q))

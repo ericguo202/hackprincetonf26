@@ -20,7 +20,7 @@ for pos, look, *rest in views:
     f = look - pos; f /= np.linalg.norm(f)
     up0 = np.array([0, 0, 1.0]) if abs(f[2]) < 0.95 else np.array([0, 1.0, 0])
     r = np.cross(f, up0); r /= np.linalg.norm(r); u = np.cross(r, f)
-    ims.append(render(scene, yup(pos), yup(f), yup(r), yup(u), W=800, H=600, fov=fov))
+    ims.append(render(scene, yup(pos), yup(f), yup(r), yup(u), W=800, H=600, fov=fov, layers=40))
 rows = [np.hstack(ims[i:i + 2]) for i in range(0, len(ims), 2)]
 if len(ims) % 2: rows[-1] = np.hstack([rows[-1], np.zeros_like(ims[0])])
 Image.fromarray(np.vstack(rows)).save(out, quality=88)

@@ -34,5 +34,12 @@
       "radius": 0.6,
       "why": "Garage r6: a rubbish bin and its lid were left by the wall next to the garage door when the house was scanned. It is clutter, not part of the house, and scans as a crumpled shell. Plan coordinates (x, y, z); scan pieces within `radius` (horizontal) of the point are removed and the wall and floor behind are filled in."
     }
+  ],
+  "remove_outdoor": [
+    {
+      "at": [19.9, 1.9, 1.2],
+      "radius": 0.8,
+      "why": "Driveway, beside scan position 37: a 1 m2 blob of scan floating 0.6 to 1.8 m above the concrete. Nothing is there in the photos (it takes the colour of the sky behind it); most likely the operator or the tripod. Plan coordinates (x, y, z); outdoor scan faces within `radius` of the point horizontally and within max(radius, 1 m) of its height are dropped."
+    }
   ]
 }

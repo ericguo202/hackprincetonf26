@@ -31,12 +31,12 @@ from worldgen.panos import Raycaster, quat_matrix  # noqa: E402
 SIZE = 192
 
 
-def face_errors(scene, pos, R, pano_id, sky) -> float:
+def face_errors(scene, pos, R, pano_id, sky, layers: int = 6) -> float:
     f, r, u = R @ [1, 0, 0], R @ [0, -1, 0], R @ [0, 0, 1]
     dirs = ((f, r, u, 1), (r, -f, u, 2), (-f, -r, u, 3), (-r, f, u, 4))
     errs = []
     for fwd, right, up, face in dirs:
-        img = render(scene, yup(pos), yup(fwd), yup(right), yup(up), W=SIZE, H=SIZE).astype(float)
+        img = render(scene, yup(pos), yup(fwd), yup(right), yup(up), W=SIZE, H=SIZE, layers=layers).astype(float)
         real = Image.open(f"{sky}/{pano_id}_{face}.jpg").convert("RGB").resize((SIZE, SIZE))
         real = np.asarray(real).astype(float)
         hole = (img == [40, 0, 60]).all(-1)
@@ -63,7 +63,8 @@ def main(argv: list[str]) -> int:
         if rooms.contains(Point(pos[0], pos[1])) == outdoor:
             continue
         R = quat_matrix(p["rotation"])
-        ea, eb = (face_errors(s, pos, R, p["id"], sky) for s in scenes)
+        # As render_compare --score: 6 alpha layers indoors, 40 outdoors (leaf cards of the tree models).
+        ea, eb = (face_errors(s, pos, R, p["id"], sky, 40 if outdoor else 6) for s in scenes)
         rows.append((p["label"], pos[:2], ea, eb))
     print(f"{'pano':>5}  {'x':>6} {'y':>6}   {'a':>6}  {'b':>6}  {'b - a':>6}")
     for label, xy, ea, eb in sorted(rows, key=lambda r: -abs(r[3] - r[2])):

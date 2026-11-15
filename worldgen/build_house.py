@@ -24,6 +24,7 @@ import shapely
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import polygonize, split, unary_union
 
+from worldgen import aerial as ae
 from worldgen import exterior as ex
 from worldgen import house_mesh as hm
 from worldgen import rebake as rb
@@ -559,6 +560,16 @@ def collision_walls(parts: list[RoomPart], spans: dict[str, list[dict]]) -> list
     return segs
 
 
+def listing_entry(out: Path, listing_id: str) -> dict:
+    """The listing's entry in out/listings/index.json (lat, lon, world pose), or {} when there is none."""
+    path = out / "listings" / "index.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    rows = data if isinstance(data, list) else data.get("listings") or []
+    return next((row for row in rows if row.get("id") == listing_id), {})
+
+
 def shell_rooms(parts: list[RoomPart], spans: dict[str, list[dict]] | None = None) -> list[rb.ShellRoom]:
     """Kept rooms as rebake inputs: centreline polygon, wall edges and the outside doors opened for play."""
     out = []
@@ -576,9 +587,13 @@ def shell_rooms(parts: list[RoomPart], spans: dict[str, list[dict]] | None = Non
     return out
 
 
-def void_polys(parts: list[RoomPart]) -> list[Polygon]:
-    """Dropped Matterport "Void" rooms: closets and chases inside the house (its outline, not yard)."""
-    return [p.poly for p in parts if not p.keep and p.raw_label.strip().lower() == VOID]
+def void_polys(parts: list[RoomPart], overrides: dict | None = None) -> list[Polygon]:
+    """Spaces inside the house that are no room (its outline, not yard): dropped Matterport "Void" rooms
+    (closets, chases), and plan polygons listed by hand in overrides/<model>.json as
+    "inside": [{"polygon": [[x, y], ...], "why": ...}] (masonry the plan leaves out as a notch: a corner
+    fireplace)."""
+    voids = [p.poly for p in parts if not p.keep and p.raw_label.strip().lower() == VOID]
+    return voids + [Polygon(o["polygon"]) for o in (overrides or {}).get("inside") or []]
 
 
 def play_doors(parts: list[RoomPart], spans: dict[str, list[dict]], footprint: Polygon) -> list[ex.Door]:
@@ -683,6 +698,9 @@ def build(
     house_dir.mkdir(parents=True, exist_ok=True)
     scan = mesh = fixture_tris = None
     outdoors: list[ex.Exterior] = []
+    # Aerial layers (Vexcel surface model, ortho, roof outline) for the roof; None when the listing has no
+    # world pose yet or its block has no cached rasters. `"aerial": false` on the house turns it off.
+    aerial = ae.load(out, block, listing_entry(out, listing_id)) if house.get("aerial", True) else None
     if source in ("panorama", "matterpak"):
         scan = rb.load_scan(extract_matterpak(model_id, raw))
         floor_z = scan_floor_z(scan, parts)
@@ -710,7 +728,7 @@ def build(
     # The house outline outdoors (rooms, Void rooms, enclosed notches). Not `footprint` below: that is the
     # MatterPak crop region (rooms buffered 0.35 m), and reusing the name once fed it to the exterior.
     house_outline = (
-        ex.house_footprint(scan, shell_rooms(parts), void_polys(parts))
+        ex.house_footprint(scan, shell_rooms(parts), void_polys(parts, overrides))
         if exterior and scan is not None
         else None
     )
@@ -741,7 +759,12 @@ def build(
 
         def add_outdoors(scene, all_panos) -> None:
             # The scanned lot (yard, facades, roof, backdrop) in the same file: house zone = house + lot.
-            outdoors.append(ex.add_exterior(scene, scan, rooms_in, all_panos, doors_out, house_outline))
+            hand = [(*d["at"], float(d["radius"])) for d in overrides.get("remove_outdoor") or []]
+            outdoors.append(
+                ex.add_exterior(
+                    scene, scan, rooms_in, all_panos, doors_out, house_outline, aerial=aerial, remove=hand
+                )
+            )
 
         interior_counts, fixture_tris = rb.write_rebaked_interior_glb(
             scan,

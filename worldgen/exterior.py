@@ -28,6 +28,7 @@ Nodes added to interior.glb: `yard_N`, `facade_N`, `roof_N`, `outdoor_N`, `backd
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -41,21 +42,56 @@ from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
+from worldgen import aerial as ae
+from worldgen import fences, vegetation
 from worldgen import house_mesh as hm
 from worldgen import rebake as rb
-from worldgen.panos import PanoSet, shade
+from worldgen import roof as rf
+from worldgen.panos import PanoSet, Raycaster, shade
 
 CELL = 0.15  # ground heightfield sample spacing (m)
 GROUND_RES = 96.0  # texels per metre on the yard (about 1 cm)
 FACADE_RES = 128.0  # texels per metre on the facades (seen up close, like interior walls)
+FACADE_RELIEF = 0.28  # facade texels are sampled at the real surface up to this far in front of the plane (m)
 ROOF_RES = 64.0  # the roof is seen from below and far away
 PIECE_RES = 96.0  # outdoor scan pieces
 TREE_RES = 40.0  # tree canopies: seen from below, noisy geometry; their own (alpha-cut) texture pages
 DOME_RES = 16.0  # backdrop texels per degree (the 2k skybox faces have about 23)
 DISK_RES = 32.0  # backdrop ground texels per metre
 OVERHANG = 0.45  # generated roof: eave overhang past the facade (m)
+MIN_OVERHANG = 0.3  # roof from the aerial data: it reaches at least this far past the facade (m)
+SOFFIT = (
+    0.18  # roof from the aerial data: thickness at the edge (fascia height); the underside is this far below
+)
+ROOF_GAP = 0.12  # roof from the aerial data: never closer than this above the ceilings below (m)
+# The roof's underside is measured from the scan (eave_underside). Where the area outside the walls is
+# wider than 2 x EAVE_EDGE (a porch, an entry alcove) any measured height counts; in a narrower strip (an
+# ordinary overhang) only one less than EAVE_DROP under the guess (the top less SOFFIT) does: a soffit is
+# (boxed level from the fascia, it lies 0.2 to 0.6 m under the top at the wall), the head of a recessed
+# garage door 1.5 m under a gable's rake is not. Within EAVE_RIM of the roof's edge
+# the underside is the guess, so it meets the SOFFIT-high band around the edge.
+EAVE_EDGE = 0.6
+EAVE_DROP = 0.7
+EAVE_RIM = 0.3
+# A measured underside becomes a flat plane only where it is flat: at least EAVE_FLAT of the measurements
+# within about 0.5 m lie within EAVE_FLAT_TOL of their smoothed height (a drywall or plywood ceiling). Where
+# they do not (open rafters: 7014's back porch) the scan stays as it is and no plane is built under the roof.
+EAVE_FLAT = 0.7
+EAVE_FLAT_TOL = 0.04
+EAVE_OVER = 0.5  # undersides are looked for up to this far above the fitted roof top (m)
+# The aerial photo colours the roof only when it shows the roof evenly lit: its per-channel scale to the
+# ground photos' shingles within ORTHO_GAIN, and its brightness over the roof (90th over 10th percentile)
+# under ORTHO_SPREAD. A roof under bare winter branches is a pattern of shadows, not of shingles.
+ORTHO_GAIN = (0.6, 1.6)
+ORTHO_SPREAD = 3.0
+SUN = (
+    205.0,
+    50.0,
+)  # azimuth (clockwise from north) and elevation, degrees, for shading a plain-coloured roof
 DEFAULT_PITCH = math.atan(5 / 12)
 TREE_MIN_Z = 2.0  # pieces this far above the ground (and away from the roof) may be cut out where sky shows
+# What add_exterior bakes. A subset (the CLI's --parts) skips the rest, for a quick look at one part.
+PARTS = frozenset({"yard", "facade", "roof", "backdrop", "pieces"})
 
 
 # ---------------------------------------------------------------- helpers
@@ -79,7 +115,8 @@ def house_footprint(scan: rb.Scan, rooms: list[rb.ShellRoom], voids: list[Polygo
     """The house outline (house_outline) plus enclosed spaces Matterport's plan left out: a notch of the
     outline under 1.5 m wide (closed with mitred corners, so it stays rectangular) with no scanned ground in
     it (a closet, a chimney chase) is inside the house, not yard. A notch with ground (an open entry alcove)
-    stays outside."""
+    stays outside. What this cannot decide goes in `voids` by hand (overrides/<model>.json "inside": 6915's
+    corner fireplace is a triangular notch whose firebox floor counts as ground)."""
     outline = house_outline(rooms, voids)
     floor_z = min(r.floor_z for r in rooms)
     g = ground_grid(scan, outline, floor_z)
@@ -100,7 +137,8 @@ def outdoor_panos(panos: PanoSet, outline: Polygon) -> PanoSet:
 
 def house_outline(rooms: list[rb.ShellRoom], voids: list[Polygon] = ()) -> Polygon:
     """Union of the room centreline polygons with notches under 0.6 m closed, as one polygon. `voids` are
-    dropped Matterport "Void" rooms (closets, chases): inside the house, so not yard."""
+    dropped Matterport "Void" rooms (closets, chases) and hand-listed masonry (build_house.void_polys):
+    inside the house, so not yard."""
     u = (
         unary_union([r.poly for r in rooms] + list(voids))
         .buffer(0.3, join_style="mitre")
@@ -198,14 +236,78 @@ def bake_patch(p: Patch, panos: PanoSet, scan: rb.Scan, max_dist: float) -> floa
         mask = np.ones((H, W), bool)
     xyz = p.pos(S[mask], T[mask])
     nrm = p.normal(S[mask], T[mask], xyz)
-    rgb, valid = shade(xyz, nrm, panos, scan.rays, snap=p.snap, max_dist=max_dist)
+    rgb, valid = shade(xyz, nrm, panos, scan.eyes, snap=p.snap, max_dist=max_dist)
     if p.no_sky:
         valid &= ~_sky(np.clip(rgb, 0, 255).astype(np.uint8)[None])[0]
     img = np.zeros((H, W, 3), np.uint8)
     img[mask] = np.clip(rgb, 0, 255).astype(np.uint8)
     ok = np.zeros((H, W), bool)
     ok[mask] = valid
-    if p.kind == "roof" and p.no_sky:
+    if "default" in p.meta:
+        # The roof's underside and edge band are plain painted surfaces. Specks seen through leaves are not
+        # the surface (opened away); what no camera saw takes a plain colour, blended in over 0.25 m: the
+        # seen part's median when the tile is seen at least half, else the default (the roof's trim colour,
+        # set by add_exterior), which is also the whole tile's colour when under 15% is seen. Blurring a few
+        # seen texels across a porch ceiling gave a mosaic of leaf colours.
+        if p.meta.get("plain"):
+            p.meta["samples"] = rgb[valid][::3]
+        ok &= ndimage.binary_opening(ok, iterations=max(3, int(0.12 * res)))
+        if ok.sum() < 0.15 * max(1, mask.sum()):
+            img[:] = p.meta["default"]
+        else:
+            # A tile seen at least half takes its own median colour where unseen, else the default.
+            mostly = ok.sum() >= 0.5 * max(1, mask.sum())
+            plain = np.median(img[ok], axis=0) if mostly else np.asarray(p.meta["default"], float)
+            wgt = np.clip(ndimage.distance_transform_edt(~ok) / (0.25 * res), 0, 1)[..., None]
+            img = (rb._fill(img, ok) * (1 - wgt) + plain * wgt).astype(np.uint8)
+        ok[:] = True
+    if p.kind == "roof" and p.no_sky and p.meta.get("colour") is not None:
+        # Seen from above: what no ground camera saw takes the aerial photo's colour, scaled per channel to
+        # the photographed shingles where both exist (another day, another exposure). Texels the aerial
+        # photo shows something else at (a tree over the roof) are filled from the roof around them. The two
+        # sources are cross-faded over 0.3 m, and the roof's edge always takes the aerial colour: that is
+        # where a ground photo projected onto a roof placed to 0.3 m lands on gutter or sky.
+        air, air_ok = p.meta["colour"](xyz)
+        both = valid & air_ok
+        gain = np.ones(3)
+        if both.sum() > 500:
+            gain = np.median(rgb[both], axis=0) / np.maximum(np.median(air[both], axis=0), 1.0)
+        lum = air[air_ok] @ np.array([0.299, 0.587, 0.114])
+        spread = float(np.percentile(lum, 90) / max(np.percentile(lum, 10), 1.0)) if len(lum) > 500 else 99.0
+        usable = bool(
+            both.sum() > 500
+            and gain.min() > ORTHO_GAIN[0]
+            and gain.max() < ORTHO_GAIN[1]
+            and spread < ORTHO_SPREAD
+        )
+        p.meta["aerial"] = {
+            "gain": [round(float(v), 2) for v in gain],
+            "brightness_spread": round(spread, 2),
+            "used": usable,
+        }
+        fill = np.zeros((H, W, 3), np.uint8)
+        fill_ok = np.zeros((H, W), bool)
+        if usable:
+            fill[mask] = np.clip(air * gain, 0, 255).astype(np.uint8)
+            fill_ok[mask] = air_ok
+        else:
+            # Plain shingle colour (the median of the dark texels the ground photos saw, else asphalt grey),
+            # a little lighter on the planes facing the sun so ridges and hips still read: everything is
+            # rendered unlit.
+            seen = rgb[valid]
+            dark = seen[seen.mean(1) < 140] if len(seen) else seen
+            base = np.median(dark, axis=0) if len(dark) > 50 else np.array([92.0, 88.0, 84.0])
+            k = np.clip(
+                0.84 + 0.3 * np.maximum(nrm @ np.asarray(p.meta.get("sun", (0.0, 0.0, 1.0))), 0.0), 0.8, 1.12
+            )
+            fill[mask] = np.clip(base * k[:, None], 0, 255).astype(np.uint8)
+            fill_ok[mask] = True
+        fill = rb._fill(fill, fill_ok) if fill_ok.any() else fill
+        ok &= ndimage.binary_opening(ok, iterations=max(3, int(0.12 * res)))  # specks seen through leaves
+        wgt = np.clip(ndimage.distance_transform_edt(ok) / (0.3 * res), 0, 1)[..., None]
+        img = (img * wgt + fill * (1 - wgt)).astype(np.uint8)
+        ok[:] = True
+    elif p.kind == "roof" and p.no_sky and "default" not in p.meta:
         # Most of a generated roof is out of every camera's view. Blurring the seen texels into it pulls in
         # fascia and wall colours (it came out beige); use the shingles' own colour: the median of the dark
         # seen texels, else asphalt grey.
@@ -503,10 +605,12 @@ def facade_planes(
     eave_z: float,
     doors: list[Door] = (),
     rooms: list[rb.ShellRoom] = (),
+    roof: rf.Roof | None = None,
 ) -> list[rb.Plane]:
     """One plane per outline segment, from just below the ground to the soffit (or, next to a room taller
     than the soffit such as a garage, to that room's top + 0.1 m, where the generated roof starts), with the
-    open doors cut out."""
+    open doors cut out. With a `roof` from the aerial data the wall ends at the roof's underside all along
+    the segment instead (sampled every 0.1 m, 2 cm inside the wall face), so a gable end is a pentagon."""
     ez = np.array([0.0, 0.0, 1.0])
     out = []
     n = len(corners)
@@ -520,11 +624,18 @@ def facade_planes(
         out_pts = a + np.outer(ts, u2) + normals[k] * 0.3
         bottom = float(np.nanmin(g.height(out_pts[:, 0], out_pts[:, 1]))) - 0.15
         seg = LineString([a, b])
-        tops = [rb.room_top(r) + 0.1 for r in rooms if r.poly.distance(seg) < 0.6]
-        hgt = max([eave_z, *tops]) - bottom
+        if roof is not None:
+            ss = np.linspace(0.0, L, max(2, int(L / 0.1) + 1))
+            at = a + np.outer(ss, u2) - normals[k] * 0.02
+            under = np.maximum(roof.height(at[:, 0], at[:, 1]) - SOFFIT - bottom, 0.5)
+            hgt = float(under.max())
+            shape = Polygon([(0.0, 0.0), *zip(ss, under, strict=True), (L, 0.0)]).buffer(0)
+        else:
+            tops = [rb.room_top(r) + 0.1 for r in rooms if r.poly.distance(seg) < 0.6]
+            hgt = max([eave_z, *tops]) - bottom
+            shape = box(0, 0, L, hgt)
         u = np.array([u2[0], u2[1], 0.0])
         nm = np.array([normals[k][0], normals[k][1], 0.0])
-        shape = box(0, 0, L, hgt)
         for d in doors:
             hit = _on_segment(a, u2, normals[k], L, d, 0.7)
             if hit:
@@ -634,6 +745,270 @@ def roof_patches(
     return [roof, soffit]
 
 
+def roof_region(walls: Polygon, vexcel: Polygon | None) -> Polygon:
+    """Where the roof is, in plan: the outer walls plus MIN_OVERHANG, united with Vexcel's outline of the
+    roof when there is one (real eaves, porch roofs, an attached garage the floor plan lacks); OVERHANG past
+    the walls when there is none. Gaps under 0.6 m between the two are closed."""
+    if vexcel is None:
+        r = orient(walls, 1.0).buffer(OVERHANG, join_style="mitre")
+    else:
+        r = orient(walls, 1.0).buffer(MIN_OVERHANG, join_style="mitre").union(vexcel.buffer(0))
+        r = r.buffer(0.3, join_style="mitre").buffer(-0.3, join_style="mitre")
+    r = max(polygons(r), key=lambda q: q.area)
+    return Polygon(r.exterior).simplify(0.05)
+
+
+def ceiling_floor(rooms: list[rb.ShellRoom], gap: float = ROOF_GAP, step: float = 0.15) -> rf.Height:
+    """(x, y) -> the lowest the roof may be there: the ceiling below plus `gap`, NaN outside the rooms. Flat
+    rooms: the listed height. Vaulted rooms: the scanned ceiling (rebake.ceiling_z), and the room's top where
+    the scan has none. Each room is grown 0.12 m (the walls are under the roof too) and the result is
+    max-filtered over 0.45 m, because a vaulted room's walls end a little above the ceiling next to them."""
+    x0, y0, x1, y1 = unary_union([r.poly for r in rooms]).buffer(0.5).bounds
+    X, Y = np.meshgrid(np.arange(x0, x1 + step, step), np.arange(y0, y1 + step, step), indexing="ij")
+    low = np.full(X.shape, -np.inf)
+    for r in rooms:
+        inside = shapely.contains_xy(r.poly.buffer(0.12, join_style="mitre"), X, Y)
+        h = rb.ceiling_z(r, X[inside], Y[inside])
+        low[inside] = np.maximum(low[inside], np.where(np.isfinite(h), h, rb.room_top(r)) + gap)
+    low = ndimage.maximum_filter(low, size=3)
+    low[~np.isfinite(low)] = np.nan
+
+    def floor(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        i = np.rint((np.asarray(x, float) - x0) / step).astype(int)
+        j = np.rint((np.asarray(y, float) - y0) / step).astype(int)
+        ok = (i >= 0) & (i < low.shape[0]) & (j >= 0) & (j < low.shape[1])
+        out = np.full(np.shape(x), np.nan)
+        out[ok] = low[i[ok], j[ok]]
+        return out
+
+    return floor
+
+
+def aerial_roof(
+    aerial: ae.Aerial, g: Ground, walls: Polygon, rooms: list[rb.ShellRoom], floor_z: float, report: dict
+) -> rf.Roof | None:
+    """The roof from the aerial surface model: tie its heights to the scan's (Aerial.level on the yard's
+    ground away from the house), fit planes over roof_region (roof.fit_roof; planes under floor + 1.9 m are
+    ground, not roof), never below the ceilings (ceiling_floor). None when no plane is found."""
+    ii, jj = np.nonzero(np.isfinite(g.z))
+    x, y = g.x0 + ii[::7] * CELL, g.y0 + jj[::7] * CELL
+    away = ~shapely.dwithin(walls, shapely.points(x, y), 1.5)
+    try:
+        spread = aerial.level(x[away], y[away], g.z[ii[::7], jj[::7]][away])
+    except ValueError:
+        return None
+    region = roof_region(walls, aerial.roof_outline(walls))
+    roof = rf.fit_roof(aerial.surface, region, floor=ceiling_floor(rooms), min_z=floor_z + 1.9)
+    if roof is None:
+        return None
+    frac, most = roof.lifted()
+    report["roof"] = {
+        "source": "aerial",
+        "planes": len(roof.planes),
+        "plane_m2": [round(a, 1) for a in roof.areas],
+        "pitch_deg": round(math.degrees(roof.pitch), 1),
+        "region_m2": round(region.area, 1),
+        "vexcel_outline": aerial.roof_outline(walls) is not None,
+        "ground_spread_m": round(spread, 3),
+        "lifted_by_ceilings": round(frac, 3),
+        "max_lift_m": round(most, 2),
+        "attributes": aerial.attributes,
+        "rasters": aerial.source,
+    }
+    return roof
+
+
+def eave_underside(
+    scan: rb.Scan, roof: rf.Roof, walls: Polygon, g: Ground, floor_z: float, step: float = 0.15
+) -> rf.Height:
+    """(x, y) -> the height of the roof's underside outside the walls: the scanned soffit, porch ceiling or
+    alcove ceiling where the scan has a flat one, else the roof's top less SOFFIT (and never above that).
+
+    Measured like the ground, upside down: per `step` cell a ray goes up from 1.2 m above the ground and
+    notes the downward-facing surfaces (normal z under -0.5) it meets between floor + 1.9 m and the roof's
+    top + EAVE_OVER, the first and the highest (up to 6 hits). Cells within 0.3 m of a measured one take the
+    nearest value; a 0.75 m median filter flattens the scan's crumple (a porch ceiling is flat, and the raw
+    scan of one is what made 7014's entry alcove look torn).
+
+    Flat or built: where under EAVE_FLAT of the measurements lie within EAVE_FLAT_TOL of their smoothed
+    height (open rafters, beams), the area is `under.built` (a plan polygon, grown 0.6 m to the roof's edge).
+    There no plane is made and the scan is kept: flattening 7014's open-raftered back porch gave a mosaic.
+    `under.cover(x, y)` is how high the roof's top must be there to clear the scanned boards (NaN elsewhere).
+
+    Elsewhere: in a strip narrower than 2 x EAVE_EDGE a measurement more than EAVE_DROP under the guess is
+    not believed, and within EAVE_RIM of the roof's edge the underside is the guess, so it rises to meet the
+    edge band (gutters measure as a wavy line there). `under.scanned(x, y)` is the same without that rise:
+    where the scanned ceiling is, for deciding which scan faces the plane replaces. `under.measured` is the
+    share of cells with a measurement."""
+    region = roof.region.difference(walls.buffer(-0.02, join_style="mitre"))
+    x0, y0, x1, y1 = region.bounds
+    X, Y = np.meshgrid(np.arange(x0, x1 + step, step), np.arange(y0, y1 + step, step), indexing="ij")
+    inside = shapely.contains_xy(region.buffer(0.2), X, Y)
+    x, y = X[inside], Y[inside]
+    top = roof.height(x, y)
+    o = np.c_[x, y, np.maximum(g.height(x, y), floor_z) + 1.2]
+    z = np.full(len(o), np.nan)  # the first underside met
+    zmax = np.full(len(o), np.nan)  # the highest one (the boards above open rafters)
+    todo = np.arange(len(o))
+    for _ in range(6):
+        if not len(todo):
+            break
+        t, prim = scan.rays.cast(o[todo], np.tile([0.0, 0.0, 1.0], (len(todo), 1)))
+        hit = (prim >= 0) & np.isfinite(t)
+        todo, t, prim = todo[hit], t[hit], prim[hit]
+        zz = o[todo, 2] + t
+        # The fitted top can sit a little under the real roof (it is placed to about 0.3 m): look EAVE_OVER
+        # above it too.
+        low = zz < top[todo] + EAVE_OVER
+        todo, zz, prim = todo[low], zz[low], prim[low]
+        ok = (scan.normals[prim, 2] < -0.5) & (zz > floor_z + 1.9)
+        first = ok & ~np.isfinite(z[todo])
+        z[todo[first]] = zz[first]
+        zmax[todo[ok]] = np.fmax(zmax[todo[ok]], zz[ok])
+        o[todo, 2] = zz + 1e-3
+    grid = np.full(X.shape, np.nan)
+    grid[inside] = z
+    highest = np.full(X.shape, np.nan)
+    highest[inside] = zmax
+    have = np.isfinite(grid)
+    built = np.zeros(X.shape, bool)
+    if have.any():
+        dist, idx = ndimage.distance_transform_edt(~have, return_indices=True)
+        filled_ = ndimage.median_filter(grid[tuple(idx)], size=5)
+        # Flat, or built (rafters, beams)? The share of measurements near their smoothed height, over 7 cells.
+        near = have & (np.abs(np.where(have, grid, 0.0) - filled_) < EAVE_FLAT_TOL)
+        share = ndimage.uniform_filter(near.astype(float), 7) / np.maximum(
+            ndimage.uniform_filter(have.astype(float), 7), 1e-6
+        )
+        built = (ndimage.uniform_filter(have.astype(float), 7) > 0.3) & (share < EAVE_FLAT)
+        built = ndimage.binary_opening(built, iterations=2)  # at least 0.6 m across
+        # ... and out to the roof's edge (0.6 m): the rafter tails and the boards at the rim are scan too.
+        built = ndimage.binary_dilation(built, iterations=4) & inside
+        grid = np.where((dist * step <= 0.3) & ~built, filled_, np.nan)
+    wide = region.buffer(-EAVE_EDGE, join_style="mitre").buffer(EAVE_EDGE + 0.15, join_style="mitre")
+    deep = shapely.contains_xy(wide, X, Y)
+    rim = ~shapely.contains_xy(roof.region.buffer(-EAVE_RIM, join_style="mitre"), X, Y)
+
+    def measured(x: np.ndarray, y: np.ndarray, to_edge: bool) -> np.ndarray:
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        guess = roof.height(x, y) - SOFFIT
+        i = np.clip(np.rint((x - x0) / step).astype(int), 0, grid.shape[0] - 1)
+        j = np.clip(np.rint((y - y0) / step).astype(int), 0, grid.shape[1] - 1)
+        m = grid[i, j]
+        ok = np.isfinite(m) & (deep[i, j] | (guess - m < EAVE_DROP)) & (to_edge | ~rim[i, j])
+        return np.where(ok, np.minimum(guess, m), guess)
+
+    def under(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        return measured(x, y, False)
+
+    # Where the scanned ceiling is, right up to the roof's edge: which scan faces the plane replaces.
+    under.scanned = lambda x, y: measured(x, y, True)
+    under.measured = float(have[inside].mean()) if inside.any() else 0.0  # for the report
+    # Where the underside is built, not flat: the scan stays there and no plane is made (plan polygon).
+    ii, jj = np.nonzero(built)
+    half = step / 2
+    cells = shapely.box(X[ii, jj] - half, Y[ii, jj] - half, X[ii, jj] + half, Y[ii, jj] + half)
+    under.built = unary_union(cells).buffer(0.1, join_style="mitre") if len(ii) else Polygon()
+    # ... and the roof's top must clear the scanned boards there: their highest underside + 6 cm, over 0.45 m.
+    cover = np.where(ndimage.binary_dilation(built, iterations=1), highest, -np.inf)
+    cover = ndimage.maximum_filter(np.where(np.isfinite(cover), cover, -np.inf), size=3) + 0.06
+
+    def over(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        i = np.rint((np.asarray(x, float) - x0) / step).astype(int)
+        j = np.rint((np.asarray(y, float) - y0) / step).astype(int)
+        ok = (i >= 0) & (i < cover.shape[0]) & (j >= 0) & (j < cover.shape[1])
+        out = np.full(np.shape(x), np.nan)
+        out[ok] = cover[i[ok], j[ok]]
+        return np.where(np.isfinite(out), out, np.nan)
+
+    under.cover = over
+    return under
+
+
+def aerial_roof_patches(roof: rf.Roof, walls: Polygon, aerial: ae.Aerial, under: rf.Height) -> list[Patch]:
+    """The fitted roof as patches: the top (ground photos where a camera saw shingles, the aerial photo
+    elsewhere), the underside outside the walls (eaves, porch and alcove ceilings: `under`, see
+    eave_underside), and a SOFFIT-high band around the edge (fascia, rake boards)."""
+    region = roof.region
+    x0, y0, x1, y1 = region.bounds
+
+    def top(s, t):
+        return np.stack([s + x0, t + y0, roof.height(s + x0, t + y0)], 1)
+
+    def colour(xyz):
+        x, y = xyz[:, 0], xyz[:, 1]
+        return aerial.colour(x, y), aerial.surface(x, y) - xyz[:, 2] < 0.4
+
+    # The sun's direction in plan coordinates (the block frame is east, south; plan y is house-local -z).
+    az, el = math.radians(SUN[0]), math.radians(SUN[1])
+    sx, sy = aerial.from_block(
+        aerial.position[0] + math.sin(az) * math.cos(el), aerial.position[1] - math.cos(az) * math.cos(el)
+    )
+    sun = (sx, sy, math.sin(el))
+
+    local = affinity.translate(region, -x0, -y0)
+    out = [
+        Patch(
+            "roof",
+            x1 - x0,
+            y1 - y0,
+            ROOF_RES,
+            top,
+            lambda s, t, xyz: roof.normal(s + x0, t + y0),
+            local,
+            step=0.2,
+            no_sky=True,
+            meta={"colour": colour, "sun": sun},
+        )
+    ]
+    pale = {"default": (226, 222, 214)}  # painted eaves, when no camera saw one at all
+
+    eaves = region.difference(walls.buffer(-0.02, join_style="mitre")).difference(under.built)
+    tiles = plan_tiles(
+        eaves,
+        6.0,
+        "roof",
+        ROOF_RES,
+        under,
+        lambda x, y, xyz: np.tile([0.0, 0.0, -1.0], (len(x), 1)),
+        0.2,
+        snap=True,  # sample the photos at the real ceiling, a few cm from the flattened one
+    )
+    for q in tiles:
+        q.no_sky = True  # the roof's edge is placed to about 0.3 m: a ground photo there can show sky
+        q.meta.update(pale)
+    out += tiles
+    ring = np.asarray(orient(region, -1.0).exterior.coords)  # clockwise: the left of each edge is outside
+    for a, b in zip(ring[:-1], ring[1:], strict=True):
+        L = float(np.linalg.norm(b - a))
+        if L < 0.05:
+            continue
+        u2 = (b - a) / L
+        nm = np.array([-u2[1], u2[0], 0.0])
+        inner = a - nm[:2] * 0.03  # sample the roof just inside its edge
+
+        def band(s, t, inner=inner, u2=u2, a=a):
+            at = inner + np.outer(s, u2)
+            edge = a + np.outer(s, u2)
+            return np.stack([edge[:, 0], edge[:, 1], roof.height(at[:, 0], at[:, 1]) - SOFFIT + t], 1)
+
+        out.append(
+            Patch(
+                "roof",
+                L,
+                SOFFIT,
+                ROOF_RES,
+                band,
+                lambda s, t, xyz, nm=nm: np.tile(nm, (len(s), 1)),
+                None,
+                step=0.25,
+                no_sky=True,
+                meta={**pale, "plain": True},
+            )
+        )
+    return out
+
+
 def fascia_planes(eaves: Polygon, eave_z: float, depth: float = 0.2) -> list[rb.Plane]:
     ring = np.asarray(orient(eaves, -1.0).exterior.coords)
     out = []
@@ -740,23 +1115,53 @@ def outdoor_faces(
     top: float,
     eaves: Polygon | None,
     eave_z: float,
+    roof: rf.Roof | None = None,
+    under: rf.Height | None = None,
 ) -> np.ndarray:
     """Scan faces to keep outdoors: outside the house volume, not on the ground heightfield, not on the
-    facade planes, not under a generated roof, and inside the lot."""
+    facade planes, not under a generated roof, and inside the lot. With a `roof` from the aerial data: not
+    what that roof replaces either (the scanned roof, gutters, fascia and eaves: faces under its region from
+    SOFFIT + 0.3 m below its top to 0.6 m above; higher ones are tree canopy and stay), nor the
+    downward-facing faces within 0.2 m of its measured underside `under` (porch and alcove ceilings,
+    soffits)."""
     c = scan.tris.mean(1)
     nz = scan.normals[:, 2]
     in_lot = shapely.contains_xy(g.lot.buffer(1.0).union(walls.buffer(1.0)), c[:, 0], c[:, 1])
     in_house = shapely.contains_xy(walls.buffer(-0.02), c[:, 0], c[:, 1]) & (c[:, 2] < top + 0.1)
     near_wall = shapely.dwithin(walls.exterior, shapely.points(c[:, 0], c[:, 1]), 0.1)
-    on_facade = near_wall & (np.abs(nz) < 0.5) & (c[:, 2] < eave_z + 0.05)
+    wall_top = np.full(len(c), eave_z)
+    replaced = np.zeros(len(c), bool)
+    if roof is not None:
+        roofed = np.nonzero(shapely.contains_xy(roof.region.buffer(0.05), c[:, 0], c[:, 1]))[0]
+        rz = roof.height(c[roofed, 0], c[roofed, 1])
+        wall_top[roofed] = rz - SOFFIT
+        replaced[roofed] = (c[roofed, 2] > rz - SOFFIT - 0.3) & (c[roofed, 2] < rz + 0.6)
+        if under is not None:
+            uz = getattr(under, "scanned", under)(c[roofed, 0], c[roofed, 1])
+            replaced[roofed] |= (np.abs(c[roofed, 2] - uz) < 0.2) & (nz[roofed] < -0.3)
+            # Where the scan has a soffit or ceiling lower than the guess, everything from 0.1 m under it up
+            # to the roof goes (gutter fronts, fascia, framing above a ceiling): the band above only reaches
+            # SOFFIT + 0.3 m down and left ragged scraps hanging under 6915's back eave.
+            outside = ~shapely.contains_xy(walls.buffer(-0.02), c[roofed, 0], c[roofed, 1])
+            lower = uz < rz - SOFFIT - 0.02
+            replaced[roofed] |= outside & lower & (c[roofed, 2] > uz - 0.1) & (c[roofed, 2] < rz + 0.6)
+            kept_area = getattr(under, "built", None)
+            if kept_area is not None and not kept_area.is_empty:  # open rafters: the scan is the underside
+                replaced[roofed] &= ~(
+                    shapely.contains_xy(kept_area, c[roofed, 0], c[roofed, 1]) & (nz[roofed] < 0.3)
+                )
+        in_house[roofed] |= shapely.contains_xy(walls.buffer(-0.02), c[roofed, 0], c[roofed, 1]) & (
+            c[roofed, 2] < rz
+        )
+    on_facade = near_wall & (np.abs(nz) < 0.5) & (c[:, 2] < wall_top + 0.05)
     in_wall_slab = shapely.contains_xy(walls, c[:, 0], c[:, 1]) & ~shapely.contains_xy(
         outline.buffer(-0.02), c[:, 0], c[:, 1]
     )
     gz = g.height(c[:, 0], c[:, 1])
     on_ground = (c[:, 2] - gz < 0.1) & (nz > 0.6) & shapely.contains_xy(g.lot, c[:, 0], c[:, 1])
     below = c[:, 2] < gz - 0.25
-    keep = in_lot & ~in_house & ~on_facade & ~in_wall_slab & ~on_ground & ~below
-    if eaves is not None:
+    keep = in_lot & ~in_house & ~on_facade & ~in_wall_slab & ~on_ground & ~below & ~replaced
+    if eaves is not None and roof is None:
         keep &= ~(shapely.contains_xy(eaves.buffer(0.05), c[:, 0], c[:, 1]) & (c[:, 2] > eave_z - 0.25))
     return np.nonzero(keep)[0]
 
@@ -768,7 +1173,10 @@ def _seen_faces(scan: rb.Scan, faces: np.ndarray, panos: PanoSet) -> np.ndarray:
     33 MB (255k tree triangles instead of 140k) for surfaces no photo shows."""
     if not len(faces):
         return faces
-    _, valid = shade(scan.tris[faces].mean(1), scan.normals[faces], panos, scan.rays, snap=False)
+    # Per 3 m cell (rebake._shade_local): `shade` only asks the 12 panoramas nearest the middle of the points
+    # it is given. Given the whole lot at once it ignored 3 of 7014's 15 outdoor cameras, and which pieces
+    # at the lot's edges survived changed whenever the set of faces (and so its middle) changed.
+    _, valid = rb._shade_local(scan.tris[faces].mean(1), scan.normals[faces], panos, scan.eyes)
     return faces[valid]
 
 
@@ -840,6 +1248,24 @@ def _soup(scan_tris: np.ndarray, uv: np.ndarray, pages: list[np.ndarray], pg: np
     return out
 
 
+def _clip_plants(scene: trimesh.Scene, roof: rf.Roof, clear: float = 0.3) -> int:
+    """Drop the triangles of the plant models (`plants_N` nodes) that reach under the roof: any vertex inside
+    the roof's region and less than `clear` above its top. vegetation.py keeps models out of the walls; a
+    porch roof reaches further (7014's sapling by the back porch grew through it). Returns how many went."""
+    back = np.linalg.inv(hm.Z_UP_TO_Y_UP)
+    cut = 0
+    for name in [n for n in scene.geometry if n.startswith("plants_")]:
+        m = scene.geometry[name]
+        v = trimesh.transform_points(m.vertices, back)
+        under = shapely.contains_xy(roof.region, v[:, 0], v[:, 1])
+        under[under] &= v[under, 2] < roof.height(v[under, 0], v[under, 1]) + clear
+        bad = under[m.faces].any(1)
+        if bad.any():
+            cut += int(bad.sum())
+            m.update_faces(~bad)
+    return cut
+
+
 @dataclass
 class Exterior:
     report: dict
@@ -857,9 +1283,17 @@ def add_exterior(
     doors: list[Door] = (),
     outline: Polygon | None = None,
     backdrop_radius: float = 45.0,
+    bake: frozenset[str] = PARTS,
+    aerial: ae.Aerial | None = None,
+    remove: list[tuple[float, float, float, float]] = (),
 ) -> Exterior:
     """Bake the lot, facades, roof, outdoor pieces and backdrop into `scene` (Y-up nodes). `doors` are the
-    outside doors opened for play (also cut from the rooms' walls via ShellRoom.cuts, and from collision)."""
+    outside doors opened for play (also cut from the rooms' walls via ShellRoom.cuts, and from collision).
+    `bake` (a subset of PARTS) bakes only those; the geometry of the others is still measured. With
+    `aerial` (aerial.load) the roof is fitted to the aerial surface model; without it the scan's roof is kept
+    when it has one, else a hip roof is generated. `remove` = (x, y, z, radius) hand removals
+    (overrides/<model>.json "remove_outdoor"): outdoor scan faces within `radius` of the point horizontally
+    and within max(radius, 1 m) of its height are dropped (scan artefacts that are not in the photos)."""
     outline = outline if outline is not None else house_footprint(scan, rooms)
     floor_z = min(r.floor_z for r in rooms)
     top = max(rb.room_top(r) for r in rooms)
@@ -873,14 +1307,32 @@ def add_exterior(
     eave_z = eave_height(corners, normals, scan, floor_z, top)
     report.update(lot_m2=round(g.lot.area, 1), eave_z=round(eave_z, 2), ground_edge_z=round(g.edge_z, 2))
 
-    planes = facade_planes(corners, normals, g, eave_z, doors, rooms)
+    roof = aerial_roof(aerial, g, walls, rooms, floor_z, report) if aerial is not None else None
+    under = None
+    if roof is not None:
+        under = eave_underside(scan, roof, walls, g, floor_z)
+        ceilings, boards = roof.floor, under.cover
+        roof.floor = lambda x, y: np.fmax(ceilings(x, y), boards(x, y))  # NaN only where both are
+        report["roof"]["underside_measured"] = round(under.measured, 2)
+        report["roof"]["underside_kept_as_scan_m2"] = round(under.built.area, 1)
+    # Line of sight outdoors: the scan plus the fitted roof. A scan often has no roof (7014: 2% of it), and
+    # without one a camera in the yard "sees" the far slope, a porch ceiling or the sky through the roof.
+    eyes = scan
+    if roof is not None:
+        v2, f2 = clipped_grid(roof.region, 0.25)
+        lid = np.c_[v2, roof.height(v2[:, 0], v2[:, 1])][f2]
+        eyes = dataclasses.replace(scan, sight=Raycaster(np.concatenate([scan.tris, lid])))
+    planes = facade_planes(corners, normals, g, eave_z, doors, rooms, roof)
     frames = door_frames(corners, normals, doors, floor_z)
     report["doors_opened"] = len(doors)
     cover = roof_coverage(scan, outline, top)
     report["roof_scan_coverage"] = round(cover, 2)
     eaves = None
     patches = ground_patches(g)
-    if cover < 0.7:
+    if roof is not None:
+        eaves = roof.region
+        patches += aerial_roof_patches(roof, walls, aerial, under)
+    elif cover < 0.7:
         eaves = Polygon(orient(walls, 1.0).buffer(OVERHANG, join_style="mitre").exterior)
         pitch = measure_pitch(scan, eaves, eave_z)
         report["roof"] = {"generated": True, "pitch_deg": round(math.degrees(pitch), 1)}
@@ -893,13 +1345,16 @@ def add_exterior(
     centre = np.mean(out_panos.positions[:, :2], axis=0)
     centre = np.asarray(filled(g.lot.union(walls)).centroid.coords[0]) * 0.5 + centre * 0.5
     patches += backdrop_patches(g, centre, backdrop_radius, walls, floor_z)
+    if "facade" not in bake:
+        planes, frames = [], []
+    patches = [p for p in patches if p.kind in bake]
 
     seen = {}
     for p in frames:  # seen from inside and outside: every camera
         rb.bake_plane(p, scan, panos, FACADE_RES)
     blank = []
     for p in planes:
-        st, _ = rb.bake_plane(p, scan, out_panos, FACADE_RES, fallback=True)
+        st, _ = rb.bake_plane(p, eyes, out_panos, FACADE_RES, fallback=True, relief=FACADE_RELIEF)
         seen.setdefault("facade", []).append((st["seen"], st["area"]))
         if st["seen"] < 0.02:
             blank.append(p)
@@ -911,10 +1366,32 @@ def add_exterior(
         colour = np.median(np.concatenate(lit)[::7], axis=0).astype(np.uint8)
         for p in blank:
             p.image[..., :3] = colour
-    for p in patches:
+
+    def shade_patch(p: Patch) -> None:  # not `bake`: that is this function's argument
         far = p.kind == "backdrop"
-        f = bake_patch(p, out_panos, scan, max_dist=backdrop_radius * 2.5 if far else 30.0)
+        f = bake_patch(p, out_panos, eyes, max_dist=backdrop_radius * 2.5 if far else 30.0)
         seen.setdefault(p.kind, []).append((f, p.w * p.h))
+
+    # The band around the roof's edge is painted boards: one plain colour (the median of its bright,
+    # photographed texels), not photos. Leaves between a camera and the edge, and the 0.3 m the roof may be
+    # off, made it a strip of leaf and sky colours. Baked first: eaves no camera saw take the same colour
+    # (soffits are painted like the trim; a tile's few dark seen texels made them brown).
+    bands = [p for p in patches if p.meta.get("plain")]
+    for p in bands:
+        shade_patch(p)
+    if bands:
+        got = np.concatenate([p.meta.pop("samples") for p in bands])
+        bright = got[got.mean(1) > 150] if len(got) else got
+        trim = np.median(bright, axis=0) if len(bright) > 200 else np.asarray(bands[0].meta["default"], float)
+        for p in bands:
+            p.image[..., :3] = trim.astype(np.uint8)
+        report["roof"]["trim_rgb"] = [int(v) for v in trim]
+        for p in patches:
+            if "default" in p.meta and not p.meta.get("plain"):
+                p.meta["default"] = tuple(int(v) for v in trim)
+    for p in patches:
+        if not p.meta.get("plain"):
+            shade_patch(p)
     report["seen"] = {
         k: round(sum(a * b for a, b in v) / max(1e-9, sum(b for _, b in v)), 3) for k, v in seen.items()
     }
@@ -926,7 +1403,7 @@ def add_exterior(
         k = "facade" if isinstance(it, rb.Plane) else it.kind
         mpx[k] = mpx.get(k, 0.0) + it.image.shape[0] * it.image.shape[1] / 1e6
     report["megatexels"] = {k: round(v, 1) for k, v in mpx.items()}
-    pages = rb.pack(items)
+    pages = rb.pack(items) if items else []
     mats = [rb._material(pg, f"outdoor_shell_{i}") for i, pg in enumerate(pages)]
     groups = {"facade": [], "roof": [], "yard": [], "backdrop": []}
     for it in items:
@@ -945,22 +1422,50 @@ def add_exterior(
             m.apply_transform(hm.Z_UP_TO_Y_UP)
             scene.add_geometry(m, node_name=f"{kind}_{pi}", geom_name=f"{kind}_{pi}")
 
-    faces = outdoor_faces(scan, outline, walls, g, top, eaves, eave_z)
-    faces = rb._drop_crumbs(scan, _seen_faces(scan, faces, out_panos), min_area=0.03)
+    report["roof"]["aerial_photo"] = next((p.meta["aerial"] for p in patches if "aerial" in p.meta), None)
+    faces = outdoor_faces(scan, outline, walls, g, top, eaves, eave_z, roof, under)
+    if "pieces" not in bake:
+        faces = faces[:0]
+    before = len(faces)
+    for x, y, z, r in remove:
+        fc = scan.tris[faces].mean(1)
+        hit = (np.hypot(fc[:, 0] - x, fc[:, 1] - y) < r) & (np.abs(fc[:, 2] - z) < max(r, 1.0))
+        faces = faces[~hit]
+    report["removed_by_hand"] = {"places": len(remove), "faces": before - len(faces)}
+    faces = rb._drop_crumbs(scan, _seen_faces(eyes, faces, out_panos), min_area=0.03)
     report["pages"] = {"shell": len(pages)}
     tree = np.zeros(len(faces), bool)
     if len(faces):
         c = scan.tris[faces].mean(1)
         tree = c[:, 2] - g.height(c[:, 0], c[:, 1]) > TREE_MIN_Z
-        if eaves is not None:
+        if roof is not None:  # over the roof only what outdoor_faces left above it is canopy
+            tree &= ~shapely.contains_xy(eaves.buffer(0.5), c[:, 0], c[:, 1]) | (
+                c[:, 2] > roof.height(c[:, 0], c[:, 1]) + 0.6
+            )
+        elif eaves is not None:
             tree &= ~shapely.contains_xy(eaves.buffer(0.5), c[:, 0], c[:, 1])
         else:
             tree &= c[:, 2] > top + 1.5  # scanned roof: only well above it
-    for sel, name, res in ((~tree, "outdoor", PIECE_RES), (tree, "trees", TREE_RES)):
+    # Generated geometry that replaces scan pieces: fence panels, then tree and shrub models. Each adds its
+    # own nodes to the scene and returns the faces it replaces (not rendered, not in collision) and the
+    # collision triangles of what it built.
+    avail = np.ones(len(faces), bool)
+    solids = []
+    if len(faces):
+        # For plants the house is everything under the roof: a sapling beside a porch post, measured and
+        # modelled, came out as a crown growing through the porch roof. It stays scan.
+        roofed = walls if roof is None else filled(walls.union(roof.region))
+        for replace, house in ((fences.replace_fences, walls), (vegetation.replace_vegetation, roofed)):
+            taken, tris = replace(scene, eyes, g, faces, tree, avail, out_panos, house, report)
+            avail &= ~taken
+            solids.append(np.asarray(tris, float).reshape(-1, 3, 3))
+    if roof is not None:
+        report["plants_cut_by_roof"] = _clip_plants(scene, roof)
+    for sel, name, res in ((~tree & avail, "outdoor", PIECE_RES), (tree & avail, "trees", TREE_RES)):
         if not sel.any():
             continue
-        pg_imgs, uv, pg = rb.bake_triangles(scan, faces[sel], out_panos, res)
-        if name == "outdoor" and eaves is None:  # scanned roof: no sky on it
+        pg_imgs, uv, pg = rb.bake_triangles(eyes, faces[sel], out_panos, res)
+        if name == "outdoor" and eaves is None and roof is None:  # scanned roof: no sky on it
             fc = scan.tris[faces[sel]].mean(1)
             roof = shapely.contains_xy(walls.buffer(0.8), fc[:, 0], fc[:, 1]) & (fc[:, 2] > eave_z - 0.1)
             roof &= scan.normals[faces[sel], 2] > 0.3  # roof surface, not white gutters and soffits
@@ -970,8 +1475,8 @@ def add_exterior(
         for node, m in _soup(scan.tris[faces[sel]], uv, pg_imgs, pg, name):
             scene.add_geometry(m, node_name=node, geom_name=node)
         report["pages"][name] = len(pg_imgs)
-    report["outdoor_faces"] = int((~tree).sum())
-    report["tree_faces"] = int(tree.sum())
+    report["outdoor_faces"] = int((~tree & avail).sum())
+    report["tree_faces"] = int((tree & avail).sum())
     report["texture_pages"] = sum(report["pages"].values())
 
     # Collision ground: the same heightfield on a coarser grid (players do not feel 15 cm cells).
@@ -981,11 +1486,11 @@ def add_exterior(
     low = np.zeros(0, int)
     if len(faces):
         c = scan.tris[faces].mean(1)
-        low = faces[(c[:, 2] - g.height(c[:, 0], c[:, 1]) < 2.2) & ~tree]
+        low = faces[(c[:, 2] - g.height(c[:, 0], c[:, 1]) < 2.2) & ~tree & avail]
     return Exterior(
         report=report,
         ground_tris=np.concatenate(gt) if gt else np.zeros((0, 3, 3)),
-        piece_tris=scan.tris[low],
+        piece_tris=np.concatenate([scan.tris[low], *solids]),
         bounds=filled(g.lot.union(walls.buffer(0.05, join_style="mitre"))),
         outline=walls,
     )
@@ -1034,27 +1539,53 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--block", required=True)
     ap.add_argument("--listing", required=True)
     ap.add_argument("--out", type=Path, default=bh.HERE / "out")
+    ap.add_argument(
+        "--dest", type=Path, help="write the glb here instead of out/cache/glb/<model>_exterior.glb"
+    )
+    ap.add_argument("--parts", help=f"comma-separated subset of {sorted(PARTS)} to bake (default: all)")
+    ap.add_argument("--no-aerial", action="store_true", help="roof from the scan alone (no Vexcel layers)")
     args = ap.parse_args(argv)
+    bake = frozenset(args.parts.split(",")) if args.parts else PARTS  # not `parts`: those are the rooms below
+    if bake - PARTS:
+        ap.error(f"unknown parts {sorted(bake - PARTS)}")
     house = next(h for h in load_block(args.block)["houses"] if h["listing_id"] == args.listing)
     model_id = house["matterport_model_id"]
     model = mp.fetch_model(model_id, args.out / "cache" / "matterport")
     ov = bh.OVERRIDES / f"{model_id}.json"
-    parts = bh.apply_splits(bh.read_rooms(model), json.loads(ov.read_text()) if ov.exists() else {})
+    overrides = json.loads(ov.read_text()) if ov.exists() else {}
+    parts = bh.apply_splits(bh.read_rooms(model), overrides)
     raw = args.out / "raw" / model_id
     scan = rb.load_scan(bh.extract_matterpak(model_id, raw))
     fz = bh.scan_floor_z(scan, parts)
     for p in parts:
         p.floor_z = fz.get(p.floor, 0.0)
     spans = bh.opening_spans(parts, lambda e, z: bh.runs_from_rays(e, scan.rays, z), np.zeros((0, 3)))
-    footprint = house_footprint(scan, bh.shell_rooms(parts), bh.void_polys(parts))
+    footprint = house_footprint(scan, bh.shell_rooms(parts), bh.void_polys(parts, overrides))
     doors = bh.play_doors(parts, spans, footprint)
     rooms = bh.shell_rooms(parts, spans)
     for r in rooms:
         rb.measure_ceiling(scan, r)
     panos = PanoSet(model, raw / "skybox_2k")
     scene = trimesh.Scene()
-    ext = add_exterior(scene, scan, rooms, panos, doors, footprint)
-    dest = args.out / "cache" / "glb" / f"{model_id}_exterior.glb"
+    air = (
+        None
+        if args.no_aerial
+        else ae.load(args.out, load_block(args.block), bh.listing_entry(args.out, args.listing))
+    )
+    hand = overrides.get("remove_outdoor") or []
+    ext = add_exterior(
+        scene,
+        scan,
+        rooms,
+        panos,
+        doors,
+        footprint,
+        bake=bake,
+        aerial=air,
+        remove=[(*d["at"], float(d["radius"])) for d in hand],
+    )
+    dest = args.dest or args.out / "cache" / "glb" / f"{model_id}_exterior.glb"
+    dest.parent.mkdir(parents=True, exist_ok=True)
     scene.export(dest)
     print(json.dumps(ext.report, indent=1))
     return 0

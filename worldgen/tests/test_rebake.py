@@ -48,6 +48,58 @@ def test_vaulted_room_keeps_its_scanned_ceiling_and_gets_taller_walls():
     assert all(p.h == pytest.approx(3.2) for p in planes if p.kind == "wall")
 
 
+def test_a_vaulted_rooms_walls_stop_at_the_scanned_ceiling():
+    # 4 x 3 room, ceiling 2.4 m at the south wall (y = 0) rising to 3.2 m at the north wall.
+    r = room(flat_ceiling=False, wall_top=3.25)
+    gx, gy = np.meshgrid(np.arange(0, 4.01, rb.CEIL_STEP), np.arange(0, 3.01, rb.CEIL_STEP), indexing="ij")
+    r.ceiling = (0.0, 0.0, 2.4 + 0.8 * gy / 3.0)
+    walls = [p for p in rb.shell_planes([r]) if p.kind == "wall"]
+    south = next(p for p in walls if p.n[1] > 0.9)
+    north = next(p for p in walls if p.n[1] < -0.9)
+    side = next(p for p in walls if abs(p.n[0]) > 0.9)
+    top = lambda p: p.shape.bounds[3]  # noqa: E731
+    assert 2.4 < top(south) < 2.4 + 0.25  # the low wall no longer rises to the room's highest point
+    assert 3.1 < top(north) <= 3.25
+    assert top(side) > 3.1 and side.shape.area < side.w * 3.25 - 0.5  # a side wall is a trapezoid
+    for p in walls:  # every wall keeps its full width (no slit at its end)
+        assert p.shape.bounds[0] == pytest.approx(0.0, abs=1e-9) and p.shape.bounds[2] == pytest.approx(p.w)
+    # Without a scanned ceiling the walls keep their full height.
+    full = [p for p in rb.shell_planes([room(flat_ceiling=False, wall_top=3.25)]) if p.kind == "wall"]
+    assert all(p.shape.bounds[3] == pytest.approx(3.25) for p in full)
+
+
+def test_ceiling_grid_reads_the_scanned_ceiling_and_fills_holes():
+    import trimesh
+
+    from worldgen.panos import Raycaster
+
+    # A sloping ceiling over a 4 x 3 room (2.4 m at y = 0, 3.3 m at y = 3) with a hole in it, and a cabinet
+    # top at 2.0 m that is not the ceiling.
+    v = np.array([[0, 0, 2.4], [4, 0, 2.4], [4, 3, 3.3], [0, 3, 3.3]], float)
+    ceiling = trimesh.Trimesh(v, [[0, 2, 1], [0, 3, 2]], process=False)  # facing down
+    keep = ~(ceiling.triangles_center[:, 0] > 9)
+    cab = trimesh.creation.box(extents=[1.0, 0.5, 0.6])
+    cab.apply_translation([0.6, 2.7, 1.7])
+    tris = np.concatenate([ceiling.triangles[keep], cab.triangles])
+    cross = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    norm = np.linalg.norm(cross, axis=1)
+    scan = rb.Scan(
+        tris,
+        np.zeros((len(tris), 3, 2)),
+        np.zeros(len(tris), int),
+        cross / norm[:, None],
+        norm / 2,
+        [np.zeros((2, 2, 3), np.uint8)],
+        Raycaster(tris),
+    )
+    r = room(flat_ceiling=False, wall_top=3.35)
+    r.ceiling = rb._ceiling_grid(scan, r)
+    z = rb.ceiling_z(r, np.array([2.0, 2.0, 0.6]), np.array([0.3, 2.7, 2.7]))
+    assert abs(z[0] - (2.4 + 0.3 * 0.3)) < 0.05 and abs(z[1] - (2.4 + 0.3 * 2.7)) < 0.05
+    assert abs(z[2] - (2.4 + 0.3 * 2.7)) < 0.05  # above the cabinet: the ceiling, not the cabinet's top
+    assert np.isfinite(rb.ceiling_z(r, np.array([-0.3]), np.array([-0.3]))).all()  # just outside: nearest
+
+
 def test_fill_blends_holes_instead_of_streaking():
     img = np.zeros((40, 40, 3), np.uint8)
     img[:, :20] = 100

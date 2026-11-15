@@ -37,7 +37,9 @@ def load(glb):
         tris.append(g.vertices[g.faces]); uvs.append(g.visual.uv[g.faces]); tid.append(np.full(len(g.faces), len(texs))); texs.append(arr)
     return np.concatenate(tris), np.concatenate(uvs), np.concatenate(tid), texs
 
-def render(scene, pos, fwd, right, up, W=640, H=640, fov=90):
+def render(scene, pos, fwd, right, up, W=640, H=640, fov=90, layers=6):
+    # layers: how many alpha-cut surfaces a ray may pass (leaf cards of the tree models need about 40; the
+    # indoor score keeps 6 so its numbers stay comparable). Texture coordinates repeat (tiled bark).
     tris, uvs, tid, texs, rc = scene
     f = 1 / np.tan(np.radians(fov) / 2)
     xs = (np.arange(W) + 0.5) / W * 2 - 1; ys = (np.arange(H) + 0.5) / H * 2 - 1
@@ -47,7 +49,7 @@ def render(scene, pos, fwd, right, up, W=640, H=640, fov=90):
     o = np.tile(pos, (len(d), 1)).astype(float)
     out = np.full((len(d), 3), (40, 0, 60), np.uint8)   # purple = nothing hit
     active = np.arange(len(d))
-    for _ in range(6):
+    for _ in range(layers):
         if not len(active): break
         t, prim = rc.cast(o[active], d[active])
         hit = prim >= 0
@@ -56,6 +58,7 @@ def render(scene, pos, fwd, right, up, W=640, H=640, fov=90):
         d00 = (v0 * v0).sum(1); d01 = (v0 * v1).sum(1); d11 = (v1 * v1).sum(1); d20 = (v2 * v0).sum(1); d21 = (v2 * v1).sum(1)
         den = d00 * d11 - d01 * d01 + 1e-15; b1 = (d11 * d20 - d01 * d21) / den; b2 = (d00 * d21 - d01 * d20) / den; b0 = 1 - b1 - b2
         uv = b0[:, None] * uvs[pr, 0] + b1[:, None] * uvs[pr, 1] + b2[:, None] * uvs[pr, 2]
+        uv = np.where((uv < 0) | (uv > 1), uv - np.floor(uv), uv)
         col = np.zeros((len(a), 4), np.uint8)
         for k in np.unique(tid[pr]):
             s = tid[pr] == k; tex = texs[k]; h, w = tex.shape[:2]
@@ -91,7 +94,7 @@ def score(glb, model_json, sky, only=None, size=192):
         used += 1
         f, r, u = R @ [1, 0, 0], R @ [0, -1, 0], R @ [0, 0, 1]
         for L, Rt, U, fi in ((f, r, u, 1), (r, -f, u, 2), (-f, -r, u, 3), (-r, f, u, 4)):
-            img = render(scene, yup(pos), yup(L), yup(Rt), yup(U), W=size, H=size).astype(float)
+            img = render(scene, yup(pos), yup(L), yup(Rt), yup(U), W=size, H=size, layers=40 if want_out else 6).astype(float)
             real = np.asarray(Image.open(f"{sky}/{p['id']}_{fi}.jpg").convert("RGB").resize((size, size))).astype(float)
             hole = (img == [40, 0, 60]).all(-1)
             holes.append(hole.mean())
