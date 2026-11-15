@@ -7,7 +7,8 @@ The model picks the intent (rule + what it relates to); this module computes eve
   corner        tucked into a convex corner              ignored
   center        open floor; with relative_to: in front   optional (coffee table in front of the sofa;
                 of that piece, facing it                 for on_surface assets: on top of it)
-  facing        front pointed at another piece           required (sofa facing the TV)
+  facing        front pointed at another piece           required (sofa facing the TV; a chair facing its
+                                                         table is pulled up to a free side of it)
   beside        next to another piece, backs aligned     required (nightstand beside the bed)
 
 Every candidate passes the same checks as validate_layout against the room and the pieces already
@@ -29,7 +30,7 @@ from layout.geometry import (
     right_dir,
     rot_facing,
 )
-from layout.validate import covers_window, object_conflicts
+from layout.validate import covers_window, object_conflicts, sits_at
 
 RULES = ("against_wall", "corner", "center", "facing", "beside")
 DEFAULT_RULE = {  # catalog `placement` -> the rule to try first
@@ -58,6 +59,9 @@ FACING_RANGE = {
 }
 DEFAULT_FACING_RANGE = (1.2, 3.0)
 TARGET_NEEDED = ("facing", "beside")
+SEAT_GAP_M = 0.05  # chair front edge to the table edge it is pulled up to
+SEAT_SPACING_M = 0.10  # free space between two chairs on the same side of a table
+ONE_SEAT_TABLES = {"desk"}  # one chair, centred on the front side; other tables seat every side
 MIN_SPREAD_M = 0.4  # returned poses with the same rotation are at least this far apart
 BLOCKED_LIMIT = 3  # blocked poses offered when no pose fits
 BLOCKED_SCAN = 60  # room-valid blocked candidates examined, best scores first
@@ -213,7 +217,48 @@ def _on_top_of(asset: dict, target: dict, target_asset: dict, floor_y: float) ->
         yield c
 
 
+def _at_table(asset: dict, target: dict, target_asset: dict) -> Iterator[dict]:
+    """A chair pulled up to its table: on a free side, square to it, facing it.
+
+    The long sides fill first, alternating front and back so chairs sit across from each other; the ends
+    come after. A table whose sides are about equal takes one chair per side. A desk takes one chair,
+    centred on its front. Sides against a wall drop out in the conflict check, like any candidate.
+    """
+    w, d = asset["size_m"]["w"], asset["size_m"]["d"]
+    tw, td = target_asset["size_m"]["w"], target_asset["size_m"]["d"]
+    f, r = front_dir(target["rot_deg"]), right_dir(target["rot_deg"])
+    one_seat = target_asset["category"] in ONE_SEAT_TABLES
+    # (label, outward normal, direction along the side, side length, table extent across the side)
+    sides = [("front", f, r, tw, td)]
+    if not one_seat:
+        sides += [
+            ("back", (-f[0], -f[1]), r, tw, td),
+            ("right end", r, f, td, tw),
+            ("left end", (-r[0], -r[1]), f, td, tw),
+        ]
+    longest = max(s[3] for s in sides)
+    slots: list[tuple[int, int, int, dict]] = []
+    for order, (label, n, along, length, across) in enumerate(sides):
+        if length < 0.8 * w:
+            continue  # the chair is wider than this side
+        count = 1 if one_seat else max(int(length // (w + SEAT_SPACING_M)), 1)
+        short = 0 if length >= 0.9 * longest else 1
+        for i in range(count):
+            off = (i + 0.5) * length / count - length / 2
+            out = across / 2 + SEAT_GAP_M + d / 2
+            x = target["x"] + n[0] * out + along[0] * off
+            z = target["z"] + n[1] * out + along[1] * off
+            c = _cand(x, z, rot_facing((-n[0], -n[1])), 0.0, f"At {target_asset['name']}, {label} side")
+            slots.append((short, i, order, c))
+    for rank, (_, _, _, c) in enumerate(sorted(slots, key=lambda s: s[:3])):
+        c["score"] = 3.0 - 0.01 * rank
+        yield c
+
+
 def _facing(geo: RoomGeometry, asset: dict, target: dict, target_asset: dict) -> Iterator[dict]:
+    if sits_at(asset, target_asset):
+        yield from _at_table(asset, target, target_asset)
+        return
     lo, hi = FACING_RANGE.get((asset["category"], target_asset["category"]), DEFAULT_FACING_RANGE)
     tf = front_dir(target["rot_deg"])
     tname = target_asset["name"]

@@ -414,3 +414,121 @@ def test_crib_poses_skip_window_walls(room):
             "conflicts": [],
         }
         assert validate_layout(plan, room, {"crib_fm_02": CRIB})["conflicts"] == []
+
+
+# --- pieces that belong together: a TV on its stand, chairs at their table ------------------------
+
+TEAM_TV = {  # furniture/v3 tv_team_stand: stands on a TV stand and keeps 1.0 m clear in front of the screen
+    "id": "tv_team_stand",
+    "name": "Flat-screen TV on stand",
+    "category": "tv",
+    "size_m": {"w": 1.24, "d": 0.24, "h": 0.78},
+    "placement": "on_surface",
+    "clearance_m": {"front": 1.0},
+}
+TABLE = {  # furniture/v3 dining_table_abo_B075YMXWZC
+    "id": "table",
+    "name": "Dining table",
+    "category": "dining_table",
+    "size_m": {"w": 1.61, "d": 0.81, "h": 0.76},
+    "placement": "center",
+    "clearance_m": {"front": 0.9},
+}
+DINING_CHAIR = {
+    "id": "chair",
+    "name": "Dining chair",
+    "category": "dining_chair",
+    "size_m": {"w": 0.5, "d": 0.58, "h": 0.94},
+    "placement": "beside",
+    "clearance_m": {"front": 0.0},
+}
+DESK = {
+    "id": "desk",
+    "name": "Desk",
+    "category": "desk",
+    "size_m": {"w": 1.6, "d": 0.8, "h": 0.75},
+    "placement": "wall",
+    "clearance_m": {"front": 0.9},
+}
+OFFICE_CHAIR = {
+    "id": "office_chair",
+    "name": "Office chair",
+    "category": "office_chair",
+    "size_m": {"w": 0.61, "d": 0.63, "h": 0.88},
+    "placement": "free",
+    "clearance_m": {"front": 0.0},
+}
+ARMCHAIR = {**OFFICE_CHAIR, "id": "armchair", "name": "Armchair", "category": "armchair"}
+SEATING = {
+    **ASSETS,
+    "tv_team_stand": TEAM_TV,
+    "table": TABLE,
+    "chair": DINING_CHAIR,
+    "desk": DESK,
+    "office_chair": OFFICE_CHAIR,
+    "armchair": ARMCHAIR,
+}
+
+
+def test_tv_is_not_blocked_by_the_stand_it_stands_on(room, plan):
+    # The stand (0.42 m deep) sticks out in front of the TV (0.24 m deep), inside the TV's front clearance.
+    geo = room_geometry(room)
+    pairs = [(o, SEATING[o["asset_id"]]) for o in plan["objects"]]
+    out = propose_poses(geo, TEAM_TV, "center", "o2", pairs)
+    assert out["poses"] and out["poses"][0]["reason"] == "On TV stand, centered"
+    p = out["poses"][0]
+    plan["objects"].append({**obj("o3", "tv_team_stand", p["x"], p["z"], p["rot_deg"]), "y": p["y"]})
+    assert validate_layout(plan, room, SEATING)["conflicts"] == []
+    # Anything else in front of the screen still counts.
+    plan["objects"].append(obj("o4", "shelf", 3.0, 3.3, rot=180))
+    details = [c["detail"] for c in validate_layout(plan, room, SEATING)["conflicts"]]
+    assert any("front clearance of Flat-screen TV" in d for d in details)
+
+
+def test_dining_chairs_are_pulled_up_to_the_table(room):
+    geo = room_geometry(room)
+    plan = {"plan_id": "t", "listing_id": "hou_000123", "room_id": room["id"], "objects": [], "conflicts": []}
+    table = obj("o1", "table", 3.0, 2.1)  # long sides face north and south, front (+Z) to the north
+    plan["objects"].append(table)
+    sides = []
+    for n in range(4):
+        pairs = [(o, SEATING[o["asset_id"]]) for o in plan["objects"]]
+        best = propose_poses(geo, DINING_CHAIR, "facing", "o1", pairs)["poses"][0]
+        sides.append(best["reason"])
+        # square to the table and facing it, front edge 0.05 m from the table edge
+        assert best["rot_deg"] in (0.0, 180.0)
+        assert abs(best["z"] - 2.1) == pytest.approx(0.81 / 2 + 0.05 + 0.58 / 2, abs=1e-3)
+        plan["objects"].append(obj(f"o{n + 2}", "chair", best["x"], best["z"], best["rot_deg"]))
+    assert sides == ["At Dining table, front side", "At Dining table, back side"] * 2  # two and two, across
+    assert validate_layout(plan, room, SEATING)["conflicts"] == []
+    # Two more take the ends; a seventh has nowhere to go and is not put somewhere else in the room.
+    for n in range(4, 7):
+        pairs = [(o, SEATING[o["asset_id"]]) for o in plan["objects"]]
+        out = propose_poses(geo, DINING_CHAIR, "facing", "o1", pairs)
+        if n < 6:
+            assert out["poses"][0]["reason"].endswith("end side")
+            p = out["poses"][0]
+            plan["objects"].append(obj(f"o{n + 2}", "chair", p["x"], p["z"], p["rot_deg"]))
+        else:
+            assert out["poses"] == []
+
+
+def test_only_a_tables_own_chairs_may_stand_in_its_clearance(room):
+    plan = {"plan_id": "t", "listing_id": "hou_000123", "room_id": room["id"], "objects": [], "conflicts": []}
+    plan["objects"] = [obj("o1", "table", 3.0, 2.1), obj("o2", "chair", 3.0, 2.1 + 0.405 + 0.05 + 0.29, 180)]
+    assert validate_layout(plan, room, SEATING)["conflicts"] == []
+    plan["objects"][1]["asset_id"] = "armchair"
+    assert types(validate_layout(plan, room, SEATING)) == ["clearance"]
+
+
+def test_office_chair_sits_centred_in_front_of_the_desk(room):
+    geo = room_geometry(room)
+    desk = obj("o1", "desk", 3.0, 0.42)  # back to the south wall, facing north
+    out = propose_poses(geo, OFFICE_CHAIR, "facing", "o1", [(desk, DESK)])
+    assert len(out["poses"]) == 1  # one seat, even at a 1.6 m desk
+    p = out["poses"][0]
+    assert (p["x"], p["rot_deg"]) == (3.0, 180.0)
+    assert p["z"] == pytest.approx(0.42 + 0.4 + 0.05 + 0.315, abs=1e-3)
+    plan = {"plan_id": "t", "listing_id": "hou_000123", "room_id": room["id"], "conflicts": []}
+    plan["objects"] = [desk, obj("o2", "office_chair", p["x"], p["z"], p["rot_deg"])]
+    assert validate_layout(plan, room, SEATING)["conflicts"] == []

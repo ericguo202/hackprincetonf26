@@ -11,7 +11,10 @@ Rules, in plain words:
   blocks_opening  nothing but flat pieces in a door's swing zone; nothing taller than 1.0 m against a window
   clearance       each keep-clear zone from the catalog (clearance_m: front/back/left/right) must stay
                   inside the room and free of other furniture; low pieces that belong in front of seating
-                  (coffee table, ottoman) may sit in another piece's front clearance
+                  (coffee table, ottoman) may sit in another piece's front clearance; a seat may stand in
+                  the clearance of the table it belongs to (dining chair at a dining table, office chair at
+                  a desk, kids' chair at a kids' table); a piece standing on another (TV on its stand) does
+                  not count that piece as being in its way
 """
 
 from __future__ import annotations
@@ -29,6 +32,13 @@ WINDOW_MAX_H_M = 1.0
 # Never under a window at any height (AGENTS.md section 10, furnish-nursery): window-covering cords and
 # falls are a strangulation and fall risk for an infant (CPSC window-covering cord guidance).
 NOT_UNDER_WINDOW = {"crib"}
+# Table category -> seat categories that may stand in its keep-clear zones: the space in front of a desk
+# or around a dining table is where its chairs go.
+SEATS_AT = {
+    "dining_table": {"dining_chair"},
+    "desk": {"office_chair"},
+    "kids_table": {"kids_chair"},
+}
 
 
 def covers_window(asset: dict) -> bool:
@@ -55,6 +65,11 @@ def is_flat(asset: dict) -> bool:
 
 def stands_on_others(asset: dict) -> bool:
     return asset.get("placement") == "on_surface"
+
+
+def sits_at(seat: dict, table: dict) -> bool:
+    """Whether `seat` is a chair that belongs at `table` (so it may stand in the table's clearance)."""
+    return seat["category"] in SEATS_AT.get(table["category"], ())
 
 
 def object_conflicts(
@@ -121,7 +136,11 @@ def object_conflicts(
                 continue
             if side == "front" and other_asset["category"] in OK_IN_FRONT_CLEARANCE:
                 continue
+            if sits_at(other_asset, asset):
+                continue
             ofp = footprint(other["x"], other["z"], other_asset["size_m"], other["rot_deg"])
+            if stands_on_others(asset) and ofp.intersection(fp).area > MIN_AREA_M2:
+                continue  # the piece this one stands on (a stand deeper than its TV) is not in its way
             if zone.intersection(ofp).area > MIN_AREA_M2:
                 out.append(
                     _c(
@@ -143,6 +162,13 @@ def object_conflicts(
             ).items():
                 if side == "front" and asset["category"] in OK_IN_FRONT_CLEARANCE:
                     continue
+                if sits_at(asset, other_asset):
+                    continue
+                if (
+                    stands_on_others(other_asset)
+                    and other_fp(other, other_asset).intersection(fp).area > MIN_AREA_M2
+                ):
+                    continue  # this piece is what `other` stands on
                 if zone.intersection(fp).area > MIN_AREA_M2:
                     out.append(
                         _c(
@@ -153,6 +179,10 @@ def object_conflicts(
                         )
                     )
     return out
+
+
+def other_fp(obj: dict, asset: dict):
+    return footprint(obj["x"], obj["z"], asset["size_m"], obj["rot_deg"])
 
 
 def validate_layout(plan: dict, room: dict | RoomGeometry, assets: AssetLookup) -> dict:
