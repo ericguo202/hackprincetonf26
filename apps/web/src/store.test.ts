@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useStore } from "./store";
-import { applyAgentEvent } from "./net/agent";
+import { applyAgentEvent, fetchTrace } from "./net/agent";
 
 describe("store", () => {
   it("merges local player updates", () => {
@@ -18,5 +18,21 @@ describe("store", () => {
     const s = useStore.getState();
     expect(s.todos).toHaveLength(1);
     expect(s.messages.at(-1)).toEqual({ role: "agent", text: "Hi there", final: true });
+  });
+
+  it("attaches the turn's LangSmith link to the latest agent reply", async () => {
+    const url = "https://smith.langchain.com/o/t/projects/p/p/r/run?poll=true";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ url }))));
+    useStore.getState().set({
+      messages: [
+        { role: "agent", text: "Earlier", final: true },
+        { role: "agent", text: "Placed a sofa.", final: true },
+      ],
+    });
+    await fetchTrace("s1");
+    const [earlier, latest] = useStore.getState().messages;
+    expect(earlier.trace).toBeUndefined();
+    expect(latest.trace).toBe(url);
+    vi.unstubAllGlobals();
   });
 });

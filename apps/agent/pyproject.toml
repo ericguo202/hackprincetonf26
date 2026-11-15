@@ -34,7 +34,7 @@ package = false
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-extend-include = ["../../contracts/validate.py"]
+extend-include = ["../../contracts/validate.py", "../../evals/run.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

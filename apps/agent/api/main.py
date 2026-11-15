@@ -92,6 +92,12 @@ def _spawn(coro) -> None:
     task.add_done_callback(_tasks.discard)
 
 
+@app.get("/sessions/{session_id}/trace")
+def trace(session_id: str) -> dict:
+    """LangSmith link of the session's latest turn ({"url": null} with tracing off or before a turn)."""
+    return {"url": runner.TRACES.get(_session(session_id).session_id)}
+
+
 @app.get("/sessions/{session_id}/stream", response_class=EventSourceResponse)
 async def stream(session_id: str) -> AsyncIterator[ServerSentEvent]:
     s = _session(session_id)

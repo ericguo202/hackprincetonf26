@@ -19,6 +19,11 @@ export function ChatPanel() {
       {messages.map((m, i) => (
         <p key={i} className={m.role}>
           {m.text}
+          {m.trace ? (
+            <a className="trace-link" href={m.trace} target="_blank" rel="noreferrer">
+              View LangSmith trace
+            </a>
+          ) : null}
         </p>
       ))}
     </aside>

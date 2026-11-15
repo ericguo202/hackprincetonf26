@@ -1,0 +1,28 @@
+{
+  "id": "play_refurnish",
+  "description": "Demo 1:30 to 2:40. Nerf-war layout, then a playroom that replaces it",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Set up the living room for a nerf war",
+      "expect": {
+        "committed": true,
+        "room_label": "living_room",
+        "min_cover": 2,
+        "valid": true,
+        "max_seconds": 180
+      }
+    },
+    {
+      "prompt": "Make it a playroom instead",
+      "expect": {
+        "committed": true,
+        "room_label": "living_room",
+        "categories_any": ["play_mat", "toy_storage", "kids_table", "kids_chair", "play_equipment", "beanbag"],
+        "replaces_previous": true,
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}
