@@ -59,7 +59,7 @@ from worldgen.block_buildings import (
 )
 from worldgen.block_facade import facade_atlas, fence_texture, place_openings
 from worldgen.block_glb import Material, MeshBuf, Node, compress, write_glb
-from worldgen.block_ground import CURB, curbs, fence_lines, fence_mesh, gridded, load_roads
+from worldgen.block_ground import CURB, fence_lines, fence_mesh, gridded, load_roads
 from worldgen.block_raster import Ortho, derive_dtm, grid_xz, read_geotiff, resample_to_grid
 from worldgen.block_veg import segment_crowns
 
@@ -529,8 +529,6 @@ def build(args) -> dict:
             )
             col = np.asarray(st["lin"]) * WALL_WB
         b.wall_mat, b.wall_col = wall, np.clip(col * gain / wall_mean[wall], 0, 1)
-        target = bufs if not b.tag else hero_bufs.setdefault(b.tag, {k: MeshBuf() for k in bufs})
-        emit_building(b, target, wall_tex_m, ground, road_lines, ortho)
     log(f"  wall styles {styles} (default = borrowed from a sampled house)")
 
     # ---- sun of the ortho capture, then cars out of the ground photo
@@ -544,43 +542,50 @@ def build(args) -> dict:
     images["ortho_ground"] = ortho_img.filter(ImageFilter.UnsharpMask(radius=2, percent=60, threshold=2))
     summary["wall_styles"] = styles
 
-    # ---- ground
-    log("ground")
+    # ---- roads, ground classes and paving traced from the ortho, before the facades (garage doors go
+    # where the traced driveways meet the houses, front doors where the traced walks do)
+    log("roads and paving")
     hways, hcircles = bh.load_ways()
     road, road_recs = bh.fit_roads(hways, hcircles, HALF, ortho, refit_names=set(NEAR_STREETS))
     summary["street_widths_m"] = {
         r["name"]: round(r["width"], 2) for r in road_recs if r["name"] and r["line"].intersects(mask)
     }
-    land_buf, road_buf, curb_buf, curb_top, far_buf = MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf()
-    near_land = P.difference(road)
     exteriors = {}
     for spec in args.hero_exterior:
         for lid, path in resolve_exteriors(spec).items():
             exteriors[lid] = load_exterior(path, lid, ground, images, mats)
-            near_land = near_land.difference(exteriors[lid]["yard"]).buffer(0)
             log(
                 f"hero exterior {lid}: {path.name}, {exteriors[lid]['triangles']} triangles, "
                 f"dy {exteriors[lid]['dy']:+.2f} m"
             )
+    skip_zone = unary_union([e["yard"] for e in exteriors.values()]) if exteriors else Polygon()
+    built0 = unary_union([b.poly.buffer(-0.3) for b in buildings])
+    crown_px = ndimage.binary_dilation((nd > 1.8) & ~bmask, iterations=2)
+
+    def crown_fn(x, z):
+        c = np.clip(((x + HALF) / RES).astype(int), 0, crown_px.shape[1] - 1)
+        r = np.clip(((z + HALF) / RES).astype(int), 0, crown_px.shape[0] - 1)
+        return crown_px[r, c]
+
+    gc = GroundClasses(ortho_g, road, built0, crown_fn=crown_fn)
+    tr = trace_hard(gc, road, road_recs, mask, parcels, buildings, skip_zone, summary)
+    for b in buildings:
+        target = bufs if not b.tag else hero_bufs.setdefault(b.tag, {k: MeshBuf() for k in bufs})
+        emit_building(b, target, wall_tex_m, ground, road_lines, ortho, tr["hints"].get(b.name))
+
+    # ---- ground
+    log("ground")
+    land_buf, road_buf, curb_buf, curb_top, far_buf = MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf()
+    # the lawn stops at the curb top: no overlap with curb, gutter or road
+    near_land = areal(P.difference(road.buffer(bh.CURB_TOP_W, join_style=1)).difference(skip_zone))
     class_bufs: dict[str, MeshBuf] = {}
     hard_meshes: list = []
     curb_cut = None
     if args.ground_classes:
-        built = unary_union([b.poly.buffer(-0.3) for b in buildings])
-        crown_px = ndimage.binary_dilation((nd > 1.8) & ~bmask, iterations=2)
-
-        def crown_fn(x, z):
-            c = np.clip(((x + HALF) / RES).astype(int), 0, crown_px.shape[1] - 1)
-            r = np.clip(((z + HALF) / RES).astype(int), 0, crown_px.shape[0] - 1)
-            return crown_px[r, c]
-
-        gc = GroundClasses(ortho_g, road, built, crown_fn=crown_fn)
         cp = gc.polygons()
         images["g_concrete"] = neutral_texture(PH / "brushed_concrete_diff_1k.jpg", GROUND_MEAN, 1.0)
-        skip_zone = unary_union([e["yard"] for e in exteriors.values()]) if exteriors else Polygon()
-        hard, lots, curb_cut, hard_meshes = hardscape(
-            buildings, road, road_recs, gc, mask, parcels, ground, skip_zone, images, mats, summary
-        )
+        hard, curb_cut, hard_meshes = hardscape(buildings, road, gc, ground, tr, images, mats, summary)
+        lots = tr["lots"]
         # on house lots in the near zone, paving is vector only: raster concrete becomes lawn there
         for name in ("concrete", "pavers"):
             cp[name] = areal(cp[name].difference(lots))
@@ -648,16 +653,7 @@ def build(args) -> dict:
     else:
         gridded(land_buf, near_land, ground, HALF, 2.0, 0.0, bpr.uv_ortho, 2.0)
         gridded(road_buf, road, ground, HALF, 2.0, -CURB, bpr.uv_ortho, 1.8)
-    curbs(
-        curb_buf,
-        road,
-        ground,
-        HALF,
-        tiled_uv(1.0),
-        curb_top,
-        skip=curb_cut if args.ground_classes else None,
-        top_w=0.18,
-    )
+    bh.curb_mesh(curb_buf, curb_top, road, ground, CURB, skip=curb_cut, half=HALF)
     gridded(far_buf, far_ground.difference(road), ground, HALF, 2.0, 0.0, bpr.uv_ortho, 2.0)
     skirt = bpr.skirt_mesh()
     # underlay: a dark surface 0.2 m under the near ground, so no crack at a curb cut or slab edge
@@ -901,85 +897,221 @@ def house_to_block(p, position, heading_deg: float) -> np.ndarray:
     return np.array([position[0] + p[0] * c + p[1] * s_, position[1] - p[0] * s_ + p[1] * c])
 
 
-def hardscape(buildings, road, recs, gc, mask, parcels, ground, skip_zone, images, mats, summary):
-    """Vector hard surfaces in the near zone (sidewalks, driveways, front walks, stoops) and their
-    meshes. Returns (union of hard surfaces, residential lots, curb-cut zone, [(MeshBuf, material)])."""
+def _frac_lawn(lab_vis, poly, step: float = 0.25) -> tuple[float, float]:
+    """(lawn fraction among visible ortho pixels, visible fraction) inside poly."""
+    x0, z0, x1, z1 = poly.bounds
+    gx, gz = np.meshgrid(np.arange(x0, x1, step), np.arange(z0, z1, step))
+    ins = contains_xy(poly, gx, gz)
+    if ins.sum() == 0:
+        return 0.0, 0.0
+    c = np.clip(((gx[ins] + HALF) / GRES).astype(int), 0, lab_vis.shape[1] - 1)
+    r = np.clip(((gz[ins] + HALF) / GRES).astype(int), 0, lab_vis.shape[0] - 1)
+    L = lab_vis[r, c]
+    vis = L >= 0
+    return (float((L[vis] == 0).mean()) if vis.any() else 0.0), float(vis.mean())
+
+
+def _wall_contact(wp: Polygon, target, min_len: float = 2.2):
+    """Longest run along an outer wall of `wp` whose outside (0.8 m out) lies in `target`:
+    ((x, z) centre, length) or None."""
+    from shapely.geometry.polygon import orient
+
+    best = None
+    ring = np.asarray(orient(wp, 1.0).exterior.coords)
+    for i in range(len(ring) - 1):
+        a, b = ring[i], ring[i + 1]
+        L = float(np.hypot(*(b - a)))
+        if L < min_len:
+            continue
+        t = (b - a) / L
+        nrm = np.array([t[1], -t[0]])  # right of a CCW ring = outside
+        s_ = np.arange(0.1, L - 0.05, 0.2)
+        hit = np.zeros(len(s_), bool)
+        for off in (0.8, 1.4, 2.2):  # the slab may stop short of the wall (eaves, shade)
+            pts = a + s_[:, None] * t + off * nrm
+            hit |= contains_xy(target, pts[:, 0], pts[:, 1])
+        if not hit.any():
+            continue
+        lab_, n = ndimage.label(hit)
+        for k in range(1, n + 1):
+            idx = np.flatnonzero(lab_ == k)
+            run = (idx[-1] - idx[0] + 1) * 0.2
+            if run >= min_len and (best is None or run > best[1]):
+                mid = a + t * s_[(idx[0] + idx[-1]) // 2]
+                best = (mid, run)
+    return best
+
+
+def trace_hard(gc, road, recs, mask, parcels, buildings, skip_zone, summary) -> dict:
+    """Paving traced from the ortho before the facades are built: fitted sidewalk strips, concrete and
+    red-brick paver polygons (curves kept), driveways = concrete reaching the curb, and per house where
+    a driveway meets a wall (garage door) and where a walk meets a wall (front door)."""
     lab_vis = gc.lab_visible
     names = {r["name"] for r in recs if r["name"] and r["line"].intersects(mask)}
     strips, report = bh.find_sidewalks(recs, road, lab_vis, HALF, GRES, mask, names)
     summary["sidewalks"] = report
-    for r in report:
-        log(
-            f"  sidewalk {r['street']} {r['side']}: {r['sidewalk_m']} of {r['length_m']} m, "
-            f"setback {r['setback_m']} width {r['width_m']}"
-        )
-    built = unary_union([b.poly.buffer(-0.1) for b in buildings])
-    lots = unary_union([pc["poly"] for pc in parcels if pc["poly"].area < 2500]).intersection(mask)
-    drives, stoops, walks = [], [], []
-    drives = bh.driveways_from_ortho(
-        gc.pale,
-        recs,
-        road,
-        built,
-        lots.difference(skip_zone),
-        HALF,
-        GRES,
-        names,
-        zone=mask.difference(skip_zone),
-    )
-    for b in buildings:
-        if not mask.contains(b.poly.centroid) or skip_zone.intersects(b.poly):
-            continue
-        d = bh.driveway(b.garage, road, lab_vis, HALF, GRES) if getattr(b, "garage", None) else None
-        clear = None
-        if d is not None:
-            clear = bh._rect(d["p"], d["n"], d["t"], 0.8, d["L"] - 0.2, d["v0"] + 0.2, d["v1"] - 0.2)
-        if d is not None and not clear.intersects(built.buffer(-0.6)):
-            # a garage always gets its drive; ortho drives it overlaps are merged into it (lateral union)
-            over = [o for o in drives if o["poly"].intersection(d["poly"]).area > 0.1 * d["poly"].area]
-            for o in over:
-                vv = [(np.asarray(c_) - d["p"]) @ d["t"] for c_ in np.asarray(o["poly"].exterior.coords)]
-                d["v0"], d["v1"] = max(min(d["v0"], min(vv)), -4.8), min(max(d["v1"], max(vv)), 4.8)
-                drives = [x for x in drives if x is not o]
-            d["poly"] = bh._rect(d["p"], d["n"], d["t"], 0.0, d["L"], d["v0"], d["v1"])
-            drives.append(d)
-        d = None
-        if getattr(b, "door", None):
-            st = bh.stoop(b.door)
-            stoops.append(st)
-            dp = Point(*b.door["p"])
-            near = [o for o in drives if o["poly"].distance(dp) < 14.0]
-            b._drive = min(near, key=lambda o: o["poly"].distance(dp)) if near else None
     side_u = areal(unary_union([s_["poly"] for s_ in strips])) if strips else Polygon()
+    built = unary_union([b.poly for b in buildings])
+    side_u = areal(side_u.difference(road).difference(skip_zone).difference(built))
+    allowed_poly = areal(mask.difference(road.buffer(bh.CURB_TOP_W)).difference(built).difference(skip_zone))
+    Xc, Zc = grid_xz(HALF, GRES)
+    allowed = contains_xy(allowed_poly, Xc, Zc)
+    hidden = lab_vis == -2
+    conc, pav = bh.trace_paving(gc.pale, gc.paver_px, hidden, allowed, HALF, GRES)
+    conc = areal(conc.difference(side_u.buffer(0.3)).buffer(-0.15, join_style=2).buffer(0.15, join_style=2))
+    pav = areal(pav.difference(side_u))
+    curb_zone = road.buffer(bh.CURB_TOP_W + 0.8)
+    walk_side = side_u.buffer(0.6)
+    drives, walks = [], []
+    for p in polys_of(conc):
+        if p.area >= 8.0 and (p.intersects(curb_zone) or p.intersects(walk_side)):
+            # driveways are poured slabs: straight edges (coarse simplify, light rounding)
+            q = p.buffer(-0.75, join_style=2).buffer(0.75, join_style=2)  # spurs off (shadow/lawn noise)
+            q = q.simplify(0.45).buffer(0.25, join_style=2).buffer(-0.25, join_style=2)
+            drives.append(q if not q.is_empty else p)
+        else:
+            walks.append(p)
+    # walks and pavers only where they connect to something (a wall, a drive, a sidewalk, each other):
+    # isolated red/pale blobs in back yards are dirt, mulch or play sets, not paving
+    anchor = unary_union([side_u, unary_union(drives) if drives else Polygon(), built.buffer(0.6)])
+    pieces = [p for p in walks + polys_of(pav)]
+    keep_ids, changed = {i for i, p in enumerate(pieces) if p.distance(anchor) < 0.5}, True
+    while changed:
+        changed = False
+        for i, p in enumerate(pieces):
+            if i not in keep_ids and any(p.distance(pieces[j]) < 0.5 for j in keep_ids):
+                keep_ids.add(i)
+                changed = True
+    pav = areal(unary_union([pieces[i] for i in keep_ids if i >= len(walks)])) if pieces else Polygon()
+    walks = [pieces[i] for i in sorted(keep_ids) if i < len(walks)]
+    hints, n_gar, n_door, bridges = {}, 0, 0, []
+    walk_u = unary_union(walks + [pav]) if (walks or not pav.is_empty) else Polygon()
     for b in buildings:
-        if getattr(b, "_drive", "x") == "x" or not getattr(b, "door", None):
+        if not b.primary or not mask.contains(b.poly.centroid) or skip_zone.intersects(b.poly):
             continue
-        ln = bh.front_walk(b.door, b._drive, side_u, road, lab_vis, HALF, GRES)
-        if ln is not None:
-            wp = ln.buffer(0.5, cap_style=2, join_style=2)
-            if wp.intersects(built.buffer(-0.5)) and b._drive is not None:
-                # the way to the drive is blocked by the house: straight out to the walk or curb
-                ln = bh.front_walk(b.door, None, side_u, road, lab_vis, HALF, GRES)
-                wp = ln.buffer(0.5, cap_style=2, join_style=2) if ln is not None else None
-            if wp is not None and not wp.intersects(built.buffer(-0.5)):
-                walks.append(wp)
-    drive_u = areal(unary_union([d["poly"] for d in drives])) if drives else Polygon()
-    stoop_u = areal(unary_union([s_["poly"] for s_ in stoops])) if stoops else Polygon()
-    walk_u = (
-        areal(unary_union(walks).difference(drive_u).difference(stoop_u).difference(built).difference(road))
-        if walks
+        wp = b.poly.buffer(-OVERHANG, join_style=2) if b.poly.area > 40 else b.poly
+        if wp.is_empty or wp.geom_type != "Polygon":
+            continue
+        h = {}
+        near = [d for d in drives if d.distance(wp) < 6.0]
+        if near:
+            dn = unary_union(near)
+            c = _wall_contact(wp, dn)
+            if c is not None:
+                h["garage_at"] = (c[0], float(np.clip(c[1] - 0.4, 2.4, 5.5)))
+            else:
+                d = min(near, key=lambda q: q.distance(wp))
+                pd, pw = nearest_points(d, wp)
+                if 0.3 < pd.distance(pw) < 6.0:
+                    br = LineString([pd, pw]).buffer(2.5, cap_style=2).intersection(allowed_poly.buffer(0.05))
+                    lawn, vis = _frac_lawn(lab_vis, br)
+                    if lawn < 0.35:  # bridge only across hidden or paved ortho, never across lawn
+                        bridges.append(br)
+                        h["garage_at"] = (np.array(pw.coords[0]), 4.9)
+        if "garage_at" in h:
+            n_gar += 1
+        if b.tag:
+            w = HERO_WORLD[b.tag.removeprefix("hero_")]
+            h["door_at"] = house_to_block(w["door"], w["position"], w["heading_deg"])
+        elif not walk_u.is_empty:
+            c = _wall_contact(wp, walk_u, min_len=0.6)
+            if c is not None:
+                h["door_at"] = c[0]
+                n_door += 1
+        hints[b.name] = h
+    drives_u = areal(unary_union(drives + bridges)) if (drives or bridges) else Polygon()
+    walks_c = areal(unary_union(walks).difference(drives_u)) if walks else Polygon()
+    summary["traced"] = {
+        "driveways": len(drives),
+        "driveway_bridges": len(bridges),
+        "concrete_walk_pieces": len(walks),
+        "paver_m2": round(pav.area),
+        "garage_doors_at_traced_drives": n_gar,
+        "front_doors_at_traced_walks": n_door,
+    }
+    log(f"  traced {summary['traced']}")
+    lots = unary_union([pc["poly"] for pc in parcels if pc["poly"].area < 2500]).intersection(mask)
+    return {
+        "strips": strips,
+        "side": side_u,
+        "drives": drives_u,
+        "walks": walks_c,
+        "pav": pav,
+        "hints": hints,
+        "lots": lots,
+        "allowed": allowed_poly,
+        "n_drives": len(drives),
+    }
+
+
+def hardscape(buildings, road, gc, ground, tr, images, mats, summary):
+    """Meshes for the traced paving plus fallbacks: a garage without a traced drive gets the straight
+    rectangle drive, a front door without paving at its stoop gets the heuristic walk, both only where
+    the ortho does not show lawn. Returns (hard union, curb cut zone, [(MeshBuf, material)])."""
+    lab_vis = gc.lab_visible
+    built = unary_union([b.poly.buffer(-0.1) for b in buildings])
+    side_u, drives_u, walks_c, pav = tr["side"], tr["drives"], tr["walks"], tr["pav"]
+    fb_drives, stoops, fb_walks = [], [], []
+    for b in buildings:
+        if b.name not in tr["hints"]:
+            continue
+        g = getattr(b, "garage", None)
+        if g is not None and drives_u.distance(Point(*g["p"])) > 1.5:
+            d = bh.driveway(g, road, lab_vis, HALF, GRES)
+            if d is not None:
+                rect = bh._rect(d["p"], d["n"], d["t"], 0.0, d["L"], -g["w"] / 2 - 0.15, g["w"] / 2 + 0.15)
+                lawn, _vis = _frac_lawn(lab_vis, rect)
+                if lawn < 0.3 and not rect.buffer(-0.6).intersects(built.difference(b.poly.buffer(0.5))):
+                    fb_drives.append(rect)
+    all_drives = areal(unary_union([drives_u, *fb_drives])) if fb_drives else drives_u
+    paved = unary_union([side_u, all_drives, walks_c, pav])
+    for b in buildings:
+        if b.name not in tr["hints"] or not getattr(b, "door", None):
+            continue
+        st = bh.stoop(b.door)
+        stoops.append(st["poly"])
+        front = Point(*(np.asarray(b.door["p"]) + np.asarray(b.door["n"]) * 1.4))
+        if paved.distance(front) < 1.2:
+            continue  # the ortho's paving already reaches the door
+        near = [p for p in polys_of(all_drives) if p.distance(front) < 14.0]
+        drv = None
+        if near:
+            pn = min(near, key=lambda p: p.distance(front))
+            drv = {"poly": pn}
+        ln = bh.front_walk(b.door, drv, side_u, road, lab_vis, HALF, GRES)
+        if ln is None:
+            continue
+        wp = ln.buffer(0.5, cap_style=2, join_style=2)
+        lawn, _vis = _frac_lawn(lab_vis, wp)
+        if lawn < 0.3 and not wp.intersects(built.buffer(-0.5)):
+            fb_walks.append(wp)
+    stoop_u = areal(unary_union(stoops)) if stoops else Polygon()
+    walk_fb = (
+        areal(
+            unary_union(fb_walks)
+            .difference(all_drives)
+            .difference(stoop_u)
+            .difference(built)
+            .difference(road)
+        )
+        if fb_walks
         else Polygon()
     )
-    side_u = areal(side_u.difference(drive_u).difference(built).difference(road).difference(skip_zone))
-    hard = areal(unary_union([side_u, drive_u, walk_u, stoop_u]))
+    walks_c = areal(walks_c.difference(stoop_u).difference(all_drives))
+    pav = areal(pav.difference(stoop_u).difference(all_drives))
+    # drives reach over the curb band to the road: that is the curb cut
+    mouth = all_drives.buffer(0.4).intersection(road.buffer(bh.CURB_TOP_W + 0.02)).difference(road)
+    drive_full = areal(unary_union([all_drives, mouth]).difference(road).difference(built))
+    cut = drive_full.buffer(0.05).intersection(road.buffer(bh.CURB_TOP_W + 0.1))
+    hard = areal(unary_union([side_u, drive_full, walks_c, pav, walk_fb, stoop_u]))
     summary["hardscape_m2"] = {
         "sidewalk": round(side_u.area),
-        "driveway": round(drive_u.area),
-        "front_walk": round(walk_u.area),
-        "stoop": round(stoop_u.area),
-        "driveways": len(drives),
-        "driveways_from_ortho": sum(1 for d in drives if d.get("source") == "ortho"),
-        "front_walks": len(walks),
+        "driveway_traced": round(drives_u.area),
+        "driveway_fallback": len(fb_drives),
+        "walk_traced_concrete": round(walks_c.area),
+        "walk_traced_pavers": round(pav.area),
+        "walk_fallback": len(fb_walks),
+        "stoops": len(stoops),
     }
     log(f"  hardscape {summary['hardscape_m2']}")
     (OUT / "hardscape.json").write_text(
@@ -989,8 +1121,9 @@ def hardscape(buildings, road, recs, gc, mask, parcels, ground, skip_zone, image
                 for k, g in (
                     ("road", road),
                     ("sidewalk", side_u),
-                    ("driveway", drive_u),
-                    ("walk", walk_u),
+                    ("driveway", drive_full),
+                    ("walk", unary_union([walks_c, walk_fb])),
+                    ("pavers", pav),
                     ("stoop", stoop_u),
                 )
             }
@@ -1002,35 +1135,53 @@ def hardscape(buildings, road, recs, gc, mask, parcels, ground, skip_zone, image
     def conc_tint(x, z):
         c = srgb_to_lin(gc.colour("concrete", x, z) / 255.0)
         lum = (c @ [0.2126, 0.7152, 0.0722])[:, None]
-        c = 0.35 * c + 0.65 * lum  # stains and shade, not the lawn's green cast
+        c = 0.35 * c + 0.65 * lum
         c = 0.5 * c + 0.5 * base * np.clip(lum / 0.35, 0.55, 1.15)
         return np.clip(c / GROUND_MEAN, 0, 1)
 
-    src = Image.open(PH / "brushed_concrete_diff_1k.jpg")
+    def paver_tint(x, z):
+        c = srgb_to_lin(gc.colour_raw(x, z) / 255.0)
+        return np.clip(c * 1.15 / GROUND_MEAN, 0, 1)
+
     neutral = neutral_texture(PH / "brushed_concrete_diff_1k.jpg", GROUND_MEAN, 0.9)
     images["conc_joint"] = bh.joint_texture(neutral)
     images["conc_grid"] = bh.joint_texture(neutral, grid=True)
-    del src
-    for k_, tex in (("hs_sidewalk", "conc_joint"), ("hs_drive", "conc_grid"), ("hs_plain", "g_concrete")):
+    images["pavers"] = neutral_texture(PH / "concrete_pavement_diff_1k.jpg", GROUND_MEAN, 1.1)
+    for k_, tex in (
+        ("hs_sidewalk", "conc_joint"),
+        ("hs_drive", "conc_grid"),
+        ("hs_plain", "g_concrete"),
+        ("hs_pavers", "pavers"),
+    ):
         mats[k_] = Material(k_, texture=tex, unlit=True, vertex_colors=True)
-    top_s, top_d, top_p, edge = MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf()
-    for s_ in strips:
+    top_s, top_d, top_p, top_b, edge = MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf(), MeshBuf()
+    for s_ in tr["strips"]:
         reg = areal(s_["poly"].intersection(side_u))
         if not reg.is_empty:
             bh.strip_mesh(
                 top_s, edge, reg, ground, bh.SIDEWALK_H, bh.line_uv(s_["line"], bh.JOINT_SIDEWALK), conc_tint
             )
-    for d in drives:
-        bh.driveway_mesh(top_d, edge, d, ground, conc_tint, CURB)
-    bh.strip_mesh(top_p, edge, walk_u, ground, bh.DRIVE_H, tiled_uv(2.0), conc_tint)
-    bh.strip_mesh(top_p, edge, stoop_u, ground, bh.STOOP_H, tiled_uv(2.0), conc_tint)
-    cut = (
-        areal(unary_union([d["poly"].intersection(road.buffer(0.8)) for d in drives]).buffer(-0.1))
-        if drives
-        else Polygon()
+    shapely.prepare(road)
+
+    def drive_h(x, z):
+        d = shapely.distance(road, shapely.points(np.asarray(x, float), np.asarray(z, float)))
+        ramp = np.clip(1.0 - (d - bh.CURB_TOP_W * 0) / 0.9, 0, 1)
+        return bh.DRIVE_H - ramp * (bh.DRIVE_H + CURB)
+
+    bh.strip_mesh(top_d, edge, drive_full, ground, drive_h, tiled_uv(bh.JOINT_DRIVE), conc_tint)
+    bh.strip_mesh(
+        top_p, edge, areal(unary_union([walks_c, walk_fb])), ground, bh.DRIVE_H, tiled_uv(2.0), conc_tint
     )
-    meshes = [(top_s, "hs_sidewalk"), (top_d, "hs_drive"), (top_p, "hs_plain"), (edge, "hs_plain")]
-    return hard, lots, cut, meshes
+    bh.strip_mesh(top_b, edge, pav, ground, bh.DRIVE_H, tiled_uv(1.6), paver_tint)
+    bh.strip_mesh(top_p, edge, stoop_u, ground, bh.STOOP_H, tiled_uv(2.0), conc_tint)
+    meshes = [
+        (top_s, "hs_sidewalk"),
+        (top_d, "hs_drive"),
+        (top_p, "hs_plain"),
+        (top_b, "hs_pavers"),
+        (edge, "hs_plain"),
+    ]
+    return hard, cut, meshes
 
 
 def hero_parcels(parcels) -> dict[str, Polygon]:
@@ -1043,7 +1194,7 @@ def hero_parcels(parcels) -> dict[str, Polygon]:
     return out
 
 
-def emit_building(b: Building, bufs, wall_tex_m, ground, road_lines, ortho) -> None:
+def emit_building(b: Building, bufs, wall_tex_m, ground, road_lines, ortho, hints=None) -> None:
     y0 = b.ground
     wall, col = b.wall_mat, np.r_[b.wall_col, 1.0]
     tex_m = wall_tex_m[wall]
@@ -1057,8 +1208,9 @@ def emit_building(b: Building, bufs, wall_tex_m, ground, road_lines, ortho) -> N
     wp = b.poly.buffer(-ov, join_style=2)
     e = y0 + b.eave
     rng = np.random.default_rng(zlib.crc32(b.name.encode()))
-    door_at = None
-    if b.tag:
+    hints = hints or {}
+    door_at, garage_at = hints.get("door_at"), hints.get("garage_at")
+    if b.tag and door_at is None:
         w = HERO_WORLD[b.tag.removeprefix("hero_")]
         door_at = house_to_block(w["door"], w["position"], w["heading_deg"])
     b.garage, b.door = None, None
@@ -1066,7 +1218,16 @@ def emit_building(b: Building, bufs, wall_tex_m, ground, road_lines, ortho) -> N
         outer_walls(bufs[wall], p, y0 - 0.3, e - FASCIA, tex_m, col)
         if b.primary and p.area > 30:
             res = place_openings(
-                bufs["facade"], p, y0, e - FASCIA, road_lines, ortho, b.eave > 4.5, rng, door_at=door_at
+                bufs["facade"],
+                p,
+                y0,
+                e - FASCIA,
+                road_lines,
+                ortho,
+                b.eave > 4.5,
+                rng,
+                door_at=door_at,
+                garage_at=garage_at,
             )
             b.garage = b.garage or res.get("garage")
             b.door = b.door or res.get("door")
@@ -1618,6 +1779,7 @@ class GroundClasses:
                 sc[k] = -1
                 lab[small] = sc.argmax(0)[small]
         self.pale = (lum > 112) & (sat < 0.2)
+        self.paver_px = (ch[..., 0] > 0.37) & (sat > 0.18) & (lum > 70) & (lum < 200)
         # under crowns and in deep shadow the photo cannot tell lawn from pavement: nearest visible class
         hidden = (lum < 38) if crown_fn is None else (crown_fn(Xc, Zc) | (lum < 38))
         crown = np.zeros_like(hidden) if crown_fn is None else crown_fn(Xc, Zc)
@@ -1724,6 +1886,14 @@ class GroundClasses:
             return Polygon()
         w = unary_union(out).difference(road).intersection(zone)
         return w.simplify(0.1).buffer(0)
+
+    def colour_raw(self, x, z) -> np.ndarray:
+        """The ortho colour itself (0.2 m smoothed), sRGB 0..255, for traced pavers."""
+        c = (np.asarray(x) + self.half) / GRES - 0.5
+        r = (np.asarray(z) + self.half) / GRES - 0.5
+        return np.stack(
+            [ndimage.map_coordinates(self.rgb[..., k], [r, c], order=1, mode="nearest") for k in range(3)], -1
+        )
 
     def colour(self, name: str, x, z) -> np.ndarray:
         """Low-frequency sRGB 0..255 colour of class `name` at (x, z)."""

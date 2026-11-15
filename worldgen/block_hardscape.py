@@ -153,7 +153,7 @@ def find_sidewalks(
     for (name, _wid, side), items in groups.items():
         # fit (setback, width) over the whole street side
         best = None
-        for i0 in range(2, 20):  # setback 0.4 .. 3.8 m (a band right at the curb is the gutter pan)
+        for i0 in range(0, 20):  # setback 0.0 .. 3.8 m
             for w in range(5, 9):  # width 1.0 .. 1.6 m
                 if i0 + w + 3 >= len(d):
                     continue
@@ -171,6 +171,27 @@ def find_sidewalks(
                     best = (score, i0, w)
         total = sum(int(it[5].sum()) for it in items)
         score, i0, w = best if best else (0, 0, 6)
+        # measure the real band: per station where the walk is clear, the run of concrete around i0
+        starts, widths = [], []
+        for _rec, _P, _N, C, V, inz in items:
+            f = ndimage.convolve1d(C, k, axis=0, mode="nearest") / np.maximum(
+                ndimage.convolve1d(V, k, axis=0, mode="nearest"), 1e-6
+            )
+            for row in f[inz]:
+                if row[i0 + w // 2] < 0.6:
+                    continue
+                a_ = i0 + w // 2
+                while a_ > 0 and row[a_ - 1] >= 0.5:
+                    a_ -= 1
+                b_ = i0 + w // 2
+                while b_ < len(row) - 1 and row[b_ + 1] >= 0.5:
+                    b_ += 1
+                if 4 <= b_ - a_ + 1 <= 10:
+                    starts.append(a_)
+                    widths.append(b_ - a_ + 1)
+        if len(widths) >= 10:
+            i0 = int(np.median(starts))
+            w = int(np.clip(round(np.median(widths)), 5, 9))
         setback, width = float(d[i0] - 0.1), float(w * 0.2)
         present_m = 0.0
         if total == 0 or score < 0.12 * total:
@@ -187,8 +208,35 @@ def find_sidewalks(
             )
             continue
         for rec, P, N, C, V, inz in items:
-            band_c = C[:, i0 : i0 + w].sum(1)
-            band_v = V[:, i0 : i0 + w].sum(1)
+            # setback per station (piecewise: blocks differ), smoothed over +-15 m
+            f = ndimage.convolve1d(C, k, axis=0, mode="nearest") / np.maximum(
+                ndimage.convolve1d(V, k, axis=0, mode="nearest"), 1e-6
+            )
+            sc = np.full((len(P), 20), -9.0)
+            for i in range(0, 20):
+                if i + w + 4 > f.shape[1]:
+                    break
+                fr = np.clip(f[:, max(0, i - 3) : i].mean(1) - 0.5, 0, None) if i > 0 else 0.0
+                sc[:, i] = f[:, i : i + w].mean(1) - f[:, i + w + 1 : i + w + 4].mean(1) - 0.5 * fr
+            bi = sc.argmax(1).astype(float)
+            bi[sc.max(1) < 0.3] = np.nan
+            if np.isfinite(bi).sum() >= 5:
+                med = np.array(
+                    [
+                        np.nanmedian(bi[max(0, j - 15) : j + 16])
+                        if np.isfinite(bi[max(0, j - 15) : j + 16]).any()
+                        else np.nan
+                        for j in range(len(bi))
+                    ]
+                )
+                ok_ = np.isfinite(med)
+                jj = np.arange(len(med))
+                i0s = np.round(np.interp(jj, jj[ok_], med[ok_])).astype(int)
+            else:
+                i0s = np.full(len(P), i0)
+            cols = i0s[:, None] + np.arange(w)[None, :]
+            band_c = np.take_along_axis(C, cols, axis=1).sum(1)
+            band_v = np.take_along_axis(V, cols, axis=1).sum(1)
             kk = np.ones(9)
             fc = ndimage.convolve1d(band_c, kk, mode="nearest")
             fv = ndimage.convolve1d(band_v, kk, mode="nearest")
@@ -196,8 +244,8 @@ def find_sidewalks(
             hidden = fv < 0.3 * 9 * w
             state = np.where(hidden, 0, np.where(frac > 0.45, 1, -1))  # 1 present, -1 absent, 0 unknown
             # stations whose band runs into another street (intersections): absent
-            o1 = rec["width"] / 2 + setback
-            mid = P + side * N * (o1 + width / 2)
+            o1 = rec["width"] / 2 + (d[i0s] - 0.1)
+            mid = P + side * N * (o1 + width / 2)[:, None]
             state[contains_xy(road, mid[:, 0], mid[:, 1])] = -1
             state[~inz] = -1
             # the median of a divided road: another carriageway within 12 m on this side
@@ -219,8 +267,8 @@ def find_sidewalks(
                 idx = np.flatnonzero(runs == j)
                 if len(idx) < 8:
                     continue
-                a = P[idx] + side * N[idx] * o1
-                b = P[idx] + side * N[idx] * (o1 + width)
+                a = P[idx] + side * N[idx] * o1[idx, None]
+                b = P[idx] + side * N[idx] * (o1[idx] + width)[:, None]
                 poly = Polygon(np.r_[a, b[::-1]]).buffer(0)
                 if poly.is_empty:
                     continue
@@ -336,7 +384,8 @@ def strip_mesh(top: MeshBuf, edge: MeshBuf, poly, ground, h: float, uvf, colorf,
         v, tri = triangulate(p)
         if not len(tri):
             continue
-        y = ground(v[:, 0], v[:, 1]) + h
+        hv = h(v[:, 0], v[:, 1]) if callable(h) else np.full(len(v), h)
+        y = ground(v[:, 0], v[:, 1]) + hv
         col = colorf(v[:, 0], v[:, 1])
         top.add(
             np.c_[v[:, 0], y, v[:, 1]],
@@ -346,11 +395,12 @@ def strip_mesh(top: MeshBuf, edge: MeshBuf, poly, ground, h: float, uvf, colorf,
             facing=np.array([0, 1, 0]),
             color=col,
         )
-        if h <= 0.005:
+        if not callable(h) and h <= 0.005:
             continue
         for ring in [p.exterior, *p.interiors]:
             xy = np.asarray(ring.coords)
             g = ground(xy[:, 0], xy[:, 1])
+            he = h(xy[:, 0], xy[:, 1]) if callable(h) else np.full(len(xy), h)
             ec = colorf(xy[:, 0], xy[:, 1]) * edge_shade
             for i in range(len(xy) - 1):
                 a, b = xy[i], xy[i + 1]
@@ -362,13 +412,15 @@ def strip_mesh(top: MeshBuf, edge: MeshBuf, poly, ground, h: float, uvf, colorf,
                 mid = (a + b) / 2
                 if p.contains(Point(mid + 0.02 * nrm[[0, 2]])):
                     nrm = -nrm
+                if max(he[i], he[i + 1]) <= 0.005:
+                    continue
                 P = [
                     [a[0], g[i] - 0.03, a[1]],
                     [b[0], g[i + 1] - 0.03, b[1]],
-                    [b[0], g[i + 1] + h, b[1]],
-                    [a[0], g[i] + h, a[1]],
+                    [b[0], g[i + 1] + he[i + 1], b[1]],
+                    [a[0], g[i] + he[i], a[1]],
                 ]
-                uv = np.array([[0, 0], [L, 0], [L, h], [0, h]])
+                uv = np.array([[0, 0], [L, 0], [L, he[i + 1]], [0, he[i]]])
                 cc = np.array([ec[i], ec[i + 1], ec[i + 1], ec[i]])
                 edge.quad(*P, uv=uv, color=cc, facing=nrm)
 
@@ -643,3 +695,111 @@ def driveways_from_ortho(
                     }
                 )
     return out
+
+
+# ---------------------------------------------------------------- curbs (clean offsets)
+
+CURB_TOP_H = 0.06  # curb top above the lawn level next to it
+CURB_TOP_W = 0.18
+
+
+def curb_mesh(face: MeshBuf, top: MeshBuf, road, ground, curb: float, skip=None, half: float = 160.0):
+    """Curb as clean offsets of the road outline: one continuous vertical face per ring (oriented so
+    the road is on its front side, UV running along the ring), a flat top band = road grown by
+    CURB_TOP_W minus the road (round joins: no shards at bends), and a short back face down to the
+    lawn. Curb cuts (skip) leave out face, top and back."""
+    from shapely.geometry.polygon import orient
+
+    lim = half - 0.05
+    band = road.buffer(CURB_TOP_W, join_style=1).difference(road)
+    if skip is not None and not skip.is_empty:
+        band = band.difference(skip)
+    band = band.intersection(box(-lim, -lim, lim, lim))
+    for p in polys_of(band):
+        p = p.segmentize(0.5)
+        v, tri = triangulate(p)
+        if len(tri):
+            y = ground(v[:, 0], v[:, 1]) + CURB_TOP_H
+            top.add(
+                np.c_[v[:, 0], y, v[:, 1]],
+                tri,
+                uv=v / 1.0,
+                normals=np.array([0, 1, 0]),
+                facing=np.array([0, 1, 0]),
+            )
+    for p in polys_of(orient(road, 1.0)):
+        for ring, toward_in in [(p.exterior, True)] + [(r, True) for r in p.interiors]:
+            xy = np.asarray(LineString(ring.coords).segmentize(0.5).coords)
+            g = ground(xy[:, 0], xy[:, 1])
+            s_ = np.r_[0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))]
+            for i in range(len(xy) - 1):
+                a, b = xy[i], xy[i + 1]
+                L = s_[i + 1] - s_[i]
+                if L < 1e-4 or max(abs(a).max(), abs(b).max()) >= lim:
+                    continue
+                mid = (a + b) / 2
+                if skip is not None and skip.contains(Point(mid)):
+                    continue
+                t = (b - a) / L
+                # orient(): exterior CCW, holes CW -> the road is always on the left of the ring
+                nrm = np.array([-t[1], 0, t[0]]) if toward_in else np.array([t[1], 0, -t[0]])
+                P = [
+                    [a[0], g[i] - curb - 0.02, a[1]],
+                    [b[0], g[i + 1] - curb - 0.02, b[1]],
+                    [b[0], g[i + 1] + CURB_TOP_H, b[1]],
+                    [a[0], g[i] + CURB_TOP_H, a[1]],
+                ]
+                u0, u1 = s_[i], s_[i + 1]
+                face.quad(
+                    *P,
+                    uv=np.array([[u0, 0], [u1, 0], [u1, curb + CURB_TOP_H], [u0, curb + CURB_TOP_H]]),
+                    facing=nrm,
+                )
+    # back face: from the curb top down to the lawn along the outer edge of the band
+    outer = road.buffer(CURB_TOP_W, join_style=1)
+    for p in polys_of(orient(outer, 1.0)):
+        for ring in [p.exterior, *p.interiors]:
+            xy = np.asarray(LineString(ring.coords).segmentize(0.5).coords)
+            g = ground(xy[:, 0], xy[:, 1])
+            for i in range(len(xy) - 1):
+                a, b = xy[i], xy[i + 1]
+                L = float(np.hypot(*(b - a)))
+                if L < 1e-4 or max(abs(a).max(), abs(b).max()) >= lim:
+                    continue
+                mid = (a + b) / 2
+                if skip is not None and skip.buffer(0.3).contains(Point(mid)):
+                    continue
+                t = (b - a) / L
+                nrm = np.array([t[1], 0, -t[0]])  # away from the road
+                P = [
+                    [a[0], g[i] - 0.02, a[1]],
+                    [b[0], g[i + 1] - 0.02, b[1]],
+                    [b[0], g[i + 1] + CURB_TOP_H, b[1]],
+                    [a[0], g[i] + CURB_TOP_H, a[1]],
+                ]
+                face.quad(*P, uv=np.array([[0, 0], [L, 0], [L, 0.08], [0, 0.08]]), facing=nrm)
+
+
+# ---------------------------------------------------------------- paving traced from the ortho
+
+
+def trace_paving(pale, pavers, hidden, allowed, half: float, res: float, min_area: float = 1.5):
+    """Vector paving where the ortho shows it: concrete (pale) and red-brick pavers, cleaned (0.4 m
+    opening/closing, blobs under min_area dropped), vectorised and smoothed (simplify + Chaikin) so
+    curved walks stay curved. Pixels hidden by crowns or deep shadow never count. Returns
+    (concrete, pavers) polygons."""
+    from worldgen.block_combined import raster_polys, smooth_polys
+
+    out = []
+    st = np.ones((3, 3), bool)
+    for m in (pavers, pale):
+        m = m & allowed & ~hidden
+        m = ndimage.binary_closing(ndimage.binary_opening(m, st, iterations=1), st, iterations=1)
+        lab_, n = ndimage.label(m)
+        if n:
+            sizes = ndimage.sum(np.ones_like(lab_), lab_, index=np.arange(1, n + 1)) * res * res
+            m = np.isin(lab_, np.flatnonzero(sizes >= min_area) + 1)
+        g = raster_polys(m.astype(np.int8), 1, half, res)
+        out.append(smooth_polys(g.simplify(0.12), min_area=min_area, iters=2))
+    pav, conc = out
+    return conc.difference(pav).buffer(0), pav

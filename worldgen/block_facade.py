@@ -131,6 +131,7 @@ def place_openings(
     two_story: bool,
     rng,
     door_at=None,
+    garage_at=None,
 ) -> dict:
     """Windows, front door and garage door on the outer walls of one building.
     Returns {"garage": {"p", "n", "w"}, "door": {"p", "n"}, "windows": n}: centre (x, z) on the wall,
@@ -160,9 +161,39 @@ def place_openings(
     if wall_h < 2.0:
         return {}
     res: dict = {}
-    # garage: best driveway match on a street-facing edge
+    # garage: where a traced driveway meets the house (garage_at = ((x, z), width)), else the best
+    # driveway match on a street-facing edge
     best = None
-    for e in edges:
+    if garage_at is not None and edges:
+        q, gw = np.asarray(garage_at[0], float), float(garage_at[1])
+
+        def _dg(e):
+            s_ = float(np.clip((q - e["a"]) @ e["t"], 0, e["L"]))
+            return float(np.linalg.norm(e["a"] + e["t"] * s_ - q))
+
+        e = min(edges, key=_dg)
+        gw = min(gw, e["L"] - 0.3)
+        if gw >= 2.2 and _dg(e) < 2.5:
+            s0 = float(np.clip((q - e["a"]) @ e["t"] - gw / 2, 0.15, e["L"] - gw - 0.15))
+            _quad_on_wall(
+                buf,
+                e["a"],
+                e["t"],
+                np.r_[e["n2"][0], 0, e["n2"][1]],
+                s0,
+                gw,
+                y_ground + 0.02,
+                min(2.2, wall_h - 0.25),
+                "garage",
+            )
+            e["busy"].append((s0 - 0.3, s0 + gw + 0.3))
+            res["garage"] = {"p": e["a"] + e["t"] * (s0 + gw / 2), "n": e["n2"], "w": gw}
+            edges_for_auto = []
+        else:
+            edges_for_auto = edges
+    else:
+        edges_for_auto = edges
+    for e in edges_for_auto:
         if e["front"] < 0.6 or e["L"] < 5.3:
             continue
         sc = driveway_score(ortho, e["a"], e["t"], e["n2"], e["L"])
