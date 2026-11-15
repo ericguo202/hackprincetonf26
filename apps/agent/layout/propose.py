@@ -29,7 +29,7 @@ from layout.geometry import (
     right_dir,
     rot_facing,
 )
-from layout.validate import WINDOW_MAX_H_M, object_conflicts
+from layout.validate import covers_window, object_conflicts
 
 RULES = ("against_wall", "corner", "center", "facing", "beside")
 DEFAULT_RULE = {  # catalog `placement` -> the rule to try first
@@ -87,8 +87,8 @@ def _wall_runs(geo: RoomGeometry, allow_windows: bool) -> list[WallSegment]:
 
 
 def _against_wall(geo: RoomGeometry, asset: dict) -> Iterator[dict]:
-    w, d, h = asset["size_m"]["w"], asset["size_m"]["d"], asset["size_m"]["h"]
-    for seg in _wall_runs(geo, allow_windows=h <= WINDOW_MAX_H_M):
+    w, d = asset["size_m"]["w"], asset["size_m"]["d"]
+    for seg in _wall_runs(geo, allow_windows=not covers_window(asset)):
         length = seg.length
         if w > length:
             continue
@@ -407,8 +407,6 @@ def _blocked(
 def _why_none(geo: RoomGeometry, asset: dict, rule: str) -> str:
     w = asset["size_m"]["w"]
     if rule == "against_wall":
-        longest = max(
-            (s.length for s in _wall_runs(geo, asset["size_m"]["h"] <= WINDOW_MAX_H_M)), default=0.0
-        )
+        longest = max((s.length for s in _wall_runs(geo, not covers_window(asset))), default=0.0)
         return f"no free wall segment fits {w:.2f} m (longest is {longest:.2f} m)"
     return f"no {rule} candidates in this room"

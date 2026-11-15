@@ -377,3 +377,40 @@ def test_wall_tv_counts_its_mount_height_against_windows(room, plan):
     assert "blocks_opening" in types(validate_layout(plan, room, assets))
     plan["objects"][-1] = obj("o3", "tv_low", 0.05, 3.2, rot=90)
     assert "blocks_opening" not in types(validate_layout(plan, room, assets))
+
+
+CRIB = {  # furniture/v3 crib_fm_02 (compact): 0.97 m tall, under WINDOW_MAX_H_M
+    "id": "crib_fm_02",
+    "name": "Compact crib on casters",
+    "category": "crib",
+    "size_m": {"w": 0.97, "d": 0.708, "h": 0.967},
+    "placement": "wall",
+    "clearance_m": {"front": 0.6},
+}
+
+
+def test_crib_never_under_a_window_however_low(room, plan):
+    assets = {**ASSETS, "crib_fm_02": CRIB}
+    plan["objects"].append(obj("o3", "crib_fm_02", 0.38, 3.2, rot=90))
+    result = validate_layout(plan, room, assets)
+    assert any(c["type"] == "blocks_opening" and "window" in c["detail"] for c in result["conflicts"])
+    # same height, another category: allowed under the window
+    plan["objects"][-1] = obj("o3", "side", 0.27, 3.2, rot=90)
+    assert validate_layout(plan, room, ASSETS)["conflicts"] == []
+
+
+def test_crib_poses_skip_window_walls(room):
+    geo = room_geometry(room)
+    out = propose_poses(geo, CRIB, "against_wall")
+    assert out["poses"]
+    for p in out["poses"]:
+        o = {"instance_id": "o9", "asset_id": "crib_fm_02", "reason": "t", **p}
+        plan = {
+            "plan_id": "t",
+            "listing_id": "x",
+            "room_id": room["id"],
+            "status": "draft",
+            "objects": [o],
+            "conflicts": [],
+        }
+        assert validate_layout(plan, room, {"crib_fm_02": CRIB})["conflicts"] == []
