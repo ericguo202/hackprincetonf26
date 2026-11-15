@@ -147,7 +147,6 @@ describe("synthetic box with two closed doors", () => {
           [10, 5],
           [0, 5],
         ],
-        center: [5, 2.5],
         area_m2: 50,
         openings: [
           {

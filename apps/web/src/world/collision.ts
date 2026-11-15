@@ -6,11 +6,16 @@ import { Matrix4, Mesh, type Object3D } from "three";
 
 export type Trimesh = { vertices: Float32Array; indices: Uint32Array };
 
+export type ExtractTrimeshOptions = {
+  skipNodes?: readonly string[];
+};
+
 /**
  * Every mesh under `root`, with its transform relative to `root` baked in,
  * merged into one vertex/index buffer pair.
+ * Optionally skips nodes whose names match skipNodes.
  */
-export function extractTrimesh(root: Object3D): Trimesh {
+export function extractTrimesh(root: Object3D, options?: ExtractTrimeshOptions): Trimesh {
   root.updateMatrixWorld(true);
   const toRoot = new Matrix4().copy(root.matrixWorld).invert();
 
@@ -18,7 +23,10 @@ export function extractTrimesh(root: Object3D): Trimesh {
   const idx: number[] = [];
   const m = new Matrix4();
 
+  const skipSet = options?.skipNodes ? new Set(options.skipNodes) : null;
+
   root.traverse((o) => {
+    if (skipSet?.has(o.name)) return;
     if (!(o instanceof Mesh)) return;
     const pos = o.geometry?.attributes?.position;
     if (!pos) return;

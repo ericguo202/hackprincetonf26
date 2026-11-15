@@ -66,9 +66,26 @@ type Props = {
    * Pass a stable (module-level) function.
    */
   prepare?: (scene: Object3D) => void;
+  /**
+   * Collision kind only: node names to skip when extracting trimesh.
+   * HouseScene passes ["walls"] to replace solid walls with split openable doors.
+   */
+  skipNodes?: readonly string[];
+  /**
+   * Collision kind only: callback with the loaded collision scene.
+   */
+  onScene?: (scene: Object3D) => void;
 };
 
-export function GlbOrPlaceholder({ kind, url, label, placeholder, prepare }: Props) {
+export function GlbOrPlaceholder({
+  kind,
+  url,
+  label,
+  placeholder,
+  prepare,
+  skipNodes,
+  onScene,
+}: Props) {
   // Probe first (meshProbe.ts): a missing file never reaches the loader, so it
   // never throws. The boundary below is only for files that exist but are bad.
   const mesh = useMeshState(url, label);
@@ -79,7 +96,12 @@ export function GlbOrPlaceholder({ kind, url, label, placeholder, prepare }: Pro
         {kind === "render" ? (
           <RenderGlb url={url} prepare={prepare} />
         ) : (
-          <CollisionGlb url={url} fallback={placeholder} />
+          <CollisionGlb
+            url={url}
+            fallback={placeholder}
+            skipNodes={skipNodes}
+            onScene={onScene}
+          />
         )}
       </Suspense>
     </LoadBoundary>
@@ -101,10 +123,23 @@ function RenderGlb({ url, prepare }: { url: string; prepare?: (scene: Object3D) 
   return <primitive object={scene} />;
 }
 
-function CollisionGlb({ url, fallback }: { url: string; fallback: ReactNode }) {
+function CollisionGlb({
+  url,
+  fallback,
+  skipNodes,
+  onScene,
+}: {
+  url: string;
+  fallback: ReactNode;
+  skipNodes?: readonly string[];
+  onScene?: (scene: Object3D) => void;
+}) {
   const { scene } = usePackGLTF(url);
-  const mesh = useMemo(() => extractTrimesh(scene), [scene]);
+  const mesh = useMemo(() => extractTrimesh(scene, { skipNodes }), [scene, skipNodes]);
   useUnloadOnUnmount(url);
+  useEffect(() => {
+    onScene?.(scene);
+  }, [scene, onScene]);
   if (mesh.indices.length === 0) {
     warnOnce(`empty:${url}`, `[pack] ${url} has no triangles; using placeholder collision`);
     return <>{fallback}</>;

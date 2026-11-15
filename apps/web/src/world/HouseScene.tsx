@@ -4,21 +4,24 @@
 // room, walls along each polygon edge with gaps for doors, and the front door
 // lit so you can find the way out.
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { CuboidCollider, RigidBody, TrimeshCollider } from "@react-three/rapier";
-import { Shape } from "three";
+import { Shape, type Object3D } from "three";
 
 import type { Point2, Room } from "../contracts.gen";
 import { FurnitureLayer } from "./FurnitureLayer";
 import { disableToneMapping } from "./interiorMaterials";
 import { ZONE_COLLIDER } from "./collisionGroups";
+import { extractWallBoxes, splitClosedDoors } from "./doorSplit";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
+import { HouseDoors } from "./HouseDoors";
 import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, type Door, type LoadedPack } from "./pack";
 import { ceilingTrimesh, segmentBox, wallSegments } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
 
 const WALL_T = 0.12;
 const SLAB_MARGIN_M = 8;
+const SKIP_WALLS = ["walls"] as const;
 /** Invisible fence around the yard edge, so nobody walks off the world. */
 const FENCE_H = 2;
 const FENCE_T = 0.2;
@@ -41,6 +44,17 @@ export function HouseScene({ pack, listingId }: Props) {
   const rooms = useMemo(() => pack.roomsByHouse[listingId] ?? [], [pack, listingId]);
   const door = pack.doors.find((d) => d.listing_id === listingId) ?? null;
   const base = pack.base;
+
+  const doorLocal = door?.local;
+  const [loadedCollision, setLoadedCollision] = useState<{ id: string; scene: Object3D } | null>(null);
+  const collisionScene = loadedCollision?.id === listingId ? loadedCollision.scene : null;
+
+  const split = useMemo(() => {
+    if (!collisionScene || !listingId) return null;
+    const boxes = extractWallBoxes(collisionScene);
+    return splitClosedDoors(boxes, rooms, doorLocal);
+  }, [collisionScene, listingId, rooms, doorLocal]);
+
   if (!house) return null;
 
   return (
@@ -57,8 +71,31 @@ export function HouseScene({ pack, listingId }: Props) {
         kind="collision"
         url={base && packUrl(base, house.collision)}
         label={house.collision}
+        skipNodes={SKIP_WALLS}
+        onScene={(scene) => setLoadedCollision({ id: listingId, scene })}
         placeholder={<PlaceholderHouseCollision rooms={rooms} door={door} />}
       />
+      {split ? (
+        <RigidBody type="fixed" colliders={false}>
+          {split.boxes.map((b, i) => {
+            const hx = (b.maxX - b.minX) / 2;
+            const hy = (b.maxY - b.minY) / 2;
+            const hz = (b.maxZ - b.minZ) / 2;
+            const cx = (b.minX + b.maxX) / 2;
+            const cy = (b.minY + b.maxY) / 2;
+            const cz = (b.minZ + b.maxZ) / 2;
+            return (
+              <CuboidCollider
+                key={`wb-${listingId}-${i}`}
+                collisionGroups={ZONE_COLLIDER}
+                args={[hx, hy, hz]}
+                position={[cx, cy, cz]}
+              />
+            );
+          })}
+        </RigidBody>
+      ) : null}
+      {split ? <HouseDoors doors={split.doors} /> : null}
       <HouseGround rooms={rooms} door={door} />
       <HouseCeilings rooms={rooms} />
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}

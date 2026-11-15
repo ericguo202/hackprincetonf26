@@ -16,6 +16,7 @@ import { Sky } from "@react-three/drei";
 
 import { useStore } from "../store";
 import { Crosshair } from "../player/Crosshair";
+import { DoorPrompt } from "../player/DoorPrompt";
 import { WeaponBar } from "../player/WeaponBar";
 import { Player } from "../player/Player";
 import { BlockScene } from "./BlockScene";
@@ -78,6 +79,7 @@ export function World() {
         </Physics>
       </Canvas>
       <Crosshair />
+      <DoorPrompt />
       <WeaponBar />
       <PackBadge status={pack} />
     </>
