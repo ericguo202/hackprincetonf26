@@ -19,3 +19,10 @@ export const START_ROOM: string | undefined = import.meta.env.DEV
  * toggles a local explore/foam override (DevModeToggle.tsx, player/foamMode.ts).
  */
 export const DEV_MODE_TOGGLE_ON: boolean = import.meta.env.DEV && import.meta.env.VITE_SOLO === "1";
+
+/**
+ * Dev build with VITE_SOLO=1: B toggles a local focus override to hou_236595179
+ * (DevFocusToggle.tsx, FocusBeacon.tsx).
+ */
+export const DEV_FOCUS_TOGGLE_ON: boolean = import.meta.env.DEV && import.meta.env.VITE_SOLO === "1";
+

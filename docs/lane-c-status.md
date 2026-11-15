@@ -532,3 +532,36 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - The prompt text, including the id fallback.
   - Precedence: the pure table; a real interior door away from the front door; a synthetic interior door beside the front door (nearer, farther, tie). 7014's nearest real interior door is 2.7 m from its front door, so the two never compete there.
 - **Not seen in a browser:** an interior door and a front door both in range (they never compete on 7014), and 6915's front door.
+
+## 26. Focus beacon and door approach
+
+**Not seen in a browser.** Checked by unit tests and the production-build grep (including `DevFocusToggle`).
+
+- **Rebased on main (after the door marker and leave fixes):**
+  - `doorApproach()` is unused. Lane D's `world/focusTeleport.ts` (`focusArrival`, called from `World.tsx`) does the focus teleport, landing on the nearest sidewalk spawn. `doorApproach.ts` and its tests stay only as a reference; nothing imports it.
+  - The beacon stands at the block door's **marker** (`beaconPoint(door) = door.marker`, 4.2 m out from the door point, `DOOR_MARKER_M`). That's in front of the real house facade, under the address label. It used to stand at `exitTo`, which was 1.2 m out on this branch's base. On main, `exitTo` is 7 m out and the door point is inside the pack v3 house mesh. `leaveTo` was rejected because on 7014 it's the sidewalk spawn 13.6 m away.
+  - The "Your match" label is at 3.6 m (`BEACON_LABEL_Y_M`), above the 2.7 m address label, so the two don't overlap.
+  - A new test checks, on real v3 data, that the beacon is at the marker, 4.2 m out, and not at `exitTo` (7014 and 6915).
+  - Fixed `doorApproach.test.ts`'s `Point2` import, which broke `tsc -b`.
+
+- **Why:** When the agent concierge focuses a house (`focus_listing`, setting `store.focus[me.id]`), the focused house needs a visible beacon on the block, and the teleport landing needs to place the player 1.5 m outside the front door facing it.
+- **Door approach (`world/doorApproach.ts`, pure):**
+  - `doorApproach(door, rooms)`: calculates the teleport target point in the block frame.
+  - Takes `door.block` and steps outward along `doorOutwardBlock(door, rooms)` by 1.5 m (`APPROACH_DIST_M`).
+  - Height: body centre y from `bodyCentreAt(door.block[1])` (`world/landing.ts`).
+  - Yaw: faces back toward `door.block` (`yawToward(dx, dz) = Math.atan2(-dx, -dz)`), matching Three.js Euler "YXZ" / `me.yaw` convention (0 faces -Z).
+  - Tested (`doorApproach.test.ts`, 8 tests): for real 7014 (`hou_236595179`) and 6915 (`hou_237901269`) using pack v3. Distance is 1.5 m, point is outside every room polygon converted to the block frame, yaw points at the door to within 1°, y matches `bodyCentreAt`.
+- **Focus beacon (`world/FocusBeacon.tsx`, `focusBeaconLogic.ts`):**
+  - Mounted next to `RemotePlayers` in `world/World.tsx`.
+  - Reads `store.focus[store.me.id]` (read-only). If it names a house in `pack.doors` and I'm on the block (`me.zone === "block"`):
+    - Translucent column of light at `door.marker`: radius 0.8 m, 30 m tall, additive blending (`AdditiveBlending`), `depthWrite: false`, DoubleSide, gently pulsing opacity in `useFrame` with priority 0 (`0.35 + 0.15 * Math.sin(t * 2.5)`).
+    - `WorldLabel` with "Your match", at 3.6 m.
+  - Draws nothing when focus is unset or when inside a house.
+  - No colliders or collision groups.
+  - Tested (`FocusBeacon.test.ts`, 8 tests): constants, effectiveFocus resolution, useDevFocusOverride toggle, door matching.
+- **Dev only (B-toggle):**
+  - Pressing `B` flips a local focus override to `"hou_236595179"` (`world/DevFocusToggle.tsx`, `world/devFocus.ts`).
+  - Gated by `DEV_FOCUS_TOGGLE_ON = import.meta.env.DEV && import.meta.env.VITE_SOLO === "1"` (`world/devFlags.ts`), wired like `DevModeToggle.tsx`.
+  - Production build tree-shaking verified: `DevFocusToggle`, `DevModeToggle`, `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM`, and `__laneC` are all 0 occurrences in `/tmp/x/assets/*.js`.
+- **Not seen in a browser:** The visual appearance of the 30 m column of light, the opacity pulse feel, and the "Your match" label placement on the real block.
+
