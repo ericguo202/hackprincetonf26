@@ -678,6 +678,7 @@ def build(
     holdout: tuple[str, ...] = (),
     fit_boxes: bool = True,
     exterior: bool = True,
+    backdrop: str | None = None,
 ) -> dict:
     block = load_block(block_id)
     house = next((h for h in block["houses"] if h["listing_id"] == listing_id), None)
@@ -776,6 +777,9 @@ def build(
                     splat=splat.load(out, model_id, house_outline.centroid.coords[0])
                     if house.get("splat", True)
                     else None,
+                    # What stands past the lot when there is a splat (exterior.add_exterior): "far" unless
+                    # the house in blocks/<block>.json or --backdrop says otherwise.
+                    backdrop=backdrop or house.get("backdrop", "far"),
                 )
             )
 
@@ -847,6 +851,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--bake-res", type=float, default=256.0, help="texels per metre on walls/floors")
     p.add_argument("--no-exterior", action="store_true", help="interior only (no yard, facades, backdrop)")
     p.add_argument(
+        "--backdrop",
+        choices=("far", "panels", "photo"),
+        help="with a drone splat: far = geometry behind the fences (default), panels = picture walls just "
+        "outside the lot (an experiment), photo = the photo disk and dome alone",
+    )
+    p.add_argument(
         "--texture-size",
         type=int,
         default=2048,
@@ -885,6 +895,7 @@ def main(argv: list[str] | None = None) -> int:
                 tuple(x for x in args.holdout.split(",") if x),
                 not args.no_boxes,
                 not args.no_exterior,
+                args.backdrop,
             ),
             indent=1,
         )

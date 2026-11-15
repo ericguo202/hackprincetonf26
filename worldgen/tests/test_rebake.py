@@ -521,3 +521,31 @@ def test_the_half_wall_between_a_counter_and_its_ledge_is_filled():
     assert ring[:, 1].max() == pytest.approx(2.07) and ring[:, 1].min() == pytest.approx(1.95)
     cabinet = rb.Box(o, u, n, 1.0, 3.0, 0.0, 0.9, 0.6)  # attached to a wall: the wall is already there
     assert rb.ledge_risers(scan, [cabinet, ledge], [ledge]) == []
+
+
+def test_a_pillar_with_one_slanted_side_is_measured_and_built():
+    import trimesh
+
+    # A 0.8 m square pillar whose corner at (0, 0.8) is cut off 0.45 m along both sides.
+    cut = Polygon([(0, 0), (0.8, 0), (0.8, 0.8), (0.45, 0.8), (0, 0.35)])
+    m = trimesh.creation.extrude_polygon(cut, 2.4)
+    scan = soup_scan(np.asarray(m.triangles))
+    o, u, n = np.zeros(3), np.array([1.0, 0, 0]), np.array([0, 1.0, 0])
+    pillar = rb.Box(o, u, n, 0.0, 0.8, 0.0, 2.4, 0.8, attached=False, to_ceiling=True)
+    assert rb.chamfer_boxes(scan, [pillar]) == 1
+    ((corner, cs, cd),) = pillar.chamfers
+    assert corner == 3 and abs(cs - 0.45) < 0.03 and abs(cd - 0.45) < 0.03  # the front corner at s0
+    assert abs(pillar.footprint().area - cut.area) < 0.03
+    inside = pillar.contains(np.array([[0.05, 0.75, 1.0], [0.4, 0.4, 1.0], [0.3, 0.55, 1.0]]))
+    assert inside.tolist() == [False, True, True]
+    planes = rb.box_planes([pillar])
+    slanted = [p for p in planes if abs(p.n[0]) > 0.5 and abs(p.n[1]) > 0.5]
+    assert len(slanted) == 1 and abs(slanted[0].w - 0.45 * 2**0.5) < 0.05
+    assert slanted[0].n @ np.array([-1.0, 1.0, 0]) > 0  # it faces out of the cut corner
+    front = next(p for p in planes if p.n @ n > 0.9)
+    assert abs(front.w - 0.35) < 0.03  # the front is what is left beside the cut
+    assert len(pillar.triangles()) == 2 * 5 + 2 * 3
+    # A square pillar has no such corner.
+    square = trimesh.creation.extrude_polygon(Polygon([(0, 0), (0.8, 0), (0.8, 0.8), (0, 0.8)]), 2.4)
+    plain = rb.Box(o, u, n, 0.0, 0.8, 0.0, 2.4, 0.8, attached=False)
+    assert rb.chamfer_boxes(soup_scan(np.asarray(square.triangles)), [plain]) == 0 and not plain.chamfers

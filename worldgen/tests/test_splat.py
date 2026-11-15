@@ -184,3 +184,44 @@ def test_fence_and_shrub_are_not_railings():
         if railings.rail_plane(join(fence, shrub), r)
     ]
     assert built == []
+
+
+def test_a_wall_no_camera_saw_is_one_picture_even_where_the_splat_is_thin():
+    from worldgen import rebake as rb
+
+    yz = np.stack(np.meshgrid(np.arange(0.02, 4, 0.04), np.arange(0.02, 2.5, 0.04)), -1).reshape(-1, 2)
+    wall = disks(np.c_[yz[:, 0], np.zeros(len(yz)), yz[:, 1]], (0.6, 0.3, 0.2), normal=(0, 1, 0))
+    most = sp.Splat(*(getattr(wall, f)[wall.xyz[:, 0] < 2.6] for f in ("xyz", "cov", "rgb", "alpha", "size")))
+    p = rb.Plane(
+        "wall", np.zeros(3), np.array([1.0, 0, 0]), np.array([0, 0, 1.0]), np.array([0, -1.0, 0]), 4.0, 2.5,
+        box(0, 0, 4, 2.5),
+    )  # fmt: skip
+    res, W, H = 32.0, 128, 80
+    mask = np.ones((H, W), bool)
+    fill = sp.WallFill(most)  # 65% covered: used, and the uncovered end continues the wall's colour
+    got, ok = fill(p, res, W, H, mask, np.zeros((H * W, 3)), np.zeros(H * W, bool))
+    assert ok.all() and fill.walls[-1]["used"]
+    far_end = got.reshape(H, W, 3)[:, 110:]
+    assert np.abs(far_end.mean((0, 1)) - np.array([153, 76.5, 51])).max() < 12
+    # A wall the cameras mostly saw only gets the texels the splat really covers: nothing is invented.
+    valid = np.ones((H, W), bool)
+    valid[:, :48] = False  # the cameras missed the left 1.5 m, which the splat has
+    _, ok = sp.WallFill(most)(p, res, W, H, mask, np.full((H * W, 3), 150.0), valid.ravel())
+    ok = ok.reshape(H, W)
+    assert ok[:, :48].mean() > 0.9 and not ok[:, 90:].any()
+
+
+def test_ground_fill_matches_the_photos_and_skips_what_is_much_darker():
+    xy = np.stack(np.meshgrid(np.arange(0.02, 8, 0.04), np.arange(0.02, 8, 0.04)), -1).reshape(-1, 2)
+    rgb = np.tile(np.array([0.3, 0.4, 0.2], np.float32), (len(xy), 1))
+    dark = np.hypot(xy[:, 0] - 4, xy[:, 1] - 4) < 0.5  # under a shrub: nearly black Gaussians
+    rgb[dark] = 0.03
+    grass = disks(np.c_[xy, np.zeros(len(xy))], rgb)
+    leaves = disks(np.c_[xy[::7], np.full(len(xy[::7]), 3.0)], (0, 0, 1))  # a crown above: not in the slab
+    fill = sp.GroundFill(join(grass, leaves), FlatGround.height, box(0, 0, 8, 8))
+    pts = np.array([[2.0, 2.0, 0.0], [4.0, 4.0, 0.0], [6.0, 5.0, 0.0]])
+    pts = np.concatenate([pts, np.c_[np.random.default_rng(0).uniform(0.5, 3, (3000, 2)), np.zeros(3000)]])
+    photo = np.tile(np.array([114.75, 153.0, 76.5]), (len(pts), 1))  # the photos are 1.5 times brighter
+    got, ok = fill(pts, photo, np.ones(len(pts), bool))
+    assert ok[0] and not ok[1] and ok[2]
+    assert np.abs(got[0] - photo[0]).max() < 6 and np.abs(got[2] - photo[2]).max() < 6

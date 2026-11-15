@@ -43,7 +43,14 @@ EDGE_SMOOTH = 0.35  # ... notches and tongues of the outline narrower than twice
 EDGE_STRAIGHT = 0.22  # ... and its cell staircase is straightened by this much (Douglas-Peucker), m
 EDGE_REACH = 1.5  # ... and no further than this outside the walls (and Vexcel's outline), m
 WALL_BAND = 0.25  # plane_image: Gaussians within this of the plane, m
-WALL_MIN = 0.7  # WallFill: least share of a wall's unseen texels the splat must cover to be used on it
+WALL_MIN = 0.5  # WallFill: least share of a wall's unseen texels the splat must cover to be used on it
+WALL_WHOLE = 0.5  # ... a wall the cameras missed more than this of is the splat's alone (see WallFill)
+WALL_FEATHER = 0.08  # ... the splat's picture fades into the fill over this at the edge of its cover, m
+WALL_THIN = 0.2  # ... and counts, on such a wall, from this alpha up
+GROUND_DARK = 0.45  # GroundFill: a texel darker than this share of the ground around it (1.5 m) is not ground
+GROUND_BAND = 0.2  # GroundFill: Gaussians within this of the yard's heightfield, m
+GROUND_RES = 48.0  # ... texels per metre of its top view (the Gaussians are about 3 cm)
+GROUND_GAIN = (0.6, 1.6)  # ... its colours are scaled per channel to the ground photos by at most this
 SEEN = 0.6  # alpha above which a flattened texel counts as covered
 ROOF_SEEN = 0.3  # ... on the roof: the slab holds nothing but roof, so a thin cover is still its colour
 
@@ -251,8 +258,12 @@ class WallFill:
     """rebake.bake_plane's `extra` source: the splat's view of a wall, for the texels no ground camera saw.
 
     Covered = alpha over SEEN after dropping specks (opened by 3 texels). A wall is filled only when the
-    splat covers at least WALL_MIN of what the cameras missed on it: less is a wall the drone saw through
-    leaves or in deep shade, dark smears that look worse than the plain colour the wall gets otherwise. The
+    splat covers at least WALL_MIN of what the cameras missed on it: less is a wall the drone hardly saw.
+    A wall the cameras missed more than WALL_WHOLE of is the splat's alone: where the splat has no cover
+    either (behind a branch, in deep shade) its own colours are continued smoothly, faded in over
+    WALL_FEATHER, so the wall is one picture (siding, windows, a gable) and not patches of picture on a
+    plain colour, which read as dark smears. On a wall the cameras mostly saw, only covered texels are given
+    and the rest is left to the photos around them. The
     splat's exposure is matched to the photos on the same wall: one gain for all channels, the ratio of the
     median brightness of texels both have (at least 500), limited to `gain`; a wall with too few such texels
     takes the median gain of the walls before it. `filled` collects (wall area, share filled) and `walls`
@@ -303,7 +314,83 @@ class WallFill:
             )
             self.gains.append(k)
         self.filled.append((p.w * p.h, float((ok & ~valid).sum()) / max(1, mask.sum())))
+        if float(missed.mean()) > WALL_WHOLE:
+            ok2 = np.zeros(mask.shape, bool)
+            ok2[mask] = ok
+            smooth = _spread(img, ok2)
+            # A thin cover still has the wall's colour (the image is not premultiplied): it counts from
+            # WALL_THIN up, in full from SEEN, softened over WALL_FEATHER so no hard edge shows.
+            w = np.clip((al - WALL_THIN) / (SEEN - WALL_THIN), 0, 1)
+            w = ndimage.gaussian_filter(w, max(1.0, WALL_FEATHER * res))[..., None]
+            mine, ok = (img * w + smooth * (1 - w))[mask], np.ones(len(mine), bool)
         return np.clip(mine * k, 0, 255), ok
+
+
+class GroundFill:
+    """The yard as the drone saw it from straight above (the Gaussians within GROUND_BAND of the scanned
+    ground, so a tree over the grass is not in it), for ground texels the cameras did not see or saw only
+    from far away at a grazing angle (a strip between the house and a fence, the grass 10 m from the nearest
+    scan position: streaks). `fill(xyz, rgb, valid)` -> (colours, covered): scaled per channel to the ground
+    photos, the median ratio over texels both have, within GROUND_GAIN; the first patches with at least 2000
+    such texels set the gain (their median), and it is then the same for the whole yard."""
+
+    def __init__(self, splat: Splat, height: Height, region: Polygon):
+        x0, y0, x1, y1 = region.buffer(0.5).bounds
+        gz = height(splat.xyz[:, 0], splat.xyz[:, 1])
+        x, y = splat.xyz[:, 0], splat.xyz[:, 1]
+        near = (np.abs(splat.xyz[:, 2] - gz) < GROUND_BAND) & (x > x0) & (x < x1) & (y > y0) & (y < y1)
+        top = float(np.nanmax(gz[near])) + 1.0 if near.any() else 10.0
+        down = (0, 0, -1)
+        self.rgb, al, _ = splat.flatten(
+            (x0, y1, top), (1, 0, 0), (0, -1, 0), x1 - x0, y1 - y0, GROUND_RES, down, 0.0, 1e3, keep=near
+        )
+        # Under a shrub or a low branch the slab holds dark half-transparent Gaussians, not grass: a texel
+        # much darker than the ground around it is not taken (a shadow is about 0.6 of sunlit grass).
+        ok = al > SEEN
+        luma = self.rgb.mean(2)
+        sigma = 1.5 * GROUND_RES
+        around = ndimage.gaussian_filter(luma * ok, sigma) / np.maximum(
+            ndimage.gaussian_filter(ok * 1.0, sigma), 0.05
+        )
+        self.ok = ndimage.binary_opening(ok & (luma > GROUND_DARK * around), iterations=2)
+        self.x0, self.y1 = x0, y1
+        self.gains: list[np.ndarray] = []
+        self.covered = float(self.ok.mean())
+
+    def __call__(self, xyz: np.ndarray, rgb: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        H, W = self.ok.shape
+        i = np.clip(((xyz[:, 0] - self.x0) * GROUND_RES).astype(int), 0, W - 1)
+        j = np.clip(((self.y1 - xyz[:, 1]) * GROUND_RES).astype(int), 0, H - 1)
+        air, ok = self.rgb[j, i], self.ok[j, i]
+        both = ok & valid
+        if both.sum() >= 2000 and len(self.gains) < 5:
+            k = np.median(rgb[both], axis=0) / np.maximum(np.median(air[both], axis=0), 1.0)
+            self.gains.append(np.clip(k, *GROUND_GAIN))
+        gain = np.median(self.gains, axis=0) if self.gains else np.ones(3)
+        return np.clip(air * gain, 0, 255), ok
+
+
+def _spread(img: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """`img` with the texels outside `valid` replaced by a smooth blend of the valid ones around them
+    (normalised convolution, the finest scale that reaches)."""
+    out = img.astype(float).copy()
+    if valid.all() or not valid.any():
+        return out
+    m = valid.astype(float)
+    src = out * m[..., None]
+    todo = ~valid
+    for sigma in (3, 8, 20, 50, 120, 300):
+        wsum = ndimage.gaussian_filter(m, sigma)
+        got = todo & (wsum > 0.05)
+        if got.any():
+            csum = np.stack([ndimage.gaussian_filter(src[..., c], sigma) for c in range(3)], -1)
+            out[got] = csum[got] / wsum[got, None]
+            todo &= ~got
+        if not todo.any():
+            break
+    if todo.any():
+        out[todo] = img[valid].mean(0)
+    return out
 
 
 def load(out: Path, model_id: str, centre: tuple[float, float]) -> Splat | None:

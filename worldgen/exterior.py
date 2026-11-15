@@ -43,6 +43,7 @@ from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
 from worldgen import aerial as ae
+from worldgen import farfield as fa
 from worldgen import fences, railings, vegetation
 from worldgen import house_mesh as hm
 from worldgen import rebake as rb
@@ -91,6 +92,20 @@ SPLAT_PLANE = (
 )  # roof from the splat: smallest plane (m2) and most planes (its sheet is sharp enough)
 SPLAT_LEVEL = 0.2  # the splat's ground must sit within this of the scan's (offset and spread), m
 SPLAT_GAIN = (0.8, 1.25)  # the splat's shingles and walls are scaled to the ground photos by at most this
+GROUND_REACH = 8.0  # with a splat, the yard takes a photo only from cameras this near (beyond: streaks), m
+GROUND_FADE = 0.3  # ... and the photos fade into the splat's top view over this, m
+MOUND_WINDOW = 2.4  # ground: a bump narrower than this ...
+MOUND_MIN = 0.2  # ... and higher than this above the ground around it ...
+MOUND_FLAT = 0.4  # ... of whose cells fewer than this share are level (a step or a deck is level) is a shrub
+FLOAT_GAP = 0.3  # an outdoor scan piece whose lowest point is this far above the ground floats ...
+FLOAT_AREA = 1.5  # ... and is dropped when smaller than this (m2) and not on the house (FLOAT_NEAR)
+FLOAT_NEAR = 0.4
+BLOCK_TOP = (0.4, 1.5)  # a block (an AC unit, a cabinet): a level top this far above the ground ...
+BLOCK_AREA = (0.25, 2.0)  # ... of this many m2 ...
+BLOCK_LEVEL = 0.08  # ... level to within this (5th to 95th percentile of its faces' heights), m
+BLOCK_FILL = 0.72  # ... filling this share of its smallest enclosing rectangle, each side over BLOCK_SIDE
+BLOCK_SIDE = 0.4
+BLOCK_WALLS = 0.6  # ... with scanned sides under this share of the rectangle's edge
 SUN = (
     205.0,
     50.0,
@@ -244,6 +259,22 @@ def bake_patch(p: Patch, panos: PanoSet, scan: rb.Scan, max_dist: float) -> floa
     xyz = p.pos(S[mask], T[mask])
     nrm = p.normal(S[mask], T[mask], xyz)
     rgb, valid = shade(xyz, nrm, panos, scan.eyes, snap=p.snap, max_dist=max_dist)
+    if "sky" in p.meta:
+        # The dome with a far field: the sky panorama (farfield.sky) where the dome is open sky from the eye
+        # (farfield.clear) and, above SKY_PHOTO_EL, where no camera saw it or the photo shows a sky colour.
+        # Lower down, what no camera saw is filled from the photos around it as before (it is the foot of
+        # the houses across the street, not sky).
+        colour, skyline, eye = p.meta["sky"]
+        d = xyz - eye
+        d /= np.linalg.norm(d, axis=1)[:, None]
+        high = d[:, 2] > math.sin(math.radians(fa.SKY_PHOTO_EL))
+        skyish = _sky(np.clip(rgb, 0, 255).astype(np.uint8)[None])[0]
+        if skyline is None:  # picture walls stand in front of everything else: the dome is sky alone
+            heaven = np.ones(len(d), bool)
+        else:
+            heaven = fa.clear(skyline, eye, d) | (high & (~valid | skyish))
+        rgb[heaven] = colour(d[heaven])
+        valid |= heaven
     if p.no_sky:
         valid &= ~_sky(np.clip(rgb, 0, 255).astype(np.uint8)[None])[0]
     img = np.zeros((H, W, 3), np.uint8)
@@ -327,6 +358,18 @@ def bake_patch(p: Patch, panos: PanoSet, scan: rb.Scan, max_dist: float) -> floa
         wgt = np.clip(ndimage.distance_transform_edt(ok) / (0.3 * res), 0, 1)[..., None]
         img = (img * wgt + fill * (1 - wgt)).astype(np.uint8)
         ok[:] = True
+    elif p.meta.get("fill") is not None:
+        # The yard with a drone splat (splat.GroundFill): the photos where a camera is near, fading over
+        # GROUND_FADE into the splat's top view where none is or none saw.
+        air, air_ok = p.meta["fill"](xyz, rgb, valid)
+        fill = np.zeros((H, W, 3), np.uint8)
+        fill_ok = np.zeros((H, W), bool)
+        fill[mask] = air.astype(np.uint8)
+        fill_ok[mask] = air_ok
+        wgt = np.clip(ndimage.distance_transform_edt(ok) / (GROUND_FADE * res), 0, 1)[..., None]
+        img = np.where(fill_ok[..., None], img * wgt + fill * (1 - wgt), img).astype(np.uint8)
+        ok |= fill_ok
+        p.meta["filled"] = float((fill_ok[mask] & ~valid).sum()) / max(1, mask.sum())
     elif p.kind == "roof" and p.no_sky and "default" not in p.meta:
         # Most of a generated roof is out of every camera's view. Blurring the seen texels into it pulls in
         # fascia and wall colours (it came out beige); use the shingles' own colour: the median of the dark
@@ -364,6 +407,7 @@ class Ground:
     z: np.ndarray  # (nx, ny) heights at grid points x0 + i * CELL, y0 + j * CELL (NaN = no ground)
     lot: Polygon  # the scanned ground outside the house
     edge_z: float  # median ground height along the lot's outer edge
+    mounds: int = 0  # shrub lumps flattened out of the heightfield (ground_grid)
 
     def height(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """Bilinear ground height (NaNs filled from the nearest sample)."""
@@ -442,6 +486,21 @@ def ground_grid(scan: rb.Scan, outline: Polygon, floor_z: float) -> Ground:
     idx = ndimage.distance_transform_edt(~have, return_distances=False, return_indices=True)
     zf = z[tuple(idx)]
     zf = ndimage.median_filter(zf, size=5)
+    # A shrub's scan is a closed lump with no ground under it, so the "ground" there was the lump's top: a
+    # mound painted with stretched grass. A bump narrower than MOUND_WINDOW and over MOUND_MIN high that is
+    # not level on top (a step, a low deck and a curb are) is flattened to the ground around it; the lump's
+    # faces are then above the ground and stay what they are, a shrub (scan piece or plant model).
+    k = max(3, int(MOUND_WINDOW / CELL) | 1)
+    base = ndimage.grey_opening(zf, size=(k, k))
+    level = ndimage.maximum_filter(zf, 3) - ndimage.minimum_filter(zf, 3) < 0.04
+    lab, n = ndimage.label((zf - base > MOUND_MIN) & lot_mask)
+    mounds = 0
+    for i in range(1, n + 1):
+        m = lab == i
+        if m.sum() >= 4 and level[m].mean() < MOUND_FLAT:
+            m = ndimage.binary_dilation(m, iterations=2) & (zf - base > 0.03)
+            zf[m] = base[m]
+            mounds += 1
     zf[~lot_mask] = np.nan
     # Lot outline from the mask (cell squares, simplified so the edge is not a staircase).
     ii, jj = np.nonzero(lot_mask)
@@ -453,6 +512,7 @@ def ground_grid(scan: rb.Scan, outline: Polygon, floor_z: float) -> Ground:
     ring = np.concatenate([np.asarray(q.exterior.coords) for q in polygons(lot)])
     g = Ground(x0, y0, zf, lot, 0.0)
     g.edge_z = float(np.median(g.height(ring[:, 0], ring[:, 1])))
+    g.mounds = mounds
     return g
 
 
@@ -1166,26 +1226,16 @@ def measure_pitch(scan: rb.Scan, eaves: Polygon, eave_z: float) -> float:
 # ---------------------------------------------------------------- backdrop
 
 
-def backdrop_patches(
-    g: Ground, centre: np.ndarray, radius: float, house: Polygon, floor_z: float
-) -> list[Patch]:
-    """A ground disk (outside the lot) and a dome of `radius` around `centre` (x, y), textured as the photos
-    see them from the middle of the lot. Shading normals point at an eye in the middle of the lot, so every
-    outdoor camera counts as a frontal view and the occlusion test picks the cameras that see past the house
-    and trees."""
+def disk_height(g: Ground, centre: np.ndarray, radius: float, house: Polygon, floor_z: float) -> Callable:
+    """(x, y) -> the backdrop ground disk's height: it follows the lot's edge height (blurred over 1.5 m)
+    near the lot and flattens to the lot's median edge height farther out; next to the house it stays under
+    the floor."""
     cx, cy = float(centre[0]), float(centre[1])
     z0 = g.edge_z - 0.03
-    eye = np.array([cx, cy, z0 + 1.5])
-
-    def toward_eye(s, t, xyz):
-        v = eye - xyz
-        return v / np.linalg.norm(v, axis=1)[:, None]
-
-    # Ground: follows the lot's edge height near the lot, flattens to z0 farther out.
-    far = g.filled.copy()
-    far = ndimage.gaussian_filter(far, 1.5 / CELL)
+    far = ndimage.gaussian_filter(g.filled.copy(), 1.5 / CELL)
 
     def zdisk(x, y):
+        x, y = np.asarray(x, float), np.asarray(y, float)
         fx = np.clip((x - g.x0) / CELL, 0, far.shape[0] - 1.001)
         fy = np.clip((y - g.y0) / CELL, 0, far.shape[1] - 1.001)
         zn = far[fx.astype(int), fy.astype(int)] - 0.04
@@ -1196,12 +1246,45 @@ def backdrop_patches(
         z[near] = np.minimum(z[near], floor_z - 0.08)  # never above the house floor next to the house
         return z
 
+    return zdisk
+
+
+def backdrop_patches(
+    g: Ground,
+    centre: np.ndarray,
+    radius: float,
+    house: Polygon,
+    floor_z: float,
+    sky: tuple | None = None,
+    skip: Polygon | None = None,
+) -> list[Patch]:
+    """A ground disk (outside the lot) and a dome of `radius` around `centre` (x, y), textured as the photos
+    see them from the middle of the lot. Shading normals point at an eye in the middle of the lot, so every
+    outdoor camera counts as a frontal view and the occlusion test picks the cameras that see past the house
+    and trees.
+
+    With a far field (farfield.py): `skip` is the part of the ground it covers (cut from the disk), and
+    `sky` = (direction -> colour, skyline ray-caster) makes the dome show that sky wherever it is open sky
+    from the eye or the photos show a sky colour (bake_patch)."""
+    cx, cy = float(centre[0]), float(centre[1])
+    z0 = g.edge_z - 0.03
+    eye = np.array([cx, cy, z0 + 1.5])
+
+    def toward_eye(s, t, xyz):
+        v = eye - xyz
+        return v / np.linalg.norm(v, axis=1)[:, None]
+
+    zdisk = disk_height(g, centre, radius, house, floor_z)
+
     # The disk stops 0.3 m inside the lot (the yard overlaps it, 4 cm higher) and at the house wall, and
     # stays below the floor near the house: a lot that does not wrap around the house (an unscanned side
     # yard) leaves no hole there, and the blurred yard height near a deck is above the floor.
     hole = filled(g.lot).buffer(-0.3).union(house.buffer(-0.02, join_style="mitre"))
     disk = Point(cx, cy).buffer(radius, quad_segs=32).difference(hole)
+    if skip is not None:
+        disk = disk.difference(skip)
     out = plan_tiles(disk, 2 * radius / 3, "backdrop", DISK_RES, zdisk, toward_eye, 1.0, min_area=0.5)
+    paint = {"sky": (*sky, eye)} if sky is not None else {}
 
     # Dome: four 90 degree tiles from the horizon to 60 degrees up, plus a cap.
     for a0 in (0.0, 90.0, 180.0, 270.0):
@@ -1217,7 +1300,9 @@ def backdrop_patches(
                 1,
             )
 
-        out.append(Patch("backdrop", 90.0, 60.0, DOME_RES, dpos, toward_eye, None, step=3.0))
+        out.append(
+            Patch("backdrop", 90.0, 60.0, DOME_RES, dpos, toward_eye, None, step=3.0, meta=dict(paint))
+        )
     rc = radius * math.cos(math.radians(60))
 
     def cpos(s, t):
@@ -1225,7 +1310,11 @@ def backdrop_patches(
         return np.stack([cx + x, cy + y, z0 + np.sqrt(np.maximum(radius**2 - x * x - y * y, 0))], 1)
 
     cap = Point(rc, rc).buffer(rc * 1.01, quad_segs=32)
-    out.append(Patch("backdrop", 2 * rc, 2 * rc, 512 / (2 * rc), cpos, toward_eye, cap, step=rc / 8))
+    out.append(
+        Patch(
+            "backdrop", 2 * rc, 2 * rc, 512 / (2 * rc), cpos, toward_eye, cap, step=rc / 8, meta=dict(paint)
+        )
+    )
     return out
 
 
@@ -1303,6 +1392,131 @@ def _seen_faces(scan: rb.Scan, faces: np.ndarray, panos: PanoSet) -> np.ndarray:
     # at the lot's edges survived changed whenever the set of faces (and so its middle) changed.
     _, valid = rb._shade_local(scan.tris[faces].mean(1), scan.normals[faces], panos, scan.eyes)
     return faces[valid]
+
+
+def find_blocks(scan: rb.Scan, faces: np.ndarray, usable: np.ndarray, g: Ground) -> list[rb.Box]:
+    """Free-standing blocks in the yard (an AC unit, a meter cabinet, a planter box) as boxes.
+
+    The scan of such a thing is a lump: every triangle picks its own cameras, the top no camera saw is a
+    crumple of sky colours. Positive evidence for a box, all measured: a level top (up-facing faces within
+    BLOCK_LEVEL of one height, BLOCK_TOP above the ground, BLOCK_AREA in size) that fills BLOCK_FILL of its
+    smallest enclosing rectangle (sides over BLOCK_SIDE), and scanned sides under at least BLOCK_WALLS of
+    that rectangle's edge (rays from 0.3 m outside at half height: a table has a top and no sides, a shrub
+    no level top). The box stands on the lowest ground under it."""
+    c = scan.tris[faces].mean(1)
+    hag = c[:, 2] - g.height(c[:, 0], c[:, 1])
+    tops = np.nonzero(usable & (scan.normals[faces, 2] > 0.8) & (hag > BLOCK_TOP[0]) & (hag < BLOCK_TOP[1]))[
+        0
+    ]
+    out = []
+    for blob, inside in rb._clumps(scan, faces[tops], grow=0.03):
+        mine = tops[inside]
+        z = c[mine, 2]
+        area = float(scan.areas[faces[mine]].sum())
+        if (
+            not BLOCK_AREA[0] <= area <= BLOCK_AREA[1]
+            or np.percentile(z, 95) - np.percentile(z, 5) > BLOCK_LEVEL
+        ):
+            continue
+        rect = blob.buffer(-0.03).minimum_rotated_rectangle
+        if rect.geom_type != "Polygon" or blob.buffer(-0.03).area < BLOCK_FILL * rect.area:
+            continue
+        ring = np.asarray(rect.exterior.coords)[:4]
+        e0, e1 = ring[1] - ring[0], ring[3] - ring[0]
+        if np.linalg.norm(e0) < np.linalg.norm(e1):  # u along the longer side
+            ring = np.roll(ring, -1, axis=0)
+            e0, e1 = ring[1] - ring[0], ring[3] - ring[0]
+        length, width = float(np.linalg.norm(e0)), float(np.linalg.norm(e1))
+        if width < BLOCK_SIDE:
+            continue
+        top = float(np.median(z))
+        gz = float(g.height(ring[:, 0], ring[:, 1]).min())
+        # Sides: rays at half height toward each edge from 0.3 m outside it.
+        pts, dirs = [], []
+        for k in range(4):
+            a, b = ring[k], ring[(k + 1) % 4]
+            inward = np.asarray(rect.centroid.coords[0]) - (a + b) / 2
+            inward -= (inward @ (b - a)) * (b - a) / ((b - a) @ (b - a))
+            inward /= np.linalg.norm(inward)
+            for f in np.linspace(0.15, 0.85, 8):
+                p = a + f * (b - a) - 0.3 * inward
+                pts.append([p[0], p[1], 0.5 * (gz + top)])
+                dirs.append([inward[0], inward[1], 0.0])
+        t, prim = scan.rays.cast(np.asarray(pts), np.asarray(dirs))
+        if float(((prim >= 0) & (np.abs(t - 0.3) < 0.15)).mean()) < BLOCK_WALLS:
+            continue
+        u = np.array([*(e0 / length), 0.0])
+        n = np.array([*(e1 / width), 0.0])
+        out.append(
+            rb.Box(np.array([ring[0, 0], ring[0, 1], gz]), u, n, 0.0, length, 0.0, top - gz, width, False)
+        )
+    return out
+
+
+def replace_blocks(
+    scene: trimesh.Scene,
+    scan: rb.Scan,
+    g: Ground,
+    faces: np.ndarray,
+    tree: np.ndarray,
+    avail: np.ndarray,
+    panos: PanoSet,
+    walls: Polygon,
+    report: dict,
+    fill: Callable | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Replace scanned blocks (find_blocks) by boxes, nodes `outdoor_box_<N>`: each face from one photo
+    (rebake's box faces), what no camera saw from `fill` (the drone splat, splat.WallFill: the top of an AC
+    unit) and else from the box's best-seen face. Same contract as fences.replace_fences."""
+    taken = np.zeros(len(faces), bool)
+    boxes = find_blocks(scan, faces, avail & ~tree, g) if len(faces) else []
+    report["blocks"] = [
+        {
+            "at": [round(float(v), 2) for v in (b.origin + b.u * b.s1 / 2 + b.n * b.depth / 2)[:2]],
+            "size_m": [round(b.s1, 2), round(b.depth, 2), round(b.t1, 2)],
+        }
+        for b in boxes
+    ]
+    if not boxes:
+        return taken, np.zeros((0, 3, 3))
+    planes = rb.box_planes(boxes)
+    for p in planes:
+        rb.bake_plane(p, scan, panos, PIECE_RES, extra=fill)
+    rb._paint_unseen_faces(planes)
+    for pi, page in enumerate(rb.pack(planes)):
+        parts = [m for m in (rb.plane_mesh(p) for p in planes if p.page == pi) if m is not None]
+        if not parts:
+            continue
+        m = trimesh.util.concatenate(parts)
+        m.visual = trimesh.visual.TextureVisuals(
+            uv=m.visual.uv, material=rb._material(page, f"outdoor_box_{pi}")
+        )
+        m.apply_transform(hm.Z_UP_TO_Y_UP)
+        scene.add_geometry(m, node_name=f"outdoor_box_{pi}", geom_name=f"outdoor_box_{pi}")
+    c = scan.tris[faces].mean(1)
+    taken = rb.in_boxes(c, boxes, grow=0.08) & avail
+    return taken, np.concatenate([b.triangles() for b in boxes])
+
+
+def _floating(scan: rb.Scan, faces: np.ndarray, avail: np.ndarray, g: Ground, house: Polygon) -> np.ndarray:
+    """Which of the still available `faces` belong to a connected piece that hangs in the air: its lowest
+    point is more than FLOAT_GAP above the ground, it is smaller than FLOAT_AREA, and it is not within
+    FLOAT_NEAR of the house or its roof (a wall lamp, a meter box, a rafter are held by the house). They are
+    what is left of a scanned tree or shrub once its crown became a model: twigs and leaf scraps around the
+    trunk, at eye height."""
+    out = np.zeros(len(faces), bool)
+    idx = np.nonzero(avail)[0]
+    for comp in rb._pieces(scan, faces[idx]):
+        mine = idx[comp]
+        if scan.areas[faces[mine]].sum() >= FLOAT_AREA:
+            continue
+        v = scan.tris[faces[mine]].reshape(-1, 3)
+        if float((v[:, 2] - g.height(v[:, 0], v[:, 1])).min()) < FLOAT_GAP:
+            continue
+        if shapely.dwithin(house, shapely.points(v[:, 0], v[:, 1]), FLOAT_NEAR).any():
+            continue
+        out[mine] = True
+    return out
 
 
 def _sky(rgb: np.ndarray) -> np.ndarray:
@@ -1412,6 +1626,7 @@ def add_exterior(
     aerial: ae.Aerial | None = None,
     remove: list[tuple[float, float, float, float]] = (),
     splat: sp.Splat | None = None,
+    backdrop: str = "far",
 ) -> Exterior:
     """Bake the lot, facades, roof, outdoor pieces and backdrop into `scene` (Y-up nodes). `doors` are the
     outside doors opened for play (also cut from the rooms' walls via ShellRoom.cuts, and from collision).
@@ -1419,7 +1634,11 @@ def add_exterior(
     `aerial` (aerial.load) the roof is fitted to the aerial surface model; without it the scan's roof is kept
     when it has one, else a hip roof is generated. `remove` = (x, y, z, radius) hand removals
     (overrides/<model>.json "remove_outdoor"): outdoor scan faces within `radius` of the point horizontally
-    and within max(radius, 1 m) of its height are dropped (scan artefacts that are not in the photos)."""
+    and within max(radius, 1 m) of its height are dropped (scan artefacts that are not in the photos).
+    `backdrop`, with a splat: "far" = geometry behind the fences and the photo disk and dome beyond (3.13);
+    "panels" = an experiment, upright walls just outside the lot with a picture of what lies beyond
+    (farfield.wall_panels, nodes `backdrop_wall_N`), a dome that is only sky, no far geometry and no far
+    trees; "photo" = the disk and dome alone, as without a splat."""
     outline = outline if outline is not None else house_footprint(scan, rooms)
     floor_z = min(r.floor_z for r in rooms)
     top = max(rb.room_top(r) for r in rooms)
@@ -1432,6 +1651,7 @@ def add_exterior(
     walls = Polygon(corners)
     eave_z = eave_height(corners, normals, scan, floor_z, top)
     report.update(lot_m2=round(g.lot.area, 1), eave_z=round(eave_z, 2), ground_edge_z=round(g.edge_z, 2))
+    report["ground_mounds_flattened"] = g.mounds
 
     roof, shingles = None, None
     if splat is not None:
@@ -1477,6 +1697,11 @@ def add_exterior(
     report["roof_scan_coverage"] = round(cover, 2)
     eaves = None
     patches = ground_patches(g)
+    grass = None
+    if splat is not None and "yard" in bake:
+        grass = sp.GroundFill(splat, g.height, g.lot)
+        for p in patches:
+            p.meta["fill"] = grass
     if roof is not None:
         eaves = roof.region
         patches += aerial_roof_patches(roof, walls, aerial, under, shingles)
@@ -1492,7 +1717,9 @@ def add_exterior(
 
     centre = np.mean(out_panos.positions[:, :2], axis=0)
     centre = np.asarray(filled(g.lot.union(walls)).centroid.coords[0]) * 0.5 + centre * 0.5
-    patches += backdrop_patches(g, centre, backdrop_radius, walls, floor_z)
+    far_field = splat is not None and "backdrop" in bake and backdrop in ("far", "panels")
+    if not far_field:  # with a splat the backdrop is built further down, around the far field
+        patches += backdrop_patches(g, centre, backdrop_radius, walls, floor_z)
     if "facade" not in bake:
         planes, frames = [], []
     patches = [p for p in patches if p.kind in bake]
@@ -1527,9 +1754,12 @@ def add_exterior(
         for p in blank:
             p.image[..., :3] = colour
 
+    far_eyes = None  # with a far field: the line of sight for the disk and dome (set further down)
+
     def shade_patch(p: Patch) -> None:  # not `bake`: that is this function's argument
         far = p.kind == "backdrop"
-        f = bake_patch(p, out_panos, eyes, max_dist=backdrop_radius * 2.5 if far else 30.0)
+        reach = backdrop_radius * 2.5 if far else GROUND_REACH if "fill" in p.meta else 30.0
+        f = bake_patch(p, out_panos, far_eyes if far and far_eyes is not None else eyes, max_dist=reach)
         seen.setdefault(p.kind, []).append((f, p.w * p.h))
 
     # The band around the roof's edge is painted boards: one plain colour (the median of its bright,
@@ -1550,11 +1780,79 @@ def add_exterior(
             if "default" in p.meta and not p.meta.get("plain"):
                 p.meta["default"] = tuple(int(v) for v in trim)
     for p in patches:
-        if not p.meta.get("plain"):
+        if p.kind == "yard":
+            shade_patch(p)
+    far = None
+    if far_field:
+        # Past the lot: the splat's surface as geometry and tree models, and a dome that is only sky
+        # (farfield.py). After the yard, whose photos set the splat's exposure (GroundFill.gains).
+        gain = np.median(grass.gains, axis=0) if grass is not None and grass.gains else np.ones(3)
+        roofed = walls if roof is None else filled(walls.union(roof.region))
+        blockers = np.concatenate([scan.tris, *([lid] if roof is not None else [])])
+        far = fa.build(
+            splat,
+            unary_union([g.lot, walls]),  # not filled: a strip of unscanned ground by a wall is far field
+            roofed,
+            tuple(walls.centroid.coords[0]),
+            gain,
+            panos=out_panos,
+            sight=blockers,
+            is_sky=_sky,
+            yard=g.height,
+            disk=disk_height(g, centre, backdrop_radius, walls, floor_z),
+            house=walls,
+            floor_z=floor_z,
+        )
+        if backdrop == "panels":
+            # The experiment: picture walls instead of far geometry and far trees; the dome is sky alone.
+            walls_out = fa.wall_panels(
+                splat, filled(g.lot.union(walls)), g.edge_z, np.clip(gain, *SPLAT_GAIN)
+            )
+            for pi, page in enumerate(rb.pack(walls_out) if walls_out else []):
+                parts = [m for m in (rb.plane_mesh(p) for p in walls_out if p.page == pi) if m is not None]
+                if not parts:
+                    continue
+                m = trimesh.util.concatenate(parts)
+                m.visual = trimesh.visual.TextureVisuals(
+                    uv=m.visual.uv, material=rb._material(page, f"backdrop_wall_{pi}")
+                )
+                m.apply_transform(hm.Z_UP_TO_Y_UP)
+                scene.add_geometry(m, node_name=f"backdrop_wall_{pi}", geom_name=f"backdrop_wall_{pi}")
+            report["backdrop_walls"] = {
+                "walls": len(walls_out),
+                "length_m": round(sum(p.w for p in walls_out), 1),
+                "megapixels": round(sum(p.image.shape[0] * p.image.shape[1] for p in walls_out) / 1e6, 2),
+            }
+            far.meshes, far.trees, far.covered = [], [], Polygon()
+        for name, m in far.meshes:
+            m.apply_transform(hm.Z_UP_TO_Y_UP)
+            scene.add_geometry(m, node_name=name, geom_name=name)
+        # Past the far field the photo disk and dome stay; the far field is in their line of sight (a
+        # neighbour's house is geometry now and no longer painted on them), and the dome's sky is cleaned.
+        # Only for the disk and dome (`far_eyes`): `eyes` also decides which scan pieces of the lot a camera
+        # sees, and the crown shells standing in it hid the back porch from its own cameras.
+        far_eyes = dataclasses.replace(scan, sight=Raycaster(np.concatenate([blockers, far.solid])))
+        heaven, sky_report = fa.sky(out_panos, Raycaster(np.concatenate([blockers, far.skyline])), _sky)
+        skyline = None if backdrop == "panels" else Raycaster(far.horizon)  # None: the whole dome is sky
+        patches += backdrop_patches(
+            g, centre, backdrop_radius, walls, floor_z, sky=(heaven, skyline), skip=far.covered
+        )
+        report["far_field"] = {**far.report, "sky": sky_report}
+    for p in patches:
+        if p.kind != "yard" and not p.meta.get("plain"):
             shade_patch(p)
     report["seen"] = {
         k: round(sum(a * b for a, b in v) / max(1e-9, sum(b for _, b in v)), 3) for k, v in seen.items()
     }
+    if grass is not None:
+        yard = [p for p in patches if "fill" in p.meta]
+        area = sum(p.w * p.h for p in yard)
+        report["splat"]["ground_filled"] = round(
+            sum(p.meta.get("filled", 0.0) * p.w * p.h for p in yard) / max(area, 1e-9), 3
+        )
+        report["splat"]["ground_gain"] = [
+            round(float(v), 2) for v in np.median(grass.gains or [np.ones(3)], 0)
+        ]
 
     # Planes and patches share texture pages.
     items = list(planes) + list(frames) + list(patches)
@@ -1619,16 +1917,36 @@ def add_exterior(
         def rails(*args):  # railings come from the splat (railings.py); without one nothing is replaced
             return railings.replace_railings(*args, splat=splat)
 
+        def plants(*args):  # with a far field, the trees past the lot are models too
+            return vegetation.replace_vegetation(*args, more=far.trees if far is not None else ())
+
+        def blocks(*args):  # an AC unit as a box; its top from the splat when there is one
+            fill = None
+            if wall_fill is not None:
+                fill = sp.WallFill(splat, SPLAT_GAIN)
+                fill.gains = list(wall_fill.gains)
+            return replace_blocks(*args, fill=fill)
+
         for replace, house in (
             (fences.replace_fences, walls),
             (rails, walls),
-            (vegetation.replace_vegetation, roofed),
+            (blocks, walls),
+            (plants, roofed),
         ):
             taken, tris = replace(scene, eyes, g, faces, tree, avail, out_panos, house, report)
             avail &= ~taken
             solids.append(np.asarray(tris, float).reshape(-1, 3, 3))
     if roof is not None:
         report["plants_cut_by_roof"] = _clip_plants(scene, roof)
+    if len(faces):
+        # What is left of the scan after fences, railings and plants were replaced must stand on something.
+        house = walls if roof is None else filled(walls.union(roof.region))
+        adrift = _floating(scan, faces, avail, g, house)
+        avail &= ~adrift
+        report["floating_scraps_dropped"] = {
+            "faces": int(adrift.sum()),
+            "m2": round(float(scan.areas[faces[adrift]].sum()), 2),
+        }
     for sel, name, res in ((~tree & avail, "outdoor", PIECE_RES), (tree & avail, "trees", TREE_RES)):
         if not sel.any():
             continue
@@ -1713,6 +2031,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--parts", help=f"comma-separated subset of {sorted(PARTS)} to bake (default: all)")
     ap.add_argument("--no-aerial", action="store_true", help="roof from the scan alone (no Vexcel layers)")
     ap.add_argument("--no-splat", action="store_true", help="do not use the drone splat (out/raw/splat)")
+    ap.add_argument("--backdrop", default="far", choices=("far", "panels", "photo"), help="see add_exterior")
     args = ap.parse_args(argv)
     bake = frozenset(args.parts.split(",")) if args.parts else PARTS  # not `parts`: those are the rooms below
     if bake - PARTS:
@@ -1753,6 +2072,7 @@ def main(argv: list[str] | None = None) -> int:
         aerial=air,
         remove=[(*d["at"], float(d["radius"])) for d in hand],
         splat=None if args.no_splat else sp.load(args.out, model_id, footprint.centroid.coords[0]),
+        backdrop=args.backdrop,
     )
     dest = args.dest or args.out / "cache" / "glb" / f"{model_id}_exterior.glb"
     dest.parent.mkdir(parents=True, exist_ok=True)

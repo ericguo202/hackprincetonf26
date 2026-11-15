@@ -823,12 +823,34 @@ class Box:
     to_ceiling: bool = False  # the box reaches the ceiling (no top face)
     room: int = -1  # index of the room the box was found in
     back: float = 0.0  # unattached boxes: how far the fixture reaches behind the outline (a half wall)
+    # Vertical corners cut off by a slanted face (a pillar with one diagonal side): (corner, cs, cd), the
+    # face runs from cs along the s edge to cd along the depth edge. Corners: 0 = (s0, back), 1 = (s1, back),
+    # 2 = (s1, front), 3 = (s0, front). Measured from the scan by `chamfer_boxes`.
+    chamfers: tuple[tuple[int, float, float], ...] = ()
+
+    def _corner(self, c: int, grow: float = 0.0) -> tuple[float, float, int, int]:
+        """(s, d) of corner c and the signs of the directions along s and d that lead into the box."""
+        a, b, lo, hi = self.s0 - grow, self.s1 + grow, -self.back - grow, self.depth + grow
+        return ((a, lo, 1, 1), (b, lo, -1, 1), (b, hi, -1, -1), (a, hi, 1, -1))[c]
+
+    def outline(self, grow: float = 0.0) -> np.ndarray:
+        """The footprint's corners in (s, d), in ring order from corner 0; a cut corner gives two points."""
+        cut = {c: (cs, cd) for c, cs, cd in self.chamfers}
+        pts = []
+        for c in range(4):
+            s, d, ds, dd = self._corner(c, grow)
+            if c in cut:
+                cs, cd = cut[c]
+                pair = [(s, d + dd * cd), (s + ds * cs, d)]
+                pts += pair[::-1] if c in (1, 3) else pair
+            else:
+                pts.append((s, d))
+        return np.asarray(pts, float)
 
     def footprint(self, grow: float = 0.0) -> Polygon:
         o, u, n = self.origin[:2], self.u[:2], self.n[:2]
-        a, b = self.s0 - grow, self.s1 + grow
-        lo, hi = -self.back - grow, self.depth + grow
-        return Polygon([o + a * u + lo * n, o + b * u + lo * n, o + b * u + hi * n, o + a * u + hi * n])
+        ring = self.outline(grow)
+        return Polygon(o + ring[:, :1] * u + ring[:, 1:] * n)
 
     @property
     def z0(self) -> float:
@@ -841,7 +863,7 @@ class Box:
     def contains(self, pts: np.ndarray, grow: float = 0.0) -> np.ndarray:
         rel = pts - self.origin
         s, d, t = rel @ self.u, rel @ self.n, rel[:, 2]
-        return (
+        inside = (
             (s > self.s0 - grow)
             & (s < self.s1 + grow)
             & (d > -self.back - grow)
@@ -849,6 +871,10 @@ class Box:
             & (t > self.t0 - grow)
             & (t < self.t1 + grow)
         )
+        for c, cs, cd in self.chamfers:  # beyond the slanted face is outside
+            cs0, cd0, ds, dd = self._corner(c)
+            inside &= ds * (s - cs0) / cs + dd * (d - cd0) / cd > 1 - grow / min(cs, cd)
+        return inside
 
     def face_planes(self) -> list[tuple[np.ndarray, float]]:
         """(outward normal, offset along it) of the six faces."""
@@ -864,7 +890,19 @@ class Box:
         ]
 
     def triangles(self) -> np.ndarray:
-        """(12, 3, 3) triangles of the box, for collision."""
+        """(n, 3, 3) triangles of the box (12, more with a cut corner), for collision and line of sight."""
+        if self.chamfers:
+            ring = self.outline()  # convex: a fan triangulates the top and bottom
+            w = self.origin + ring[:, :1] * self.u + ring[:, 1:] * self.n
+            lo, hi = w + [0, 0, self.t0], w + [0, 0, self.t1]
+            k = len(ring)
+            tris = []
+            for i in range(k):
+                j = (i + 1) % k
+                tris += [[lo[i], lo[j], hi[j]], [lo[i], hi[j], hi[i]]]
+            for i in range(1, k - 1):
+                tris += [[hi[0], hi[i], hi[i + 1]], [lo[0], lo[i + 1], lo[i]]]
+            return np.asarray(tris, float)
         m = trimesh.creation.box(extents=[self.s1 - self.s0, self.depth + self.back, self.t1 - self.t0])
         rot = np.eye(4)
         rot[:3, 0], rot[:3, 1], rot[:3, 2] = self.u, self.n, [0, 0, 1]
@@ -1399,6 +1437,82 @@ def ledge_risers(scan: Scan, boxes: list[Box], ledges: list[Box]) -> list[Box]:
     return out
 
 
+CHAMFER_MIN = 0.2  # a slanted corner face is modelled when it cuts at least this much off both edges, m
+CHAMFER_MAX = 0.85  # ... and at most this share of either edge
+CHAMFER_FIT = 0.02  # ... and the scan lies within this of one plane along it (RMS), m
+CHAMFER_STEP = 0.02  # spacing of the measuring rays along the edge, m
+
+
+def chamfer_boxes(scan: Scan, boxes: list[Box]) -> int:
+    """Find box corners that are really one slanted face (a pillar or a cabinet end built at 45 degrees) and
+    record them in `Box.chamfers`; returns how many. A box is fitted as a rectangle, so such a corner stood
+    out into the room as a sharp edge that is not there.
+
+    Per vertical corner whose two faces are both exposed: rays against one of the faces, every CHAMFER_STEP
+    along it from the corner, at up to 12 heights. On a square corner they stop at the face. On a cut corner
+    they go deeper the closer they start to the corner, in a straight line: the depth profile (median over
+    the heights that agree) is fitted with a line, and the corner is cut when the line reaches at least
+    CHAMFER_MIN along both edges, at most CHAMFER_MAX of either, with an RMS under CHAMFER_FIT, and at least
+    70% of the rays along it agree across heights. A rounded scan corner (a few cm) and a fixture standing
+    askew (the whole face is off, not a stretch beside the corner) do not pass."""
+    up = np.array([0.0, 0.0, 1.0])
+    found = 0
+    for b in boxes:
+        w, deep, h = b.s1 - b.s0, b.depth + b.back, b.t1 - b.t0
+        if w < 2 * CHAMFER_MIN or deep < 2 * CHAMFER_MIN or h < 0.6:
+            continue
+        cuts = []
+        for c in range(4):
+            front = c in (2, 3)
+            if (not front and b.attached) or b.wall_ends[0 if c in (0, 3) else 1]:
+                continue
+            s0, d0, ds, dd = b._corner(c)
+            a = np.arange(CHAMFER_STEP / 2, min(w * CHAMFER_MAX, 1.2), CHAMFER_STEP)
+            zz = b.origin[2] + b.t0 + h * np.linspace(0.15, 0.85, min(12, max(3, int(h / 0.15))))
+            A, Z = np.meshgrid(a, zz)
+            start = 0.4
+            pts = (
+                b.origin
+                + (s0 + ds * A.ravel())[:, None] * b.u
+                + (d0 - dd * start) * b.n
+                + (Z.ravel() - b.origin[2])[:, None] * up
+            )
+            t, prim = scan.rays.cast(pts, np.tile(dd * b.n, (len(pts), 1)))
+            q = np.where((prim >= 0) & (t < start + deep), t - start, np.nan).reshape(A.shape)
+            with np.errstate(all="ignore"):
+                med = np.nanmedian(q, axis=0)
+                agree = np.nanmean(np.abs(q - med) < 0.03, axis=0) * np.isfinite(q).mean(0)
+            cutting = np.isfinite(med) & (med > 0.03)
+            n = (
+                int(np.argmin(cutting)) if not cutting.all() else len(a)
+            )  # the run of deep rays from the corner
+            if n * CHAMFER_STEP < CHAMFER_MIN:
+                continue
+            k, m = np.polyfit(a[:n], med[:n], 1)  # depth = m + k * a: m = cd, the line meets the face at cs
+            if k >= 0 or m <= 0:
+                continue
+            cs, cd = float(-m / k), float(m)
+            rms = float(np.sqrt(np.mean((m + k * a[:n] - med[:n]) ** 2)))
+            if (
+                rms > CHAMFER_FIT
+                or min(cs, cd) < CHAMFER_MIN
+                or cs > w * CHAMFER_MAX
+                or cd > deep * CHAMFER_MAX
+                or float(agree[:n].mean()) < 0.7
+            ):
+                continue
+            cuts.append((c, round(cs, 3), round(cd, 3)))
+        # Two cuts that would meet (a triangle-shaped box) are not a chamfered rectangle: leave it square.
+        along = {0: 0.0, 1: 0.0}
+        for c, _, cd in cuts:
+            along[0 if c in (0, 3) else 1] += cd
+        across = sum(cs for c, cs, cd in cuts if c in (2, 3)), sum(cs for c, cs, cd in cuts if c in (0, 1))
+        if cuts and max(along.values()) < deep and max(across) < w:
+            b.chamfers = tuple(cuts)
+            found += len(cuts)
+    return found
+
+
 def _write_box_list(boxes: list[Box], dest: Path) -> None:
     """The fitted boxes as JSON (plan coordinates, metres), for finding the one to drop by hand."""
     import json
@@ -1413,6 +1527,7 @@ def _write_box_list(boxes: list[Box], dest: Path) -> None:
                 "depth": round(b.depth + b.back, 2),
                 "z": [round(b.z0, 2), round(b.z1, 2)],
                 "attached_to_wall": b.attached,
+                "slanted_corners": [list(c) for c in b.chamfers],
             }
         )
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1481,19 +1596,33 @@ def box_planes(boxes: list[Box]) -> list[Plane]:
     for i, b in enumerate(boxes):
         w, h, deep = b.s1 - b.s0, b.t1 - b.t0, b.depth + b.back
         corner = b.origin + b.s0 * b.u + b.t0 * up - b.back * b.n
-        faces = [(corner + deep * b.n, b.u, up, b.n, w, h)]  # front
+        # A cut corner shortens the two faces that met there and adds the slanted face between them.
+        cut = {c: (cs, cd) for c, cs, cd in b.chamfers}
+        bl, br, fr, fl = (cut.get(c, (0.0, 0.0)) for c in range(4))
+        lid = Polygon(b.outline() - [b.s0, -b.back]) if cut else None
+        faces = [(corner + deep * b.n + fl[0] * b.u, b.u, up, b.n, w - fl[0] - fr[0], h, None)]  # front
         if not b.wall_ends[0]:
-            faces.append((corner, b.n, up, -b.u, deep, h))
+            faces.append((corner + bl[1] * b.n, b.n, up, -b.u, deep - bl[1] - fl[1], h, None))
         if not b.wall_ends[1]:
-            faces.append((corner + w * b.u, b.n, up, b.u, deep, h))
+            faces.append((corner + w * b.u + br[1] * b.n, b.n, up, b.u, deep - br[1] - fr[1], h, None))
         if not b.to_ceiling:
-            faces.append((corner + h * up, b.u, b.n, up, w, deep))  # top
+            faces.append((corner + h * up, b.u, b.n, up, w, deep, lid))  # top
         if b.t0 > 0.03:
-            faces.append((corner, b.u, b.n, -up, w, deep))
+            faces.append((corner, b.u, b.n, -up, w, deep, lid))
         if not b.attached:
-            faces.append((corner, b.u, up, -b.n, w, h))
-        for origin, fu, fv, fn, fw, fh in faces:
-            shape = _hidden(box(0, 0, fw, fh), origin, fu, fv, fn, fw, b, boxes, i)
+            faces.append((corner + bl[0] * b.u, b.u, up, -b.n, w - bl[0] - br[0], h, None))
+        for c, (cs, cd) in cut.items():
+            s0, d0, ds, dd = b._corner(c)
+            a = b.origin + s0 * b.u + (d0 + dd * cd) * b.n + b.t0 * up
+            run = ds * cs * b.u - dd * cd * b.n
+            out = -(ds / cs) * b.u - (dd / cd) * b.n
+            length = float(np.linalg.norm(run))
+            faces.append((a, run / length, up, out / np.linalg.norm(out), length, h, None))
+        for origin, fu, fv, fn, fw, fh, outline in faces:
+            if fw < 0.01:
+                continue
+            full = outline if outline is not None else box(0, 0, fw, fh)
+            shape = _hidden(full, origin, fu, fv, fn, fw, b, boxes, i)
             if shape is None or shape.area < 0.004:
                 continue
             p = Plane("box", origin, fu, fv, fn, fw, fh, shape, carve=False)
@@ -1998,6 +2127,7 @@ def write_rebaked_interior_glb(
     ledges = [b for b in ledges if any(b is x for x in boxes)]
     risers = ledge_risers(scan, boxes, ledges)
     boxes += risers
+    slanted = chamfer_boxes(scan, boxes)
     if debug is not None:
         _write_box_list(boxes, debug / "boxes.json")
     if boxes:
@@ -2067,6 +2197,7 @@ def write_rebaked_interior_glb(
     report = {
         "planes": {k: sum(p.kind == k for p in planes) for k in ("wall", "floor", "ceiling", "box")},
         "relief_boxes": len(boxes),
+        "box_corners_slanted": slanted,
         "door_leaf_slabs": len(leaves),
         "ledge_slabs": len(ledges),
         "ledge_risers": len(risers),

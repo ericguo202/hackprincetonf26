@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "boto3>=1.44.3",
     "embreex>=4.4.0.post1",
+    "fast-simplification>=0.1.7",
     "httpx>=0.28.1",
     "jsonschema>=4.26.0",
     "mapbox-earcut>=2.1.0",

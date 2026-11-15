@@ -176,6 +176,7 @@ def shade(
     max_candidates: int = 12,
     views: int = 5,
     chunk: int = 300_000,
+    min_cos: float = 0.12,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Colour each surface point from the panoramas that see it.
 
@@ -185,7 +186,9 @@ def shade(
     panoramas (by cos / distance^2) are sampled; when three or more see it, views that disagree with the
     per-channel median are thrown out (photo-consistency: doors that were open in one sweep and closed in
     another, the photographer, reflections). The rest are blended with weight^3: nearly "best view wins",
-    with soft seams. Returns (rgb float (n, 3), valid (n,))."""
+    with soft seams. `min_cos`: a camera counts when it sees the surface less obliquely than this (cosine
+    of the angle to the normal; the far field asks for more than the default, a street seen from 1.5 m up is
+    streaks beyond a few metres). Returns (rgb float (n, 3), valid (n,))."""
     n = len(pts)
     rgb = np.zeros((n, 3))
     valid = np.zeros(n, dtype=bool)
@@ -209,7 +212,7 @@ def shade(
             v = panos.positions[j] - p
             dist = np.linalg.norm(v, axis=1)
             cos = np.einsum("ij,ij->i", v, nm) / np.maximum(dist, 1e-6)
-            ok = (cos > 0.12) & (dist < max_dist) & (dist > 0.25)
+            ok = (cos > min_cos) & (dist < max_dist) & (dist > 0.25)
             geo[ok, k] = cos[ok] / dist[ok] ** 2
         kk = min(views, len(order))
         top = (

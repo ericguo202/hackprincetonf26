@@ -87,6 +87,7 @@ SHRUB_LEAFY = 0.6  # share of the scan surface inside the shrub's box that is fo
 # only what the photos barely show (7014's ground cover by the side gate, 0.11).
 SHRUB_SEEN_MAX = 0.35
 NEIGHBOUR_MIN_AREA = 8.0  # m2: a trunkless crown smaller than this gets no model outside the lot
+FAR_CARDS = 3  # a tree past the lot (Tree.far) keeps every n-th leaf card
 HOUSE_TOP = 6.0  # m above the lowest ground: below it no leaf or limb may reach into the house outline
 # Unlit shading baked in the texture: brightness of the four leaf levels, and a slight colour shift (shade is
 # bluer, sunlit leaves yellower).
@@ -386,6 +387,7 @@ class Tree:
     variant: int = 0
     tint: int = 0
     note: str = ""
+    far: bool = False  # stands past the lot (farfield.py): fewer, larger leaf cards and only the trunk's bark
 
 
 def crown_axes(cells: np.ndarray, centre: np.ndarray | None = None) -> tuple[np.ndarray, float, float, float]:
@@ -984,8 +986,13 @@ def replace_vegetation(
     panos: PanoSet,
     walls: Polygon,
     report: dict,
+    more: list[Tree] = (),
 ) -> tuple[np.ndarray, np.ndarray]:
     """Replace scanned trees and shrubs by models that fill the same space (nodes `plants_N`).
+
+    `more`: trees measured elsewhere (farfield.py: the drone splat's crowns past the lot). One that overlaps
+    a tree of the yard is dropped; a tree this module only guessed at past the lot's edge (a crown without a
+    trunk) gives way to one of `more` that overlaps it, because the splat saw where it really stands.
 
     `faces`: indices into scan.tris of the outdoor scan faces an outdoor camera sees; `tree`: which of them
     are more than exterior.TREE_MIN_Z above the ground and away from the roof (canopies); `avail`: which are
@@ -1001,6 +1008,17 @@ def replace_vegetation(
     m = measure(scan, g, walls, panos, lib)
     trees, shrubs = m["trees"], m["shrubs"]
     taken = m["gone"][faces] & avail
+    if more:
+
+        def overlap(a: Tree, b: Tree) -> bool:
+            d = math.hypot(a.x + a.lean[0] - b.x - b.lean[0], a.y + a.lean[1] - b.y - b.lean[1])
+            return d < max(a.r_major, b.r_major)
+
+        trees = [t for t in trees if t.in_lot or not any(overlap(t, f) for f in more)]
+        extra = [f for f in more if not any(overlap(f, t) for t in trees)]
+        for f in extra:
+            f.variant = pick_variant(lib.variants, 0.5 * (f.r_major + f.r_minor) / max(f.top - f.bottom, 0.5))
+        trees = trees + extra
     if not trees and not shrubs and not taken.any():
         report["vegetation"] = {"replaced": False, "why": "no foliage found in the scan"}
         return taken, none
@@ -1025,10 +1043,16 @@ def replace_vegetation(
         v = lib.variants[t.variant]
         bark, cards, light = place_tree(v, t)
         ok = ~indoors(cards.reshape(-1, 3)).reshape(-1, 4).any(1)
+        if t.far:  # seen from tens of metres: a third of the cards, each grown to close the gaps
+            ok &= np.arange(len(cards)) % FAR_CARDS == 0
+            mid = cards.mean(1, keepdims=True)
+            cards = mid + (cards - mid) * math.sqrt(FAR_CARDS)
         leaf_v.append(cards[ok])
         level = (light * len(LEVELS)).astype(int)
         leaf_uv.append(slot_uv(v.leaf_uv, np.full(len(cards), t.tint), level, len(tints))[ok])
         tri_ok = ~indoors(bark)[v.bark_idx].any(1)
+        if t.far:
+            tri_ok &= v.bark_pos[v.bark_idx].mean(1)[:, 1] < v.crown_base
         bark_v.append(bark)
         bark_f.append(v.bark_idx[tri_ok] + nb)
         nb += len(bark)
@@ -1090,6 +1114,7 @@ def replace_vegetation(
                 "leaf_rgb": [int(c) for c in t.colour],
                 "model": lib.variants[t.variant].name,
                 "in_lot": t.in_lot,
+                "far": t.far,
                 "note": t.note,
             }
             for t in trees

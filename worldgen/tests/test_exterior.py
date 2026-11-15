@@ -244,3 +244,67 @@ def test_open_rafters_under_a_porch_roof_stay_scan():
     c = scan.tris.mean(1)
     inner = (c[:, 0] > -2.5) & (c[:, 0] < -1.0)
     assert np.isin(np.nonzero(inner)[0], kept).all()  # rafters and boards are still there
+
+
+def height_mesh(z, step=0.1):
+    """An up-facing triangle mesh of a height function over 0..12 x 0..12."""
+    n = int(12 / step) + 1
+    x, y = np.meshgrid(np.arange(n) * step, np.arange(n) * step, indexing="ij")
+    v = np.c_[x.ravel(), y.ravel(), z(x.ravel(), y.ravel())]
+    i = (np.arange(n - 1)[:, None] * n + np.arange(n - 1)[None]).ravel()
+    return v[np.concatenate([np.c_[i, i + n, i + n + 1], np.c_[i, i + n + 1, i + 1]])]
+
+
+def test_a_shrubs_lump_is_flattened_out_of_the_ground_and_a_deck_is_not():
+    def z(x, y):
+        lump = 0.7 * np.clip(1 - np.hypot(x - 3, y - 3) / 0.8, 0, 1)  # a cone: the top of a scanned shrub
+        deck = np.where((x > 7) & (x < 10.5) & (y > 2) & (y < 5.5), 0.4, 0.0)
+        return lump + deck
+
+    g = ex.ground_grid(fake_scan(height_mesh(z)), box(5, 8, 7, 10), 0.0)
+    assert g.mounds == 1
+    assert float(g.height(np.array([3.0]), np.array([3.0]))[0]) < 0.08
+    assert abs(float(g.height(np.array([8.7]), np.array([3.7]))[0]) - 0.4) < 0.03
+    assert abs(float(g.height(np.array([1.0]), np.array([9.0]))[0])) < 0.03
+
+
+def flat_ground():
+    return ex.Ground(-1.0, -1.0, np.zeros((100, 100)), box(-1, -1, 13, 13), 0.0)
+
+
+def test_scraps_in_the_air_are_dropped_and_what_stands_or_hangs_on_the_house_is_kept():
+    quad = np.array([[0, 0, 0], [0.3, 0, 0], [0.3, 0, 0.3], [0, 0, 0], [0.3, 0, 0.3], [0, 0, 0.3]], float)
+
+    def piece(x, y, z0):
+        return (quad + [x, y, z0]).reshape(2, 3, 3)
+
+    tris = np.concatenate([piece(3, 3, 0.9), piece(6, 6, 0.0), piece(9.1, 9, 1.5)])
+    scan = fake_scan(tris)
+    faces = np.arange(len(tris))
+    adrift = ex._floating(scan, faces, np.ones(len(faces), bool), flat_ground(), box(9.3, 8, 12, 12))
+    assert adrift.tolist() == [
+        True,
+        True,
+        False,
+        False,
+        False,
+        False,
+    ]  # in the air; on the ground; on the wall
+    assert not ex._floating(scan, faces, np.zeros(len(faces), bool), flat_ground(), box(9.3, 8, 12, 12)).any()
+
+
+def test_a_block_with_a_level_top_and_sides_is_found_and_a_table_is_not():
+    unit = trimesh.creation.box(extents=[0.8, 0.7, 0.75])
+    unit.apply_translation([3.0, 3.0, 0.375])
+    table = trimesh.creation.box(extents=[1.0, 0.8, 0.04])  # a top with nothing under it
+    table.apply_translation([8.0, 8.0, 0.75])
+    for m in (unit, table):
+        m.vertices, m.faces = trimesh.remesh.subdivide_to_size(m.vertices, m.faces, 0.2)
+    tris = np.concatenate([np.asarray(unit.triangles), np.asarray(table.triangles)])
+    scan = fake_scan(tris)
+    faces = np.arange(len(tris))
+    blocks = ex.find_blocks(scan, faces, np.ones(len(faces), bool), flat_ground())
+    assert len(blocks) == 1
+    b = blocks[0]
+    assert np.allclose(sorted([b.s1, b.depth]), [0.7, 0.8], atol=0.05) and abs(b.t1 - 0.75) < 0.03
+    assert np.allclose((b.origin + b.u * b.s1 / 2 + b.n * b.depth / 2)[:2], [3.0, 3.0], atol=0.05)
