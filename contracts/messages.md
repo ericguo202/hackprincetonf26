@@ -1,4 +1,4 @@
-# Game service messages (contracts v2.4.2)
+# Game service messages (contracts v2.4.3)
 
 Colyseus 0.18, one room type `NeighborhoodRoom` keyed by `block_id`, up to 16 players.
 Shared state schema: `game-state.ts`. Positions are in the player's current zone frame
@@ -10,7 +10,7 @@ Shared state schema: `game-state.ts`. Positions are in the player's current zone
 | ------------ | ---------------------------------------------- | ------------------------------------------------------------- |
 | `move`       | `{x, y, z, yaw, anim}`                         | 20 Hz; reject a jump over 3 m since the last accepted move, except in a teleport window (below); always reject non-finite values |
 | `enter_zone` | `{zone}` (`"block"` or a `listing_id`)         | Sets `Player.zone`; a real change opens a teleport window     |
-| `fire`       | `{origin: [x,y,z], dir: [x,y,z], target_id?, weapon?}` | Hit counts only if both alive, same zone, under 5 shots/s, under 40 m, origin within 1.5 m of last position |
+| `fire`       | `{origin: [x,y,z], dir: [x,y,z], target_id?, weapon?}` | Foam mode only. Hit counts only if both alive, same zone, under the weapon's fire rate, in range, origin within 1.5 m of last position (rules below) |
 | `set_mode`   | `{mode: "explore" or "foam"}`                  | Host toggle                                                   |
 | `chat`       | `{text}`                                       | Relayed to the room                                           |
 
@@ -28,9 +28,19 @@ crouched capsule top is about 0.97 m above the floor instead of 1.3 m, so a
 server-side hit check that models the body should use the lower height.
 
 `weapon` (v2.4.0) is one of `blaster, noodle` (`WEAPONS` in `game-state.ts`).
-Absent means `blaster`, so older payloads stay valid. `noodle` (the pool
-noodle) is reserved; its rules (for example a short reach instead of 40 m)
-are Lane D's to define.
+Absent means `blaster`, so older payloads stay valid.
+
+Fire rules (v2.4.3). `Player.hp` is 3 when full (the schema default).
+
+| Weapon    | Damage per hit | Hits to eliminate | Client cooldown | Server min interval | Range (origin to target body centre)             |
+| --------- | -------------- | ----------------- | --------------- | ------------------- | ------------------------------------------------ |
+| `blaster` | 1              | 3                 | 0.25 s          | 0.2 s               | under 40 m, and the ray passes within 1 m of the target |
+| `noodle`  | 2              | 2                 | 0.8 s           | 0.64 s              | under 2.9 m (2.0 m reach + body radius + lag slack); no aim or line-of-sight check |
+
+Every accepted `fire` counts toward the rate limit, misses included, and is
+sent to the other players (not the shooter) as `fx {kind: weapon, origin, dir}`.
+A rejected hit does no damage but the accepted shot still sends `fx`. Line of
+sight through walls and furniture is not checked on the server (stretch).
 
 ## Game -> client broadcasts (besides state patches)
 
@@ -41,7 +51,13 @@ are Lane D's to define.
 | `fx`         | `{kind, origin, dir}`   |
 | `toast`      | `{text}`                |
 
-Three hits eliminate; respawn after 3 s at a valid spawn point for the zone.
+`hp` reaching 0 eliminates: `alive` false, `anim` "eliminated", the shooter's
+`score` +1, then `eliminated {target, by}`. The server ignores `move` and
+`fire` from an eliminated player. After 3 s it sets `hp` 3, `alive` true and
+opens that player's teleport window; the client then moves itself to a spawn
+point for its zone (indoors: free floor after the latest plan, never inside
+furniture), because only the client knows the current free floor. Switching
+the room to `explore` revives everyone; switching to `foam` resets scores.
 
 ## Agent -> game internal API
 

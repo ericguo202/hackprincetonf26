@@ -34,6 +34,8 @@ import { DevPlan, DevProbe } from "./DevPlan";
 import { DevRemotes } from "./DevRemotes";
 import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
 import { RemotePlayers } from "./RemotePlayers";
+import { RespawnWatcher } from "./RespawnWatcher";
+import { sendFire } from "../net/game";
 import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
 import { DEV_PLAN_ON, START_ROOM } from "./devFlags";
@@ -93,6 +95,8 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
   );
   const setMe = useStore((s) => s.setMe);
   const [start] = useState(() => initialPlacement(pack));
+  // Lane D: where a foam-fight respawn lands on the block (indoors uses indoorSpawns).
+  const blockSpawn = useMemo(() => (start.zone === "block" ? lift(start.pos) : null), [start]);
   // The zone we render. Owned here and copied into the store, not read back from
   // it: on the first render the store still holds its default ("block"), and
   // reading that would mount the block for a frame and fetch its meshes.
@@ -143,6 +147,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}
       <RemotePlayers zone={zone} />
+      <RespawnWatcher zone={zone} blockSpawn={blockSpawn} />
       {DEV_REMOTES_ON ? <DevRemotes pack={pack} zone={zone} /> : null}
       {/* getHitboxes: remote players as drawn this frame. onFire: Lane D sends `fire`; in dev-remotes mode, the stand-in. */}
       <Player
@@ -150,7 +155,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
         spawn={spawn}
         zone={zone}
         getHitboxes={remoteHitboxes}
-        onFire={DEV_REMOTES_ON ? devFire : undefined}
+        onFire={DEV_REMOTES_ON ? devFire : sendFire}
       />
     </>
   );

@@ -2,6 +2,7 @@
 // sends `move` at 20 Hz from store.me. SOLO=1 (VITE_SOLO) skips the server entirely.
 import { Client, type Room } from "@colyseus/sdk";
 import type { AnimState, GameMode } from "../../../../contracts/game-state";
+import type { FirePayload } from "../player/blasterMath";
 import { type HouseFurniture, type NetPlayer, useStore } from "../store";
 import { applyBroadcast, BROADCAST_TYPES } from "./broadcasts";
 
@@ -51,6 +52,13 @@ export async function joinBlock(blockId: string, name: string): Promise<void> {
     }
     room.send("move", { x: me.pos[0], y: me.pos[1], z: me.pos[2], yaw: me.yaw, anim: me.anim });
   }, 1000 / MOVE_HZ);
+}
+
+/** Player.onFire: send `fire` as the blaster builds it. Dropped while eliminated or offline. */
+export function sendFire(p: FirePayload) {
+  const s = useStore.getState();
+  if (!room || !s.me.id || s.players[s.me.id]?.alive === false) return;
+  room.send("fire", p);
 }
 
 export function setMode(mode: GameMode) {

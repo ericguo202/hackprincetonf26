@@ -1,7 +1,24 @@
 // Lane D: the shared world for one block (AGENTS.md section 8, contracts/messages.md).
-// Join/leave, zones, clamped movement relay (with a teleport grace window), mode toggle. Hit validation is TODO.
-import { type Client, Room } from "colyseus";
+// Join/leave, zones, clamped movement relay (with a teleport grace window), mode toggle, foam-fight hits.
+import { type Client, type Delayed, Room } from "colyseus";
 import { ANIM_STATES, House, Placed, Player, RoomState } from "../../../../contracts/game-state.ts";
+import {
+  AIM_TOLERANCE_M,
+  DAMAGE,
+  distance,
+  FULL_HP,
+  MAX_ORIGIN_OFFSET_M,
+  MAX_RANGE_M,
+  MIN_FIRE_INTERVAL_MS,
+  normalize,
+  parseVec3,
+  parseWeapon,
+  RESPAWN_MS,
+  rayPointDistance,
+  type Vec3,
+} from "./fire.ts";
+
+export * from "./fire.ts";
 
 export const MAX_STEP_M = 3;
 /**
@@ -16,6 +33,7 @@ export const roomsByBlock = new Map<string, NeighborhoodRoom>();
 
 type JoinOptions = { block_id?: string; name?: string };
 type MovePayload = { x: number; y: number; z: number; yaw: number; anim: string };
+type FirePayload = { origin?: unknown; dir?: unknown; target_id?: unknown; weapon?: unknown };
 
 export type PlanObject = {
   instance_id: string;
@@ -32,6 +50,10 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
   state = new RoomState();
   /** sessionId -> time (ms) until which moves skip the step check. Server-only, not in state. */
   private graceUntil = new Map<string, number>();
+  /** sessionId -> Date.now() of the last accepted fire (any weapon). Server-only. */
+  private lastFire = new Map<string, number>();
+  /** sessionId -> pending respawn timer. Server-only. */
+  private respawns = new Map<string, Delayed>();
 
   messages = {
     move: (client: Client, m: MovePayload) => {
@@ -54,15 +76,25 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
       this.allowTeleport(client.sessionId); // block frame <-> house-local frame is always a jump
     },
     set_mode: (_client: Client, m: { mode: string }) => {
-      if (m.mode === "explore" || m.mode === "foam") this.state.mode = m.mode;
+      if (m.mode !== "explore" && m.mode !== "foam") return;
+      const prev = this.state.mode;
+      this.state.mode = m.mode;
+      if (m.mode === "explore") {
+        for (const t of this.respawns.values()) t.clear();
+        this.respawns.clear();
+        this.state.players.forEach((p, id) => this.revive(id, p));
+      } else if (prev === "explore") {
+        this.state.players.forEach((p) => {
+          p.score = 0;
+          p.hp = FULL_HP;
+        });
+      }
     },
     chat: (client: Client, m: { text: string }) => {
       const p = this.state.players.get(client.sessionId);
       this.broadcast("toast", { text: `${p?.name ?? "?"}: ${String(m.text).slice(0, 200)}` });
     },
-    fire: (_client: Client, _m: unknown) => {
-      // TODO(lane-d): validate per AGENTS.md section 11 and broadcast hit / eliminated / fx.
-    },
+    fire: (client: Client, m: FirePayload) => this.fire(client, m ?? {}),
   };
 
   onCreate(options: JoinOptions) {
@@ -83,6 +115,9 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
     this.state.players.delete(client.sessionId);
     this.state.focus.delete(client.sessionId);
     this.graceUntil.delete(client.sessionId);
+    this.lastFire.delete(client.sessionId);
+    this.respawns.get(client.sessionId)?.clear();
+    this.respawns.delete(client.sessionId);
   }
 
   onDispose() {
@@ -102,6 +137,61 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
   /** Let this player's moves skip the step check for TELEPORT_GRACE_MS (zone change, focus, respawn). */
   allowTeleport(playerId: string) {
     if (this.state.players.has(playerId)) this.graceUntil.set(playerId, Date.now() + TELEPORT_GRACE_MS);
+  }
+
+  /**
+   * Foam fight (AGENTS.md section 11). Any failed check drops the shot silently.
+   * Every accepted fire (hit or miss) counts against the rate limit and sends fx to the others.
+   */
+  private fire(client: Client, m: FirePayload) {
+    const id = client.sessionId;
+    const shooter = this.state.players.get(id);
+    const rawOrigin = parseVec3(m.origin);
+    const rawDir = parseVec3(m.dir);
+    const weapon = parseWeapon(m.weapon);
+    if (this.state.mode !== "foam" || !shooter?.alive || !rawOrigin || !rawDir || !weapon) return;
+    const origin = rawOrigin;
+    const dir = normalize(rawDir);
+    if (!dir || distance(origin, [shooter.x, shooter.y, shooter.z]) > MAX_ORIGIN_OFFSET_M) return;
+    const now = Date.now();
+    if (now - (this.lastFire.get(id) ?? Number.NEGATIVE_INFINITY) < MIN_FIRE_INTERVAL_MS[weapon]) return;
+    this.lastFire.set(id, now);
+    this.broadcast("fx", { kind: weapon, origin, dir }, { except: client });
+
+    if (typeof m.target_id !== "string" || m.target_id === id) return;
+    const target = this.state.players.get(m.target_id);
+    if (!target?.alive || target.zone !== shooter.zone) return;
+    const centre: Vec3 = [target.x, target.y, target.z];
+    if (distance(origin, centre) >= MAX_RANGE_M[weapon]) return;
+    if (weapon === "blaster" && rayPointDistance(origin, dir, centre) > AIM_TOLERANCE_M) return;
+
+    target.hp = Math.max(0, target.hp - DAMAGE[weapon]);
+    if (target.hp > 0) target.anim = "hit";
+    this.broadcast("hit", { shooter: id, target: target.id, hp: target.hp });
+    if (target.hp > 0) return;
+
+    target.alive = false;
+    target.anim = "eliminated";
+    shooter.score += 1;
+    this.broadcast("eliminated", { target: target.id, by: id });
+    const targetId = target.id;
+    this.respawns.get(targetId)?.clear();
+    this.respawns.set(
+      targetId,
+      this.clock.setTimeout(() => {
+        this.respawns.delete(targetId);
+        const p = this.state.players.get(targetId);
+        if (p) this.revive(targetId, p);
+      }, RESPAWN_MS),
+    );
+  }
+
+  /** Full hp, alive, idle; a player coming back from dead may jump to its (client-chosen) spawn point. */
+  private revive(id: string, p: Player) {
+    if (!p.alive) this.allowTeleport(id);
+    p.hp = FULL_HP;
+    p.alive = true;
+    p.anim = "idle";
   }
 
   /** Internal API: replace one house's furniture with a validated plan. */
