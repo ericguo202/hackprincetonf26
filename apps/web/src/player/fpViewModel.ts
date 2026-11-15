@@ -7,6 +7,7 @@ import { Mesh, Quaternion, Vector3, type Material, type Object3D } from "three";
 
 import { actionFor, buildRig, setWeapon, type Rig } from "./characterRig";
 import { CLIPS } from "./clips";
+import { FP_NOODLE_DIR, FP_NOODLE_LENGTH } from "./fpWeaponMath";
 
 /** Drawn after the world. */
 const FP_RENDER_ORDER = 999;
@@ -59,6 +60,15 @@ export function buildViewModel(scene: Object3D, clips: Parameters<typeof buildRi
       }
     });
     props.push(p);
+  }
+  // A shorter noodle in first person: scale the tube along its own axis, about the grip.
+  const tube = rig.noodleJiggle?.mesh;
+  if (tube) {
+    tube.scale.y = FP_NOODLE_LENGTH;
+    tube.position.multiplyScalar(FP_NOODLE_LENGTH);
+    // Point the tube along FP_NOODLE_DIR, turning its holder about the grip.
+    const axis = new Vector3(0, 1, 0).applyQuaternion(tube.quaternion).normalize();
+    tube.parent?.quaternion.setFromUnitVectors(axis, new Vector3(...FP_NOODLE_DIR).normalize());
   }
   rig.mixer.stopAllAction();
   rig.mixer.uncacheRoot(rig.root);
