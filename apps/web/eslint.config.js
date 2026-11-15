@@ -5,7 +5,8 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "src/**/*.gen.ts"] },
+  // public/matterport: the downloaded Showcase bundle (scripts/setup-matterport.sh), not our code.
+  { ignores: ["dist", "src/**/*.gen.ts", "public/matterport"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx,js,mjs}"],

@@ -36,3 +36,6 @@ raw/
 
 # Amazon Berkeley Objects raw download (listings + 3D metadata); use worldgen/sources/abo.py
 amazon-3d-images/
+
+# Matterport Showcase bundle + tour furniture copies (apps/web/scripts/setup-matterport.sh)
+apps/web/public/matterport/

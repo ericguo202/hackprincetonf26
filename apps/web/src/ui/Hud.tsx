@@ -4,6 +4,7 @@ import { setMode } from "../net/game";
 import { useStore } from "../store";
 import { Broadcasts } from "./Broadcasts";
 import { useBuild } from "../world/buildState";
+import { useTour } from "./tourSdk";
 
 export function Hud() {
   const mode = useStore((s) => s.mode);
@@ -47,6 +48,15 @@ export function Hud() {
             onClick={() => useBuild.getState().toggle()}
           >
             {building ? "Furnishing" : "Furnish by hand"}
+          </button>
+        ) : null}
+        {inHouse ? (
+          <button
+            type="button"
+            title="See this house's furniture inside the real Matterport tour"
+            onClick={() => useTour.getState().setOpen(true)}
+          >
+            View in Matterport
           </button>
         ) : null}
         <span>

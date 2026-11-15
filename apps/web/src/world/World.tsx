@@ -20,6 +20,8 @@ import { DoorPrompt } from "../player/DoorPrompt";
 import { SfxHud } from "../player/SfxHud";
 import { WeaponBar } from "../player/WeaponBar";
 import { FurnishPanel } from "../ui/FurnishPanel";
+import { TourView } from "../ui/TourView";
+import { useTour } from "../ui/tourSdk";
 import { Player } from "../player/Player";
 import { BlockScene } from "./BlockScene";
 import { PHYSICS_PRIORITY } from "./frameOrder";
@@ -74,9 +76,11 @@ function initialPlacement(pack: LoadedPack): { zone: string; pos: Vec3; roomId: 
 
 export function World() {
   const pack = usePack();
+  // "View in Matterport" (ui/TourView) covers the screen: stop rendering the game under it.
+  const tourOpen = useTour((s) => s.open);
   return (
     <>
-      <Canvas shadows camera={{ position: [0, 3.4, 9], fov: 50 }}>
+      <Canvas shadows camera={{ position: [0, 3.4, 9], fov: 50 }} frameloop={tourOpen ? "never" : "always"}>
         {/* Sky and live sun both from the baked sun (sun.ts, Lane A HANDOFF 22:20). */}
         <Sky sunPosition={SKY_SUN} />
         <ambientLight intensity={0.45} />
@@ -97,6 +101,7 @@ export function World() {
         />
       ) : null}
       <PackBadge status={pack} />
+      {pack.status === "ready" ? <TourView pack={pack.pack} /> : null}
     </>
   );
 }

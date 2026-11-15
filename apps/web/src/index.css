@@ -263,3 +263,20 @@ body { background: #10141a; color: #e8eaed; font-family: system-ui, sans-serif; 
   pointer-events: auto; font: inherit; font-size: 12px; font-weight: 600; color: #10141a; background: #c5d4f0;
   border: 0; border-radius: 14px; padding: 3px 10px; cursor: pointer;
 }
+
+/* "View in Matterport" (ui/TourView.tsx) */
+.tour-overlay {
+  position: absolute; inset: 0; z-index: 50; display: flex; flex-direction: column;
+  background: #10141a;
+}
+.tour-bar {
+  display: flex; gap: 14px; align-items: center; padding: 8px 14px; font-size: 13px;
+  background: rgba(16, 20, 26, 0.95); color: #e8eaed;
+}
+.tour-bar button {
+  margin-left: auto; font: inherit; color: #10141a; background: #c5d4f0; border: 0;
+  border-radius: 16px; padding: 6px 12px; cursor: pointer;
+}
+.tour-status { color: #9aa3b2; }
+.tour-status.error { color: #f2a5a5; }
+.tour-frame { flex: 1; width: 100%; border: 0; }
