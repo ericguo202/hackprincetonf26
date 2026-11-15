@@ -11,5 +11,15 @@
         { "label": "living_room", "point": [1.0, 1.0], "confidence": 0.9 }
       ]
     }
+  ],
+  "inside": [
+    {
+      "polygon": [[5.2, 0.69], [3.7, -0.81], [5.2, -0.81]],
+      "why": "The living room's corner fireplace: the plan leaves its masonry out as a triangular notch in the east wall. The firebox floor counts as scanned ground, so the notch was treated as yard and facade planes lined it, black from the firebox and visible from the back yard through gaps in the scanned chimney. Plan coordinates (x, y); the polygon is added to the house outline."
+    },
+    {
+      "polygon": [[3.37, -5.18], [5.22, -5.18], [5.22, -4.56], [3.37, -4.56]],
+      "why": "A slot 0.6 m wide and 1.8 m deep in the east wall, between the bedroom and the bathroom behind it (an unscanned closet or pipe chase; no room, no door). As yard it was a slit 0.25 m wide lined with facade planes no camera saw."
+    }
   ]
 }

@@ -24,6 +24,8 @@ import shapely
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import polygonize, split, unary_union
 
+from worldgen import aerial as ae
+from worldgen import exterior as ex
 from worldgen import house_mesh as hm
 from worldgen import rebake as rb
 from worldgen.pack import load_block, pack_dir, update_manifest
@@ -531,7 +533,8 @@ def graph_json(parts: list[RoomPart], spans: dict[str, list[dict]]) -> dict:
 def collision_walls(parts: list[RoomPart], spans: dict[str, list[dict]]) -> list[hm.WallSegment]:
     """Box runs per wall edge (every room, kept or not: a closet's walls are still walls). A door is cut out
     only when the scan shows a real gap there and it joins two rooms. Outside doors stay solid (players
-    enter and leave a house by zone switch), and so do doors that were closed when scanned and windows."""
+    enter and leave a house by zone switch), and so do doors that were closed when scanned and windows.
+    Exception: outside doors marked `play_open` (see play_doors) are cut so players can walk into the yard."""
     by_edge = edge_rooms(parts)
     seen: dict[str, tuple[Edge, RoomPart]] = {}
     height: dict[str, float] = defaultdict(float)
@@ -546,7 +549,8 @@ def collision_walls(parts: list[RoomPart], spans: dict[str, list[dict]]) -> list
         cuts = sorted(
             (s["t0"], s["t1"])
             for s in spans.get(eid, [])
-            if s["type"] == "door" and s.get("open", True) and len(span_rooms(e, s, by_edge)) >= 2
+            if s["type"] == "door"
+            and (s.get("play_open") or (s.get("open", True) and len(span_rooms(e, s, by_edge)) >= 2))
         )
         t = 0.0
         for t0, t1 in [*cuts, (e.length, e.length)]:
@@ -556,15 +560,66 @@ def collision_walls(parts: list[RoomPart], spans: dict[str, list[dict]]) -> list
     return segs
 
 
-def shell_rooms(parts: list[RoomPart]) -> list[rb.ShellRoom]:
-    """Kept rooms as rebake inputs: centreline polygon and wall edges."""
-    return [
-        rb.ShellRoom(
-            p.poly, p.floor_z, p.height, [(e.line(), e.thickness) for e in p.edges if e.type == "wall"]
-        )
-        for p in parts
-        if p.keep
-    ]
+def listing_entry(out: Path, listing_id: str) -> dict:
+    """The listing's entry in out/listings/index.json (lat, lon, world pose), or {} when there is none."""
+    path = out / "listings" / "index.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    rows = data if isinstance(data, list) else data.get("listings") or []
+    return next((row for row in rows if row.get("id") == listing_id), {})
+
+
+def shell_rooms(parts: list[RoomPart], spans: dict[str, list[dict]] | None = None) -> list[rb.ShellRoom]:
+    """Kept rooms as rebake inputs: centreline polygon, wall edges and the outside doors opened for play."""
+    out = []
+    for p in parts:
+        if not p.keep:
+            continue
+        cuts = [
+            (_at(e, s["t0"]), _at(e, s["t1"]), p.floor_z, p.floor_z + s["height"])
+            for e in p.edges
+            for s in (spans or {}).get(e.id, [])
+            if s.get("play_open")
+        ]
+        walls = [(e.line(), e.thickness) for e in p.edges if e.type == "wall"]
+        out.append(rb.ShellRoom(p.poly, p.floor_z, p.height, walls, cuts=cuts))
+    return out
+
+
+def void_polys(parts: list[RoomPart], overrides: dict | None = None) -> list[Polygon]:
+    """Spaces inside the house that are no room (its outline, not yard): dropped Matterport "Void" rooms
+    (closets, chases), and plan polygons listed by hand in overrides/<model>.json as
+    "inside": [{"polygon": [[x, y], ...], "why": ...}] (masonry the plan leaves out as a notch: a corner
+    fireplace)."""
+    voids = [p.poly for p in parts if not p.keep and p.raw_label.strip().lower() == VOID]
+    return voids + [Polygon(o["polygon"]) for o in (overrides or {}).get("inside") or []]
+
+
+def play_doors(parts: list[RoomPart], spans: dict[str, list[dict]], footprint: Polygon) -> list[ex.Door]:
+    """Mark the outside doors players may walk through (`play_open`) and return them as (a, b, z0, z1).
+
+    Chosen by the user on 2026-11-14: the front and back doors, i.e. doors on the house outline that the scan
+    saw open (so their position is measured, not guessed), not in a garage. Doors into closets the plan left
+    out (dropped Void rooms, unmodelled spaces) also have no room on the other side but are not on the
+    outline of `footprint` (exterior.house_footprint)."""
+    outline = footprint.exterior
+    by_edge = edge_rooms(parts)
+    out = []
+    for p in parts:
+        if not p.keep or p.label == "garage":
+            continue
+        for e in p.edges:
+            for s in spans.get(e.id, []):
+                if s["type"] != "door" or not s.get("open") or len(span_rooms(e, s, by_edge)) >= 2:
+                    continue
+                a, b = _at(e, s["t0"]), _at(e, s["t1"])
+                if outline.distance(Point(a)) > 0.25 or outline.distance(Point(b)) > 0.25:
+                    continue
+                if not s.get("play_open"):
+                    s["play_open"] = True
+                    out.append((a, b, p.floor_z, p.floor_z + s["height"]))
+    return out
 
 
 def scan_floor_z(scan: rb.Scan, parts: list[RoomPart]) -> dict[int, float]:
@@ -618,6 +673,10 @@ def build(
     refresh: bool = False,
     texture_size: int = 2048,
     bake_res: float = 256.0,
+    debug_dir: Path | None = None,
+    holdout: tuple[str, ...] = (),
+    fit_boxes: bool = True,
+    exterior: bool = True,
 ) -> dict:
     block = load_block(block_id)
     house = next((h for h in block["houses"] if h["listing_id"] == listing_id), None)
@@ -638,6 +697,10 @@ def build(
     house_dir = pack_dir(out, block_id, version) / "houses" / listing_id
     house_dir.mkdir(parents=True, exist_ok=True)
     scan = mesh = fixture_tris = None
+    outdoors: list[ex.Exterior] = []
+    # Aerial layers (Vexcel surface model, ortho, roof outline) for the roof; None when the listing has no
+    # world pose yet or its block has no cached rasters. `"aerial": false` on the house turns it off.
+    aerial = ae.load(out, block, listing_entry(out, listing_id)) if house.get("aerial", True) else None
     if source in ("panorama", "matterpak"):
         scan = rb.load_scan(extract_matterpak(model_id, raw))
         floor_z = scan_floor_z(scan, parts)
@@ -661,6 +724,15 @@ def build(
     for p in parts:
         p.floor_z = floor_z.get(p.floor, 0.0)
     spans = opening_spans(parts, door_runs, win_pts)
+    exterior = exterior and source == "panorama" and house.get("exterior", True)
+    # The house outline outdoors (rooms, Void rooms, enclosed notches). Not `footprint` below: that is the
+    # MatterPak crop region (rooms buffered 0.35 m), and reusing the name once fed it to the exterior.
+    house_outline = (
+        ex.house_footprint(scan, shell_rooms(parts), void_polys(parts, overrides))
+        if exterior and scan is not None
+        else None
+    )
+    doors_out = play_doors(parts, spans, house_outline) if house_outline is not None else []
     rooms = rooms_json(parts, spans)
     graph = graph_json(parts, spans)
     (house_dir / "rooms.json").write_text(json.dumps(rooms, indent=1) + "\n", encoding="utf-8")
@@ -673,9 +745,38 @@ def build(
         # Clean shell + scan pieces, every texel coloured from the original panoramas (worldgen/rebake.py).
         mp.download_skyboxes(model_id, raw / "skybox_2k", "2k")
         panos = PanoSet(model, raw / "skybox_2k")
-        tmp = out / "cache" / "glb" / f"{model_id}_interior_pano.glb"
+        # The uncompressed glb is kept for the preview and scoring scripts. worldgen/out is shared by every
+        # worktree, so builds of other pack versions get their own file and cannot overwrite each other.
+        suffix = "" if version == 1 else f"_v{version}"
+        tmp = out / "cache" / "glb" / f"{model_id}_interior_pano{suffix}.glb"
+        if holdout:
+            # Quality measurement: bake without these panoramas, then score against them
+            # (scripts/preview/render_compare.py --score ... <labels>). Never ship a hold-out build.
+            label = {q["id"]: q.get("label") for q in model.get("panoLocations") or []}
+            panos = panos.subset([i for i, q in enumerate(panos.panos) if label.get(q.id) not in holdout])
+            tmp = tmp.with_name(f"{model_id}_interior_pano_holdout{suffix}.glb")
+        rooms_in = shell_rooms(parts, spans)
+
+        def add_outdoors(scene, all_panos) -> None:
+            # The scanned lot (yard, facades, roof, backdrop) in the same file: house zone = house + lot.
+            hand = [(*d["at"], float(d["radius"])) for d in overrides.get("remove_outdoor") or []]
+            outdoors.append(
+                ex.add_exterior(
+                    scene, scan, rooms_in, all_panos, doors_out, house_outline, aerial=aerial, remove=hand
+                )
+            )
+
         interior_counts, fixture_tris = rb.write_rebaked_interior_glb(
-            scan, shell_rooms(parts), panos, tmp, bake_res
+            scan,
+            rooms_in,
+            panos,
+            tmp,
+            bake_res,
+            debug=debug_dir,
+            fit_boxes=fit_boxes,
+            drop_boxes=[tuple(d["at"]) for d in overrides.get("drop_boxes") or []],
+            remove=[(*d["at"], float(d["radius"])) for d in overrides.get("remove") or []],
+            extra=add_outdoors if exterior else None,
         )
         interior_counts["panoramas"] = len(panos)
         hm.compress_glb(tmp, house_dir / "interior.glb", texture_size)
@@ -693,7 +794,11 @@ def build(
         (unary_union([p.poly for p in parts if p.floor == f]).buffer(0.05), z) for f, z in floor_z.items()
     ]
     collision_counts = hm.write_collision_glb(
-        collision_walls(parts, spans), floors, house_dir / "collision.glb", fixture_tris
+        collision_walls(parts, spans),
+        floors,
+        house_dir / "collision.glb",
+        fixture_tris,
+        ex.collision_meshes(outdoors[0]) if outdoors else None,
     )
     doors = [s for items in spans.values() for s in items if s["type"] == "door"]
 
@@ -707,6 +812,7 @@ def build(
         "graph_edges": len(graph["edges"]),
         "doors": {"listed": len(doors), "found_in_scan": sum(s["open"] for s in doors)},
         "interior_faces": interior_counts,
+        "exterior": outdoors[0].report if outdoors else None,
         "collision_tris": collision_counts,
         "floor_y": floor_z,
         "sizes_kb": {f.name: round(f.stat().st_size / 1024) for f in sorted(house_dir.glob("*"))},
@@ -726,11 +832,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", type=Path, default=HERE / "out")
     p.add_argument("--refresh", action="store_true", help="re-fetch the Matterport model detail")
     p.add_argument("--bake-res", type=float, default=256.0, help="texels per metre on walls/floors")
+    p.add_argument("--no-exterior", action="store_true", help="interior only (no yard, facades, backdrop)")
     p.add_argument(
         "--texture-size",
         type=int,
         default=2048,
         help="max texture edge in interior.glb (1024 halves GPU memory)",
+    )
+    p.add_argument(
+        "--debug-dir",
+        type=Path,
+        help="write QA images here (wall relief maps with the fitted fixture boxes)",
+    )
+    p.add_argument(
+        "--holdout",
+        default="",
+        help="comma-separated pano labels to leave out of the bake, for scoring (use with --version 99)",
+    )
+    p.add_argument(
+        "--no-boxes",
+        action="store_true",
+        help="keep wall-attached fixtures as scan triangles instead of fitting clean boxes (fallback)",
     )
     args = p.parse_args(argv)
     from worldgen import versions
@@ -746,6 +868,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.refresh,
                 args.texture_size,
                 args.bake_res,
+                args.debug_dir,
+                tuple(x for x in args.holdout.split(",") if x),
+                not args.no_boxes,
+                not args.no_exterior,
             ),
             indent=1,
         )

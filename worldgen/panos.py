@@ -259,3 +259,81 @@ def shade(
         rgb[a:b][got] = (cols[got] * w3[got][..., None]).sum(1) / wsum[got, None]
         valid[a:b] = got
     return rgb, valid
+
+
+def see(
+    panos: PanoSet,
+    rays: Raycaster,
+    j: int,
+    pts: np.ndarray,
+    normals: np.ndarray,
+    max_dist: float = 12.0,
+    min_cos: float = 0.12,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """What panorama j sees of surface points: (visible mask (n,), colours and weights of the visible
+    ones). Same tests as `shade`: the point faces the camera (cosine above min_cos), is 0.25 to max_dist
+    away, and nothing in `rays` is in front of it. The weight is cos / distance^2 times the tripod trust."""
+    c = panos.positions[j]
+    v = c - pts
+    dist = np.linalg.norm(v, axis=1)
+    cos = np.einsum("ij,ij->i", v, normals) / np.maximum(dist, 1e-6)
+    vis = np.zeros(len(pts), dtype=bool)
+    idx = np.nonzero((cos > min_cos) & (dist < max_dist) & (dist > 0.25))[0]
+    if len(idx):
+        t, _ = rays.cast(np.tile(c, (len(idx), 1)), -v[idx] / dist[idx, None])
+        vis[idx] = t >= dist[idx] - (0.05 + 0.012 / cos[idx])
+    col, trust = panos.sample(j, pts[vis])
+    return vis, col, cos[vis] / dist[vis] ** 2 * trust
+
+
+def shade_single(
+    pts: np.ndarray,
+    normals: np.ndarray,
+    panos: PanoSet,
+    rays: Raycaster,
+    max_dist: float = 12.0,
+    max_candidates: int = 12,
+    min_cos: float = 0.25,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Colour one small surface (a cabinet front, a fridge door) from as few panoramas as possible.
+
+    `shade` picks and blends views per point, which is right for a wall but turns a shiny or detailed
+    object into a patchwork: every camera sees a different reflection, and the surface is a few cm off the
+    box face, so views do not line up. Here the whole surface goes to the single panorama that sees most
+    of it (largest sum of weights); what that one cannot see goes to the next best, and so on. A later
+    view's colours are scaled per channel so that they match the earlier ones where both see the surface
+    (exposure differs between panoramas). Views more than about 75 degrees off the surface normal
+    (min_cos) do not count: at that angle a lacquered bar top or a steel door shows the window it
+    reflects, not itself; the surface is then left to the fill. Returns (rgb float (n, 3), valid (n,))."""
+    n = len(pts)
+    rgb = np.zeros((n, 3))
+    valid = np.zeros(n, dtype=bool)
+    if not n or not len(panos):
+        return rgb, valid
+    centre = pts.mean(0)
+    reach = float(np.linalg.norm(pts - centre, axis=1).max()) + max_dist
+    d = np.linalg.norm(panos.positions - centre, axis=1)
+    order = [int(j) for j in np.argsort(d)[:max_candidates] if d[j] <= reach]
+    if not order:
+        return rgb, valid
+    cols = np.zeros((n, len(order), 3), dtype=np.float32)
+    wts = np.zeros((n, len(order)), dtype=np.float32)
+    for k, j in enumerate(order):
+        vis, col, w = see(panos, rays, j, pts, normals, max_dist, min_cos)
+        cols[vis, k] = col
+        wts[vis, k] = w
+    left = wts.max(1) > 0
+    while left.any():
+        k = int(np.argmax(wts[left].sum(0)))
+        take = left & (wts[:, k] > 0)
+        if not take.any():
+            break
+        col = cols[take, k].astype(float)
+        both = valid & (wts[:, k] > 0)
+        if both.sum() >= 50:  # match this view's exposure to what is already there
+            gain = (np.median(rgb[both], axis=0) + 1.0) / (np.median(cols[both, k], axis=0) + 1.0)
+            col *= np.clip(gain, 0.6, 1.6)
+        rgb[take] = col
+        valid |= take
+        left &= ~take
+    return rgb, valid

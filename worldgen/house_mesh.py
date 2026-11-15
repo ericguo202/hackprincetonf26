@@ -255,9 +255,11 @@ def write_collision_glb(
     floors: list[tuple[Polygon, float]],
     dest: Path,
     fixtures: np.ndarray | None = None,
+    extra: dict[str, trimesh.Trimesh] | None = None,
 ) -> dict[str, int]:
     """collision.glb, Y-up: `walls` (boxes, door gaps cut out), `floor` (slabs) and, when given, `fixtures`
-    (scan triangles (n, 3, 3) of counters, half walls, tubs: things players must not walk through).
+    (scan triangles (n, 3, 3) of counters, half walls, tubs: things players must not walk through) and the
+    `extra` meshes (Z-up; name -> mesh, e.g. the yard's `ground`, `outdoor` and `bounds`).
     Returns triangle counts."""
     scene = trimesh.Scene()
     counts: dict[str, int] = {}
@@ -286,6 +288,13 @@ def write_collision_glb(
         fx.apply_transform(Z_UP_TO_Y_UP)
         scene.add_geometry(fx, node_name="fixtures", geom_name="fixtures")
         counts["fixtures"] = len(fx.faces)
+    for name, m in (extra or {}).items():
+        if m is None or not len(m.faces):
+            continue
+        m = m.copy()
+        m.apply_transform(Z_UP_TO_Y_UP)
+        scene.add_geometry(m, node_name=name, geom_name=name)
+        counts[name] = len(m.faces)
     dest.parent.mkdir(parents=True, exist_ok=True)
     scene.export(dest)
     return counts

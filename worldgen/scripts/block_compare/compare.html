@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Block Compare</title>
+<style>
+  :root { --bg:#111418; --panel:#1b2026; --text:#e8eaed; --muted:#9aa3ad; --accent:#6aa9ff; --line:#2c333b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13px/1.4 system-ui,-apple-system,sans-serif; }
+  #bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px 10px; background:var(--panel); border-bottom:1px solid var(--line); }
+  #bar button, #bar select { background:#252c34; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 8px; font:inherit; cursor:pointer; }
+  #bar button.on { border-color:var(--accent); color:var(--accent); }
+  #bar .sep { width:1px; height:20px; background:var(--line); margin:0 4px; }
+  #bar .hint { color:var(--muted); margin-left:auto; }
+  #views { display:grid; grid-template-columns:1fr 1fr; gap:2px; height:calc(100% - 46px); }
+  .view { position:relative; overflow:hidden; background:#000; }
+  .view canvas { display:block; width:100%; height:100%; }
+  .label { position:absolute; top:8px; left:8px; background:rgba(0,0,0,.6); padding:3px 8px; border-radius:4px; font-weight:600; pointer-events:none; }
+  .status { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,.6); padding:3px 8px; border-radius:4px; color:var(--muted); pointer-events:none; }
+  .view img { width:100%; height:100%; object-fit:contain; display:none; }
+  body.shots .view canvas { display:none; } body.shots .view img { display:block; }
+  body.shoot #bar { display:none; } body.shoot #views { grid-template-columns:1fr; height:100%; } body.shoot .label, body.shoot .status { display:none; }
+  @media (max-width: 700px) { #views { grid-template-columns:1fr; grid-template-rows:1fr 1fr; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="bar">
+  <select id="cam"></select>
+  <button id="walk">Walk (WASD)</button>
+  <button id="orbit" class="on">Orbit</button>
+  <span class="sep"></span>
+  <button id="shotsBtn">Static shots</button>
+  <button id="fogBtn" class="on">Fog</button>
+  <span class="hint">Both views share one camera. Walk: click a view, WASD + mouse, Shift fast, Q/E down/up. Esc releases.</span>
+</div>
+<div id="views"></div>
+<script type="module">
+/*
+  Block approach comparison (Lane A QA only; not the game, never deployed).
+  Serve worldgen/out/block_compare/ over HTTP, open compare.html.
+  ?a=photo,procedural  approaches to show (folders next to this file, each with render.glb, shots/)
+  ?shoot=<approach>&cam=<camera_id>  single full-window render used by shoot.mjs; sets window.__ready
+*/
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const q = new URLSearchParams(location.search);
+const shoot = q.get('shoot');
+const approaches = shoot ? [shoot] : (q.get('a') || 'photo,procedural').split(',');
+if (shoot) document.body.classList.add('shoot');
+
+const cams = await (await fetch('cameras.json')).json();
+const fovDeg = cams.fov_deg || 70;
+const SKY = new THREE.Color(0xbfd4e6);
+
+const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
+
+// One shared camera; each view has its own renderer and scene.
+const camera = new THREE.PerspectiveCamera(fovDeg, 16 / 9, 0.1, 3000);
+const views = [];
+const host = document.getElementById('views');
+if (!shoot && innerWidth > 700) host.style.gridTemplateColumns = `repeat(${approaches.length}, 1fr)`;
+
+function makeScene() {
+  const scene = new THREE.Scene();
+  scene.background = SKY.clone();
+  scene.fog = new THREE.Fog(SKY.clone(), 180, 700);
+  scene.add(new THREE.HemisphereLight(0xdfeeff, 0x6b5a45, 1.2));
+  const sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
+  sun.position.set(-120, 200, 80); // afternoon sun from the southwest-ish
+  scene.add(sun);
+  return scene;
+}
+
+function prepMaterials(root) {
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material)) {
+      if (m.isMeshBasicMaterial) m.toneMapped = false; // unlit photo textures: show as captured
+    }
+  });
+}
+
+for (const name of approaches) {
+  const div = document.createElement('div'); div.className = 'view';
+  const label = document.createElement('div'); label.className = 'label'; label.textContent = name;
+  const status = document.createElement('div'); status.className = 'status'; status.textContent = 'loading…';
+  const img = document.createElement('img'); img.alt = `${name} shot`;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: !!shoot });
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.setPixelRatio(shoot ? 1 : Math.min(devicePixelRatio, 2));
+  div.append(renderer.domElement, img, label, status);
+  host.append(div);
+  const scene = makeScene();
+  const v = { name, div, renderer, scene, status, img, ready: false, fog: scene.fog };
+  views.push(v);
+  loader.load(`${name}/render.glb`, g => {
+    prepMaterials(g.scene); scene.add(g.scene);
+    let tris = 0; g.scene.traverse(o => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+    status.textContent = `${Math.round(tris).toLocaleString()} triangles`;
+    v.ready = true;
+  }, undefined, e => { status.textContent = `no ${name}/render.glb yet`; v.ready = true; console.warn(e); });
+}
+
+// Camera presets
+const sel = document.getElementById('cam');
+for (const c of cams.cameras) sel.append(new Option(c.id, c.id));
+function applyCam(id) {
+  const c = cams.cameras.find(c => c.id === id) || cams.cameras[0];
+  camera.position.fromArray(c.pos); camera.lookAt(...c.look_at);
+  orbit.target.fromArray(c.look_at); orbit.update();
+  syncYawPitch();
+}
+sel.onchange = () => applyCam(sel.value);
+
+// Controls: orbit (default) or walk; events come from whichever view is under the mouse.
+const orbit = new OrbitControls(camera, host);
+orbit.enableDamping = false;
+let mode = 'orbit', yaw = 0, pitch = 0;
+const keys = new Set();
+function syncYawPitch() { const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); yaw = e.y; pitch = e.x; }
+const walkBtn = document.getElementById('walk'), orbitBtn = document.getElementById('orbit');
+function setMode(m) {
+  mode = m; orbit.enabled = m === 'orbit';
+  walkBtn.classList.toggle('on', m === 'walk'); orbitBtn.classList.toggle('on', m === 'orbit');
+  if (m === 'walk') syncYawPitch(); else { orbit.target.copy(camera.position).add(new THREE.Vector3(0, 0, -10).applyQuaternion(camera.quaternion)); orbit.update(); }
+}
+walkBtn.onclick = () => setMode('walk'); orbitBtn.onclick = () => setMode('orbit');
+host.addEventListener('click', () => { if (mode === 'walk') host.requestPointerLock(); });
+addEventListener('mousemove', e => {
+  if (mode !== 'walk' || document.pointerLockElement !== host) return;
+  yaw -= e.movementX * 0.0025; pitch = Math.max(-1.5, Math.min(1.5, pitch - e.movementY * 0.0025));
+  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+});
+addEventListener('keydown', e => keys.add(e.code)); addEventListener('keyup', e => keys.delete(e.code));
+
+document.getElementById('shotsBtn').onclick = e => {
+  const on = document.body.classList.toggle('shots'); e.target.classList.toggle('on', on);
+  for (const v of views) v.img.src = `${v.name}/shots/${sel.value}.png?${Date.now()}`;
+};
+sel.addEventListener('change', () => { if (document.body.classList.contains('shots')) for (const v of views) v.img.src = `${v.name}/shots/${sel.value}.png?${Date.now()}`; });
+let fogOn = true; // fog only at street level (camera below 10 m), where it hides the edge of the 320 m square
+document.getElementById('fogBtn').onclick = e => { fogOn = e.target.classList.toggle('on'); };
+
+function resize() {
+  for (const v of views) {
+    const w = shoot ? cams.size_px[0] : v.div.clientWidth, h = shoot ? cams.size_px[1] : v.div.clientHeight;
+    v.renderer.setSize(w, h, !shoot);
+    camera.aspect = w / h;
+  }
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.1, (t - last) / 1000); last = t;
+  if (mode === 'walk') {
+    const sp = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 15 : 4) * dt;
+    const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), r = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    if (keys.has('KeyW')) camera.position.addScaledVector(f, sp);
+    if (keys.has('KeyS')) camera.position.addScaledVector(f, -sp);
+    if (keys.has('KeyD')) camera.position.addScaledVector(r, sp);
+    if (keys.has('KeyA')) camera.position.addScaledVector(r, -sp);
+    if (keys.has('KeyE')) camera.position.y += sp;
+    if (keys.has('KeyQ')) camera.position.y -= sp;
+  }
+  for (const v of views) { v.scene.fog = fogOn && camera.position.y < 10 ? v.fog : null; v.renderer.render(v.scene, camera); }
+  if (!shoot) requestAnimationFrame(frame);
+}
+
+resize();
+applyCam(q.get('cam') || cams.cameras[0].id);
+if (q.get('cam')) sel.value = q.get('cam');
+if (shoot) {
+  // Wait for the model (and its textures) then render once.
+  const wait = () => views.every(v => v.ready) ? setTimeout(() => { frame(performance.now()); requestAnimationFrame(() => { frame(performance.now()); window.__ready = true; }); }, 500) : setTimeout(wait, 100);
+  wait();
+} else requestAnimationFrame(frame);
+</script>
+</body>
+</html>
