@@ -9,7 +9,7 @@ import {
   type Material,
 } from "three";
 
-import { disableToneMapping } from "./interiorMaterials";
+import { disableToneMapping, disableUnlitToneMapping } from "./interiorMaterials";
 
 /** An interior.glb-like scene: unlit photo materials, one multi-material mesh, a masked wall. */
 function interiorScene() {
@@ -64,5 +64,41 @@ describe("interior.glb materials: tone mapping off", () => {
     const versions = interior.materials.map((m) => m.version);
     expect(disableToneMapping(interior.root)).toBe(0);
     interior.materials.forEach((m, i) => expect(m.version).toBe(versions[i]));
+  });
+});
+
+describe("block/render.glb materials: tone mapping off on unlit only (pack v2)", () => {
+  /** Like v2's block: unlit ground and far-zone tiles, lit roofs, walls and trees. */
+  function blockScene() {
+    const root = new Group();
+    const lawn = new MeshBasicMaterial();
+    const tile = new MeshBasicMaterial();
+    const roof = new MeshStandardMaterial();
+    const bark = new MeshStandardMaterial();
+    const leaves = new MeshStandardMaterial({ alphaTest: 0.5 });
+    root.add(new Mesh(new BoxGeometry(), lawn), new Mesh(new BoxGeometry(), [tile, roof]));
+    const tree = new Group();
+    tree.add(new Mesh(new BoxGeometry(), bark), new Mesh(new BoxGeometry(), leaves));
+    root.add(tree);
+    return { root, basic: [lawn, tile], standard: [roof, bark, leaves] };
+  }
+
+  it("switches off MeshBasicMaterial materials, including in multi-material meshes", () => {
+    const b = blockScene();
+    expect(disableUnlitToneMapping(b.root)).toBe(2);
+    expect(b.basic.every((m) => m.toneMapped === false)).toBe(true);
+  });
+
+  it("leaves standard (lit) materials unchanged", () => {
+    const b = blockScene();
+    const versions = b.standard.map((m) => m.version);
+    disableUnlitToneMapping(b.root);
+    expect(b.standard.every((m) => m.toneMapped === true)).toBe(true);
+    b.standard.forEach((m, i) => expect(m.version).toBe(versions[i]));
+  });
+
+  it("the default (interiors) still switches every material", () => {
+    const b = blockScene();
+    expect(disableToneMapping(b.root)).toBe(5);
   });
 });

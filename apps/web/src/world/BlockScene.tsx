@@ -24,6 +24,7 @@ import {
   type Door,
   type LoadedPack,
 } from "./pack";
+import { disableUnlitToneMapping } from "./interiorMaterials";
 import { houseBoxLocal, houseBoxesLocal } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
 
@@ -47,6 +48,7 @@ export function BlockScene({ pack }: { pack: LoadedPack }) {
         kind="render"
         url={base && packUrl(base, manifest.block.render)}
         label={manifest.block.render}
+        prepare={disableUnlitToneMapping}
         placeholder={<PlaceholderBlockRender pack={pack} layout={layout} />}
       />
       <GlbOrPlaceholder
@@ -230,13 +232,14 @@ function DoorMarker({
         <meshStandardMaterial color={PALETTE.door} emissive={PALETTE.door} emissiveIntensity={0.6} />
       </mesh>
       {/* Centred on the door point: this is exactly the radius stepZone tests. */}
-      <mesh rotation-x={-Math.PI / 2} position={[local[0], 0.02, local[2]]}>
+      {/* The group sits at world.position, whose y is the block ground at the door (pack v2), so local[1] is ~0. */}
+      <mesh rotation-x={-Math.PI / 2} position={[local[0], local[1] + 0.02, local[2]]}>
         <ringGeometry args={[DOOR_RADIUS_M - 0.08, DOOR_RADIUS_M, 40]} />
         <meshBasicMaterial color={PALETTE.door} transparent opacity={0.8} />
       </mesh>
       {/* Door labels are wayfinding on the block, so they stay up much further out. */}
       <WorldLabel
-        position={[local[0] + ox * 0.6, 2.7, local[2] + oz * 0.6]}
+        position={[local[0] + ox * 0.6, local[1] + 2.7, local[2] + oz * 0.6]}
         style={labelStyle}
         range={{ fadeFrom: 40, fadeTo: 50 }}
       >
