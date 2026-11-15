@@ -3,6 +3,7 @@
 import { Client, type Room } from "@colyseus/sdk";
 import type { AnimState, GameMode } from "../../../../contracts/game-state";
 import { type HouseFurniture, type NetPlayer, useStore } from "../store";
+import { applyBroadcast, BROADCAST_TYPES } from "./broadcasts";
 
 const GAME_URL = import.meta.env.VITE_GAME_URL ?? "ws://localhost:2567";
 const SOLO = import.meta.env.VITE_SOLO === "1";
@@ -36,6 +37,7 @@ export async function joinBlock(blockId: string, name: string): Promise<void> {
     }
     useStore.getState().set({ mode: j.mode, players, houses: j.houses ?? {}, focus: j.focus ?? {} });
   });
+  for (const type of BROADCAST_TYPES) room.onMessage(type, (data: unknown) => applyBroadcast(type, data));
   room.onLeave(() => useStore.getState().set({ connected: false }));
 
   // The server starts every player in "block"; if we join already inside a house, the first tick tells it.

@@ -1,4 +1,4 @@
-# Game service messages (contracts v2.4.1)
+# Game service messages (contracts v2.4.2)
 
 Colyseus 0.18, one room type `NeighborhoodRoom` keyed by `block_id`, up to 16 players.
 Shared state schema: `game-state.ts`. Positions are in the player's current zone frame
@@ -50,8 +50,12 @@ HTTP with header `X-Internal-Secret: $GAME_INTERNAL_SECRET`. Private network fir
 
 | Method | Path                                                  | Body                                                                 | Effect                                                                                     |
 | ------ | ----------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `POST` | `/internal/rooms/{block_id}/houses/{listing_id}/plan` | `{player_id, plan}` (plan: `placement_plan.schema.json`, no conflicts) | Replace that house's furniture; broadcast `toast` "{name}'s agent furnished the {room}" |
+| `POST` | `/internal/rooms/{block_id}/houses/{listing_id}/plan` | `{player_id, plan, room_label?}` (plan: `placement_plan.schema.json`, no conflicts) | Replace that house's furniture; broadcast `toast` "{name}'s agent furnished the {room}" |
 | `POST` | `/internal/rooms/{block_id}/focus`                    | `{player_id, listing_id}`                                            | Beacon on a house; a changed beacon opens that player's teleport window                   |
 | `GET`  | `/internal/rooms/{block_id}/players/{player_id}`      | none                                                                 | `{zone, x, y, z}` for agent context                                                        |
+
+`room_label` (v2.4.2, optional) is the room's `label` from `room.schema.json`
+(for example `living_room`). The toast shows it in words ("the living room");
+without it the toast says "a room", never the raw `room_id`.
 
 Changing anything here needs all four humans, a bump of `VERSION`, and updated fixtures in the same commit.

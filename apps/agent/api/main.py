@@ -53,6 +53,8 @@ def _session(session_id: str) -> Session:
 async def replay_fixture_transcript(s: Session) -> None:
     """MOCK_AGENT=1: replay the transcript; send its placement and beacon to the game API."""
     plan = json.loads((settings.FIXTURES_DIR / "placement_plan.json").read_text(encoding="utf-8"))
+    room = json.loads((settings.FIXTURES_DIR / "room.json").read_text(encoding="utf-8"))
+    room_label = room["label"] if room.get("id") == plan["room_id"] else None
     for line in (settings.FIXTURES_DIR / "agent.session.jsonl").read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -61,7 +63,9 @@ async def replay_fixture_transcript(s: Session) -> None:
         tool = event["data"].get("tool") if event["type"] == "agent.tool" else None
         try:
             if tool == "commit_placement":
-                await game_api.post_plan(s.block_id, s.player_id, {**plan, "status": "placed"})
+                await game_api.post_plan(
+                    s.block_id, s.player_id, {**plan, "status": "placed"}, room_label=room_label
+                )
             elif tool == "focus_listing":
                 await game_api.post_focus(s.block_id, s.player_id, plan["listing_id"])
         except Exception as e:  # game server down: the chat still replays

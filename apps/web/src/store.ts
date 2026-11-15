@@ -32,6 +32,12 @@ export type ListingMatch = {
   evidence: { criterion: string; passed: boolean; value: unknown; source: string }[];
 };
 
+/** Game broadcasts (net/broadcasts.ts). `at` is Date.now() on receipt. */
+export type Toast = { id: number; text: string; at: number };
+export type KillFeedEntry = { id: number; target: string; by: string; targetName: string; byName: string; at: number };
+export type HitOnMe = { shooter: string; shooterName: string; hp: number; at: number };
+export type FxEvent = { id: number; kind: string; origin: Vec3; dir: Vec3; at: number };
+
 export type LocalPlayer = { id: string | null; zone: Zone; pos: Vec3; yaw: number; anim: AnimState; roomId: string | null };
 
 export type ClientState = {
@@ -42,6 +48,14 @@ export type ClientState = {
   players: Record<string, NetPlayer>;
   houses: Record<string, HouseFurniture>;
   focus: Record<string, string>;
+  // game broadcasts (written by net/broadcasts.ts): toasts expire after 4 s, kill feed after 8 s
+  toasts: Toast[];
+  killFeed: KillFeedEntry[];
+  lastHitOnMe: HitOnMe | null;
+  /** Increments on every `hit` whose target is me; key a damage flash on it. */
+  hitsOnMe: number;
+  /** Latest few `fx` broadcasts (other players' shots), for Lane C to render. Newest last. */
+  fx: FxEvent[];
   // agent service (SSE, written by net/)
   agentSessionId: string | null;
   agentStatus: "connecting" | "live" | "offline";
@@ -65,6 +79,11 @@ export const useStore = create<ClientState>()((set) => ({
   players: {},
   houses: {},
   focus: {},
+  toasts: [],
+  killFeed: [],
+  lastHitOnMe: null,
+  hitsOnMe: 0,
+  fx: [],
   agentSessionId: null,
   agentStatus: "connecting",
   waiting: false,

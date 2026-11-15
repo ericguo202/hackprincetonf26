@@ -102,4 +102,37 @@ describe("NeighborhoodRoom", () => {
     await room.waitForNextPatch();
     assert.strictEqual(x(), 25);
   });
+  async function postPlan(playerId: string, roomLabel?: string) {
+    const plan = {
+      plan_id: "p_toast",
+      listing_id: "hou_236595179",
+      room_id: "hou_236595179.r3",
+      status: "placed",
+      objects: [{ instance_id: "o1", asset_id: "sofa_01", x: 1, y: 0, z: 1, rot_deg: 0, reason: "test" }],
+      conflicts: [],
+    };
+    return colyseus.http.post(`/internal/rooms/${BLOCK}/houses/hou_236595179/plan`, {
+      headers: { "Content-Type": "application/json", "X-Internal-Secret": SECRET },
+      body: roomLabel === undefined ? { player_id: playerId, plan } : { player_id: playerId, plan, room_label: roomLabel },
+    });
+  }
+
+  async function furnishToast(roomLabel?: string): Promise<string> {
+    const room = await colyseus.createRoom("neighborhood", { block_id: BLOCK });
+    const client = await colyseus.connectTo(room, { name: "ana" });
+    const toast = new Promise<string>((resolve) => client.onMessage("toast", (m: { text: string }) => resolve(m.text)));
+    const res = await postPlan(client.sessionId, roomLabel);
+    assert.strictEqual(res.statusCode, 200);
+    return toast;
+  }
+
+  it("names the room by its label in the furnish toast", async () => {
+    assert.strictEqual(await furnishToast("living_room"), "ana's agent furnished the living room");
+  });
+
+  it("falls back to 'a room', never the raw room id, without room_label", async () => {
+    const text = await furnishToast();
+    assert.strictEqual(text, "ana's agent furnished a room");
+    assert.ok(!text.includes("hou_236595179"));
+  });
 });
