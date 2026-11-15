@@ -1,0 +1,40 @@
+{
+ "listing_id": "hou_237901269",
+ "findings": [
+  {
+   "check": "stories_vs_scan",
+   "severity": "info",
+   "listed": 1,
+   "observed": 1,
+   "evidence": "consistent: listing.stories = 1; scan: 1 floor(s) (rooms[].floor = 0); staircase rooms: none (rooms[label=staircase]); stairs edges: 0 (graph.edges[kind=stairs])"
+  },
+  {
+   "check": "beds_vs_rooms",
+   "severity": "info",
+   "listed": 3,
+   "observed": 3,
+   "evidence": "consistent: listing.beds = 3; rooms[label in (bedroom, primary_bedroom)]: hou_237901269.r5 16.0 m2, hou_237901269.r6 11.2 m2, hou_237901269.r7 10.5 m2"
+  },
+  {
+   "check": "area_vs_scan",
+   "severity": "warn",
+   "listed": 122.4,
+   "observed": 103.9,
+   "evidence": "off by more than 15%: listing.area_m2 = 122.4 m2 (1318 sqft); sum of 10 room polygons = 103.9 m2 (1118 sqft), excluded: none; scan 15.1% smaller; scans measure inside the walls, so a scan is usually a little smaller than the listed area"
+  },
+  {
+   "check": "baths_vs_rooms",
+   "severity": "info",
+   "listed": 2,
+   "observed": 2,
+   "evidence": "consistent: listing.baths = 2; rooms[label=bathroom]: hou_237901269.r9 5.2 m2, hou_237901269.r10 4.1 m2"
+  },
+  {
+   "check": "pool_vs_vexcel",
+   "severity": "info",
+   "listed": false,
+   "observed": false,
+   "evidence": "consistent: listing.features.pool = false; Vexcel property/extract pool.detected (imagery 2025-12-31) = false"
+  }
+ ]
+}
