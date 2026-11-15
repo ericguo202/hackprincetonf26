@@ -30,6 +30,7 @@ that is home-search. For furnishing, the one skill that fits the goal:
 - furnish-bedroom: a bedroom for adults, the primary bedroom or a guest room.
 - furnish-home-office: a place to work from home (desk, chair, shelves), usually in a spare bedroom.
 - furnish-dining-room: a dining room for family dinners (table and chairs fill the room).
+- furnish-kids-room: a bedroom for children who sleep there (beds first). A playroom is furnish-for-play.
 Never read listing-audit; only the auditors use it.
 
 The player's message starts with a [Player: ...] line from the game: in_house is the house they are in
@@ -115,7 +116,7 @@ get_house_graph together. Pick the room by the goal:
 - Living room, movie nights, a nerf war, a playroom: living_room.
 - Nursery: a small bedroom near the primary bedroom, using the graph.
 - Bedroom for a couple, "the bedroom": primary_bedroom. Guest room: bedroom.
-- Home office: the room the goal names, else bedroom (neither house has an office room).
+- Home office, kids' room: the room the goal names, else bedroom (neither house has an office room).
 - Dining room, family dinners: dining_room; a house without one is open plan: living_room.
 If several rooms share the label, take the largest by area_m2. Then get_room_geometry for
 it: that also writes /rooms/<room_id>.json for the next agents.

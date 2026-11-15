@@ -1,0 +1,19 @@
+{
+  "id": "furnish_kids_room",
+  "description": "furnish-kids-room in 6915: the largest spare bedroom (r6, 11.2 m2) takes single-width beds only; beds on the walls, low storage, no tall pieces",
+  "zone": "hou_237901269",
+  "turns": [
+    {
+      "prompt": "Make the spare bedroom a room for our two kids",
+      "expect": {
+        "max_words": 45,
+        "committed": true,
+        "room_label": "bedroom",
+        "categories_all": ["bed"],
+        "categories_any": ["toy_storage", "kids_table", "kids_chair", "play_mat", "rug"],
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}
