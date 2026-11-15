@@ -461,21 +461,35 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
 - **Not seen in a browser:** the landing on the real `collision.glb` lawn, the unlit block's look with tone mapping off, live shadows lining up with the baked ones, and shadow-edge shimmer as the box follows the player (no texel snapping yet).
 - **Trees (note 4), not done:** the 168 live oaks are 9 meshes as about 340 separate draw calls. Make an `InstancedMesh` per variant only if the frame rate drops on weaker laptops. Lane A saw 60 fps on an M-series laptop.
 
-## 23. Other players' shots from store.fx
+## 23. Openable interior doors
 
-**Not seen in a browser.** It's checked by unit tests and the production-build grep only. In SOLO nothing writes `store.fx`, and the `VITE_DEV_REMOTES` fakes don't emit fx, so it needs two real clients on the game server to see it.
+**Seen in a browser, 7014 (`hou_236595179`, pack v2) only:** E opens and closes the r3 → r9 door. A closed door blocks walking, and an open one lets you through. Nothing else below has been seen in a browser.
 
-- **Source:** Lane D's `net/broadcasts.ts` keeps the latest 8 `fx` broadcasts in `store.fx` (`{id, kind, origin, dir, at}`, ids monotonic, newest last). The server sends `{kind: weapon, origin, dir}` to everyone but the shooter, in every zone, with no shooter id or zone (`NeighborhoodRoom.ts:159`).
-- **`world/remoteFx.ts` (pure):**
-  - `fxInMyZone(fx, bodies)`: keep an event only if its origin is within `FX_MATCH_M` (1.5 m, in 3D) of a remote body centre drawn in my zone this frame. A shot from another zone is in another frame, so it matches nobody and is dropped.
-  - `seenIds` / `takeUnseen`: each id plays once. Ids already in the list on mount are marked seen, so a reload or remount never replays old shots. The seen set is trimmed to ids still in the list.
-  - `unitDir`, `swooshYaw`.
-- **Bodies:** `RemotePlayers` now also publishes the interpolated body centres of every remote in my zone (alive or not) via `remoteTargets.setRemoteBodies` / `remoteBodies()`, from the same samples it draws and builds hitboxes from.
-- **`world/RemoteShots.tsx`** (mounted next to `RemotePlayers` in `World.tsx` Zones; `REMOTE_FX_PRIORITY` 0, after remotes at −20). It's named `RemoteShots`, not `RemoteFx`, because macOS's case-insensitive filenames would make `RemoteFx.tsx` collide with `remoteFx.ts`.
-  - **blaster:** a Rapier ray from the origin along dir, `SHOT_QUERY` (zone + furniture), 40 m (`BLASTER.rangeM`). Tracer to the hit point (or 40 m), plus an impact puff on a hit. Pools: 8 tracers, 4 puffs. No muzzle flash.
-  - **noodle:** one pooled flat ring segment, 60° wide, 1.1–1.5 m from the head at head height, centred on dir. It fades over 0.25 s and grows a little. No physics.
-  - No mode gating: fx only arrives in foam mode.
-- **Shared effects: `player/shotFx.tsx`.** `useTracerPool(n)` and `usePuffPool(n)` were pulled out of `Blaster.tsx`, which now uses them (12 tracers, 1 puff, same as before). The tracer streak, speed, puff timing and look are unchanged.
-- **Tests (`remoteFx.test.ts`, 14):** in my zone, another zone, no remotes, 1.4 m vs 1.6 m, 3D distance, several remotes. Once per id: mount marks all seen, new ids once in order, the same events in a new array aren't replayed, an 8-entry rolling cap over 30 events plays each exactly once with the set bounded, a burst between frames. Dir normalization and the swoosh yaw.
-- **Known env-dependent test (already on main):** `foamMode.test.ts` "the override is ignored unless the dev toggle is on" fails when `/.env.local` sets `VITE_SOLO=1`, because Vitest loads it. All 327 tests pass with that file moved aside.
-- **Not seen in a browser:** the remote tracer and puff, the swoosh's orientation and look, and the match tolerance on a running shooter. The body is drawn 100 ms behind, and the head is 0.65 m above the body centre, so a shooter at 6 m/s is about 0.9 m off, still inside 1.5 m.
+- **Why:** doors that were closed during the Matterport scan are baked into `collision.glb` as solid wall boxes, so you couldn't get through them.
+- **Split (`world/doorSplit.ts`, pure):**
+  - `extractWallBoxes(scene)` reads the `walls` mesh (8 vertices per box).
+  - `splitClosedDoors(boxes, rooms, frontDoor)` cuts each box that spans a `rooms.json` door opening into the solid pieces around the openings, plus a lintel from y 2.03 up. Several doors on one wall are handled.
+  - The front door (the opening nearest `Listing.world.door`) stays solid: the zone trigger handles it.
+  - Doors reported by both rooms are deduplicated.
+  - 7014: 64 boxes, 7 opened doors. 6915 is covered by unit tests only.
+- **Colliders (`world/HouseScene.tsx`):** `collision.glb` is still one trimesh, minus the `walls` node (`skipNodes`). The split boxes are `CuboidCollider`s (`ZONE_COLLIDER`). It warns once if `collision.glb` has no `walls` mesh. Placeholder collision (no pack, fixture mode) has no openable doors.
+- **Doors (`world/HouseDoors.tsx`):**
+  - Closed: a 2 m `CuboidCollider` fills the gap.
+  - The leaf is an off-white box hinged at point `a`. It swings 90° over 0.3 s with smoothstep easing. Visual only.
+- **State (`world/doorState.ts`):** doors are kept per listing id. `HouseDoors` sets them on mount and clears them (with their open flags) on unmount, for that listing only. Readers use `doorsFor(state, zone)`. There is no zone subscription: the old reset-on-zone-change could wipe the list if a zone write landed after the doors registered.
+- **Prompt (`player/DoorPrompt.tsx`):**
+  - "E  Open door" / "E  Close door" shows within 1.5 m of a door midpoint (XZ, house-local).
+  - E toggles the door. It won't close while you're within 0.4 m of the door line.
+  - It's ignored while typing.
+- **Dev probe:** `window.__laneC.doors()` returns `{zone, pos, activeDoors, open, source, packBase}`. `source: null` means `collision.glb` never loaded; `wallBoxes: 0` means it has no `walls` mesh. It's dev-only and absent from the production build (section 14 grep).
+- **Gotcha:** with no `VITE_PACK_BASE_URL`, the client runs on the contracts fixture: there's no `collision.glb`, so there are no doors. For local v2, use `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v2`.
+- **Tests:** `doorSplit.test.ts` (7014 and 6915 real files, synthetic two-door wall), `doorInteract.test.ts`, `doorState.test.ts` (a zone write after the doors register, zone flapping, per-listing clear, re-split keeps open flags).
+- **Not seen in a browser:**
+  - 7014's other six doors.
+  - Every 6915 door.
+  - The leaf's swing direction and look.
+  - The close guard at 0.4 m.
+  - Walking through a door that has more than one door on its wall.
+  - Darts against the door collider.
+  - Door state after leaving and re-entering the house.
+  - Multiplayer: door state is local to each client, not shared through the game server.
