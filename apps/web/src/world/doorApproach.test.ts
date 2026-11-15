@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import type { Listing, Room } from "../contracts.gen";
+import type { Listing, Point2, Room } from "../contracts.gen";
 import { viewDir } from "../player/armMath";
-import { pointInPolygon, type Point2 } from "./geometry";
+import { pointInPolygon } from "./geometry";
 import { bodyCentreAt } from "./landing";
 import { houseToBlock, makeDoor, parseListings } from "./pack";
 import { doorApproach } from "./doorApproach";

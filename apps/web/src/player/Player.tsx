@@ -18,7 +18,7 @@
 // capsule renders instead (same HEAD probe as every other mesh). First
 // person hides bodyMesh, which holds the model and the capsule alike.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Ecctrl, EcctrlAnimationStateController, type EcctrlHandle } from "ecctrl";
 import { Euler, type Group, Quaternion, Vector3 } from "three";
@@ -118,6 +118,11 @@ export function Player({
   // Explore mode: the model holds nothing (foamMode.ts); foam: the selected weapon.
   const weapon = heldWeaponProp(useFoamMode(), useWeaponState((s) => s.weapon));
   const crouchedRef = useRef(false);
+  /** CameraArm fills this; playerControl.setYaw calls it. */
+  const yawSetter = useRef<((yaw: number) => void) | null>(null);
+  const onYawSetter = useCallback((set: ((yaw: number) => void) | null) => {
+    yawSetter.current = set;
+  }, []);
   useEffect(() => {
     crouchedRef.current = crouched;
   }, [crouched]);
@@ -191,6 +196,7 @@ export function Player({
           lastSent.current = { ...lastSent.current, pos: [x, y, z] };
           setMe({ pos: [x, y, z] });
         },
+        setYaw: (yaw) => yawSetter.current?.(yaw),
       }),
     [setMe],
   );
@@ -274,6 +280,7 @@ export function Player({
           body={bodyMesh}
           zone={zone}
           initialYaw={spawnYaw}
+          onYawSetter={onYawSetter}
           crouchedRef={crouchedRef}
           onBodyHidden={(hidden) => {
             if (bodyMesh.current) bodyMesh.current.visible = !hidden;

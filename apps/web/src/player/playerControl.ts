@@ -14,6 +14,8 @@ export type PlayerControl = {
   getPos: () => Vec3;
   /** Move the body to `pos` (body centre) and stop it. */
   teleport: (pos: Vec3) => void;
+  /** Turn the camera to `yaw` (radians, armMath convention). Optional: test stubs leave it out. */
+  setYaw?: (yaw: number) => void;
 };
 
 let current: PlayerControl | null = null;

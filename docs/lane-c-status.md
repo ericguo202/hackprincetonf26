@@ -538,3 +538,22 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - Production build tree-shaking verified: `DevFocusToggle`, `DevModeToggle`, `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM`, and `__laneC` are all 0 occurrences in `/tmp/x/assets/*.js`.
 - **Not seen in a browser:** The visual appearance of the 30 m column of light, the opacity pulse feel, and the "Your match" label placement on the real block.
 
+
+## 26. Focus teleport watcher
+
+**Not seen in a browser.** Checked by unit tests, typecheck, lint and the production-build grep. Lane D is asleep, so Lane C wrote the watcher (HANDOFF lane-b 16:45, lane-d 21:58 item 2, lane-c 01:10).
+
+- **What:** when the agent's `focus_listing` CHANGES `store.focus[me.id]`, the local player lands at `doorApproach(door, rooms)` on the block: 1.5 m outside that house's front door, facing it.
+- **Where:** `world/FocusWatcher.tsx`, mounted in `World.tsx` Zones next to `FocusBeacon`. It renders nothing and reads the store only. `net/` and `store.ts` are untouched.
+  - Indoors: `goTo("block", floorPoint, yaw)`, the same switch a door exit uses. `net/game.ts` sees `me.zone` change and sends `enter_zone` first. The player remounts at the approach point with `spawnYaw`.
+  - On the block: `localPlayer().teleport(pos)` plus the new `setYaw(yaw)`, without a remount.
+  - Both happen inside the store callback, so the next 20 Hz move falls inside the server's 1.5 s teleport window (contracts v2.4.1).
+  - The door trigger is disarmed on landing (`disarmDoors`), because 1.5 m is inside the trigger radius. It re-arms once the player walks clear.
+  - Skipped while eliminated (the respawn owns the body), and for focus values that aren't in `pack.doors`.
+- **When (`world/focusWatch.ts`, pure, `stepFocusWatch`):** the session key is `me.id` while `store.connected` is true, else null. `net/game.ts` sets `me.id = room.sessionId` and `connected` on join, and clears `connected` on leave. The first value of a session is a baseline, so the initial sync and a reconnect never cause a jump. A reconnect counts as a new session either way: `connected` goes false, or the session id changes. Only a change to a known house moves the player; null, unknown and repeated values don't.
+  - Tests (`focusWatch.test.ts`, 7): first value, same value, change, change to null or unknown, cleared then back, reconnect (both same and new session id), disconnected.
+- **Camera yaw on the block:** `PlayerControl.setYaw?` (`player/playerControl.ts`). Player.tsx fills it from CameraArm's new `onYawSetter` prop, which sets the look yaw. It's optional, so test stubs need no change.
+- **Dev (VITE_SOLO):** with `DEV_FOCUS_TOGGLE_ON`, the session key is a fixed `"dev-solo"` and the B override feeds the same `effectiveFocus` as the beacon. Pressing B teleports to 7014; B again clears it (no move); B a third time teleports again. Gone in a production build (the grep finds no `dev-solo`).
+- **Replaced Lane D's inline watcher.** Lane D's version in `World.tsx` and `world/focusTeleport.ts` (ce64d6a, HANDOFF lane-d 23:48/23:58) landed on the nearest sidewalk spawn, because 1.2 m from the door put the camera inside 7014's stand-in lot. Both files are removed, so only one watcher runs. This one lands at `doorApproach` as asked. **Check in a browser whether the camera ends up inside the lot fence on 7014.** If it does, the fix is to land on Lane D's sidewalk spawn (`git show ce64d6a`) and keep this watcher's timing.
+- **Fixed on the base branch:** `doorApproach.test.ts` imported `Point2` from `./geometry` (not exported), which broke `tsc -b`. It now imports from `contracts.gen`.
+- **Build grep note:** `hou_236595179` shows up in the prod bundle through `devFocus.ts`. The zustand store is imported without a gate by `FocusBeacon.tsx`, and that was already true on `lane-c/focus`. It's inert (no key handler, no subscription), but it isn't tree-shaken.

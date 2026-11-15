@@ -44,7 +44,7 @@ import { RemotePlayers } from "./RemotePlayers";
 import { FocusBeacon } from "./FocusBeacon";
 import { RemoteShots } from "./RemoteShots";
 import { RespawnWatcher } from "./RespawnWatcher";
-import { type FocusState, focusArrival, stepFocus } from "./focusTeleport";
+import { FocusWatcher } from "./FocusWatcher";
 import { sendFire } from "../net/game";
 import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
@@ -161,27 +161,10 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
     [pack, setMe, goTo],
   );
 
-  // Lane D: focus teleport (HANDOFF lane-b 16:45). When the agent's focus_listing
-  // changes MY beacon, land outside that house's door on the block, facing it.
-  // The first value seen is a starting point, not a jump (focusTeleport.ts).
-  const focusState = useRef<FocusState>({ seen: false, listing: undefined });
-  useEffect(
-    () =>
-      useStore.subscribe((s) => {
-        const id = s.me.id;
-        if (!s.connected || !id) return;
-        const { state, goTo: listing } = stepFocus(focusState.current, s.focus[id]);
-        focusState.current = state;
-        if (!listing || s.players[id]?.alive === false) return;
-        const door = pack.doors.find((d) => d.listing_id === listing);
-        if (!door) return; // not a house on this block
-        const arrival = focusArrival(door, 0, pack.manifest.spawns as Vec3[]);
-        // Right outside the door: the trigger stays disarmed until we walk clear.
-        zoneState.current = { zone: "block", armed: false };
-        goTo("block", arrival.pos, arrival.yaw);
-      }),
-    [pack, goTo],
-  );
+  // Focus teleport lands 1.5 m from a front door: the trigger waits until we walk clear.
+  const disarmDoors = useCallback(() => {
+    zoneState.current = { zone: "block", armed: false };
+  }, []);
 
   const inHouse = zone !== "block" && pack.manifest.houses.some((h) => h.listing_id === zone);
   return (
@@ -194,6 +177,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       {DEV_FOCUS_TOGGLE_ON ? <DevFocusToggle /> : null}
       <RemotePlayers zone={zone} />
       <FocusBeacon pack={pack} />
+      <FocusWatcher pack={pack} goTo={goTo} disarmDoors={disarmDoors} />
       <RemoteShots />
       <RespawnWatcher zone={zone} blockSpawn={blockSpawn} />
       {DEV_REMOTES_ON ? <DevRemotes pack={pack} zone={zone} /> : null}
