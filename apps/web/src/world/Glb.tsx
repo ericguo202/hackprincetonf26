@@ -11,8 +11,9 @@
 // covers the probe and loading moments, so the player always has a floor.
 // LoadBoundary remains for a file that exists but fails to parse.
 
-import { Component, Suspense, useEffect, useMemo, type ReactNode } from "react";
+import { Component, Suspense, useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
 import { RigidBody, TrimeshCollider } from "@react-three/rapier";
+import type { Object3D } from "three";
 
 import { extractTrimesh } from "./collision";
 import { ZONE_COLLIDER } from "./collisionGroups";
@@ -59,9 +60,15 @@ type Props = {
   /** Pack-relative name for the warning, e.g. "block/render.glb". */
   label: string;
   placeholder: ReactNode;
+  /**
+   * Render kind only: run once on the loaded scene, before it is first drawn.
+   * HouseScene passes disableToneMapping for interior.glb; nothing else uses it.
+   * Pass a stable (module-level) function.
+   */
+  prepare?: (scene: Object3D) => void;
 };
 
-export function GlbOrPlaceholder({ kind, url, label, placeholder }: Props) {
+export function GlbOrPlaceholder({ kind, url, label, placeholder, prepare }: Props) {
   // Probe first (meshProbe.ts): a missing file never reaches the loader, so it
   // never throws. The boundary below is only for files that exist but are bad.
   const mesh = useMeshState(url, label);
@@ -70,7 +77,7 @@ export function GlbOrPlaceholder({ kind, url, label, placeholder }: Props) {
     <LoadBoundary url={url} label={label} fallback={placeholder}>
       <Suspense fallback={placeholder}>
         {kind === "render" ? (
-          <RenderGlb url={url} />
+          <RenderGlb url={url} prepare={prepare} />
         ) : (
           <CollisionGlb url={url} fallback={placeholder} />
         )}
@@ -84,9 +91,13 @@ function useUnloadOnUnmount(url: string) {
   useEffect(() => () => clearPackGLTF(url), [url]);
 }
 
-function RenderGlb({ url }: { url: string }) {
+function RenderGlb({ url, prepare }: { url: string; prepare?: (scene: Object3D) => void }) {
   const { scene } = usePackGLTF(url);
   useUnloadOnUnmount(url);
+  // Once per loaded scene, before the first paint (not per frame).
+  useLayoutEffect(() => {
+    prepare?.(scene);
+  }, [scene, prepare]);
   return <primitive object={scene} />;
 }
 

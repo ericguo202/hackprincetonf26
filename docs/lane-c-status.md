@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 221 tests in 14 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 227 tests in 15 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -105,11 +105,11 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 - **No block pack:** Lane A hasn't published one. No `block/render.glb` or `collision.glb`, and `spawns` is `[]`, so the block is always placeholder geometry.
 - **No listings index:** `listings/index.json` doesn't exist yet (Lane A's `costar.py` is a stub). No listing has a door point, so you can't walk into a house from the block. Use `VITE_START_ROOM`.
 - **Furniture renders as boxes** until real meshes are published. The labelled box is also the deliberate fallback if they never are. With Lane A's `publish --local`, the library lands in `public/packs/furniture/v1/`, so real meshes should start loading; that path isn't verified.
-- **Interior looks washed out:** Lane A's HANDOFF suggests `material.toneMapped = false` on `interior.glb` meshes, since its textures are finished photos. Not done.
+- **Interior looks washed out: fixed (section 17, not checked in a browser).** `interior.glb` meshes now have `material.toneMapped = false`, since their textures are finished photos (Lane A's HANDOFF suggestion). It applies only to the interior.
 - **Blocky walls up close:** walls look blocky within about 30 cm. The camera arm pulls in 0.15 m from walls, so this can show indoors.
 - **Character and collider don't line up:** the model is 1.3 m with feet on the floor, but ecctrl floats the 1.3 m capsule 0.3 m up, so the collider spans 0.3–1.6 m. Shot hitboxes for remote players should match the model, not the capsule: centre at feet + 0.65 m, which is 0.30 m below the body centre (`FOOT_BELOW_CENTRE_M` − 0.65).
 - **7014's doors are unchecked:** the radius is now 0.25 m, so per Lane A's widths every bathroom door in both houses should fit, and 6915 is confirmed headless (section 12). 7014 hasn't been run: its pack isn't on this machine or any branch. Run `apps/web/scripts/door-check.ts` on it once Lane A's publish lands.
-- **Jump apex vs ceiling:** the 1.6 m eye sits exactly at the capsule top. A normal jump (4 m/s) peaks at about 2.40 m, which puts the first-person eye within the 0.1 m near plane of a 2.43 m ceiling, so the roof can clip at the top of a jump. Fixes: a lower `jumpVel` (3 m/s gives about a 0.46 m apex), or an eye a little below the capsule top. Not done.
+- **Jump apex vs ceiling: fixed (section 17, not checked in a browser).** `jumpVel` is now 3.0 m/s (about a 0.46 m apex), down from 4.0 (about 0.8 m). The 1.6 m first-person eye no longer reaches the 2.43 m ceilings at the top of a jump. Crouch still sets it to 0.
 - **No respawn yet:** `indoorSpawns` computes indoor spawns, but nothing uses them yet. That's the foam-fight round loop, Lane D server and C client.
 - **Weapon choice:** the character holds the kit's `RocketLauncher`, tinted foam orange. Despite the name it's a chunky cartoon tube, the only prop in the kit that reads as a toy; the pistols and rifles are realistic. Changing it is one constant: `CHARACTER.keepWeapon`.
 
@@ -189,7 +189,7 @@ Merged to main this session:
 | Spawn drop height | 1.0 m | `FOOT_BELOW_CENTRE_M` + 0.1 | `World.tsx` |
 | Remote hitbox | centre 0.30 m below body centre, radius 0.25, half-height 0.40 | centre 0.15 m below body centre, radius 0.25, half-height 0.625 | section 5, HANDOFF to Lane D |
 | Spawn clearance, door trigger | 0.6 / 0.9 / 1.2 m | unchanged (radius-based) | — |
-| `jumpVel` | 4.0 (about 0.8 m apex) | about 3.0, or the head goes through 2.43 m ceilings | `movement.ts` |
+| `jumpVel` | 3.0 (about 0.46 m apex; section 17) | 3.0 is fine: the eye rises to about 2.1 m | `movement.ts` |
 
 **Tests that need new expectations:**
 1. `characterRig.test`: "1.3 m tall" becomes 1.75, and the `heightM` formula check gains `+ floatHeight`.
@@ -362,3 +362,11 @@ Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, 
 - **One-shot replay restored:** `if (prev === next && !plan.once) return`, now in `characterRig.crossfadeTo` and tested on the real rig. A repeated one-shot (hit, jump, death, Duck) restarts from frame 0. A repeated loop carries on.
   - **Shoot is a loop:** `Idle_Shoot` (or `Run_Shoot`) loops, so rapid blaster fire is one continuous clip, and this line never governed it.
   - **The crossfade effect only re-runs when its inputs change:** `animState`, `moving` or the rig. So a state that repeats without changing (`hit` → `hit`) doesn't re-trigger at all. A per-event replay would need a counter prop.
+
+## 17. Interior tone mapping off; jumpVel 3
+
+Neither fix has been checked in a browser. Both rest on code and unit tests only.
+
+- **Interior colours:** `world/interiorMaterials.ts` `disableToneMapping(root)` sets `toneMapped = false` (and `needsUpdate`) on every mesh material under the loaded `interior.glb` scene. The materials are `KHR_materials_unlit`, so `MeshBasicMaterial`, with finished photo textures. It runs once per loaded scene, before the first paint, through a new optional `prepare` prop on `GlbOrPlaceholder`. Only `HouseScene`'s interior passes it, so furniture, characters, effects and the block keep tone mapping. `alphaTest` / alpha mask is untouched, so doorways stay cut out. Tests: interior meshes (multi-material and nested included) are switched off, other scenes are unchanged, `alphaTest` is kept, and a second pass is a no-op.
+- **Jump height:** `MOVEMENT.jumpVel` is 3.0 (was 4.0), so the jump peaks at about 0.46 m and the first-person eye at about 2.1 m, under 2.43 m ceilings. Crouch still sets `jumpVel` to 0. No test pinned the old value.
+- **Checks:** typecheck, lint and 227 tests pass. A production build with `VITE_DEV_PLAN`, `VITE_START_ROOM` and `VITE_DEV_REMOTES` set contains none of `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM` or `__laneC`.
