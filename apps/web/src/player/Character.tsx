@@ -13,14 +13,14 @@
 
 import { Suspense, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
-import { LoopOnce, LoopRepeat, type AnimationAction, type Group } from "three";
+import { LoopRepeat, type AnimationAction, type Group } from "three";
 
 import type { AnimState, Weapon } from "../../../../contracts/game-state";
 import { LoadBoundary } from "../world/Glb";
 import { usePackGLTF } from "../world/gltf";
 import { useMeshState } from "../world/meshProbe";
 import { CHARACTER } from "./characterAsset";
-import { actionFor, blendedLift, buildRig, setWeapon, updateNoodleJiggle } from "./characterRig";
+import { actionFor, blendedLift, buildRig, crossfadeTo, setWeapon, updateNoodleJiggle } from "./characterRig";
 import { CROSSFADE_S, clipFor } from "./clips";
 
 type Props = {
@@ -82,20 +82,9 @@ function CharacterModel({
 
   // New state: crossfade to its clip.
   useEffect(() => {
-    const plan = clipFor(animState, moving);
-    const next = actionFor(rig, plan.clip);
-    if (!next) return;
-    const prev = current.current;
-    if (prev === next) return;
-    next.reset();
-    next.setLoop(plan.once ? LoopOnce : LoopRepeat, plan.once ? 1 : Infinity);
-    next.clampWhenFinished = plan.once;
-    next.enabled = true;
-    next.setEffectiveTimeScale(1);
-    next.setEffectiveWeight(1);
-    next.play();
-    if (prev && prev !== next) next.crossFadeFrom(prev, CROSSFADE_S, false);
-    current.current = next;
+    // crossfadeTo: a looping clip already playing carries on; a one-shot replays
+    // (`if (prev === next && !plan.once) return`).
+    current.current = crossfadeTo(rig, current.current, clipFor(animState, moving));
   }, [rig, animState, moving]);
 
   useEffect(

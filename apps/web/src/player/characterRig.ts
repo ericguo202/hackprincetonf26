@@ -13,6 +13,8 @@
 
 import {
   AnimationMixer,
+  LoopOnce,
+  LoopRepeat,
   Box3,
   CylinderGeometry,
   Group,
@@ -30,7 +32,7 @@ import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js
 
 import type { Weapon } from "../../../../contracts/game-state";
 import { CHARACTER } from "./characterAsset";
-import { CLIPS, CLIP_TRIM, MOVING_SHOOT, ONE_SHOT, type PackClip } from "./clips";
+import { CLIPS, CLIP_TRIM, CROSSFADE_S, MOVING_SHOOT, ONE_SHOT, type ClipPlan, type PackClip } from "./clips";
 
 export type NoodleJiggle = {
   mesh: Mesh;
@@ -333,4 +335,25 @@ export function blendedLift(rig: Rig): number {
     weight += w;
   }
   return weight > 0 ? sum / weight : 0;
+}
+
+/**
+ * Start the clip for a plan, crossfading from the current action. Returns the
+ * action now playing. A looping clip that is already current carries on; a
+ * one-shot (Jump, HitReact, Death, Duck) restarts from frame 0 even when it is
+ * already current, so a repeated one-shot state replays.
+ */
+export function crossfadeTo(rig: Rig, prev: AnimationAction | null, plan: ClipPlan): AnimationAction | null {
+  const next = actionFor(rig, plan.clip);
+  if (!next) return prev;
+  if (prev === next && !plan.once) return prev;
+  next.reset();
+  next.setLoop(plan.once ? LoopOnce : LoopRepeat, plan.once ? 1 : Infinity);
+  next.clampWhenFinished = plan.once;
+  next.enabled = true;
+  next.setEffectiveTimeScale(1);
+  next.setEffectiveWeight(1);
+  next.play();
+  if (prev && prev !== next) next.crossFadeFrom(prev, CROSSFADE_S, false);
+  return next;
 }
