@@ -25,8 +25,8 @@ from worldgen.block_buildings import polys_of, triangulate
 from worldgen.block_glb import MeshBuf
 from worldgen.block_ground import TURN_R, WIDTH, calibrate
 
-SIDEWALK_H = 0.06  # sidewalk top above the lawn
-DRIVE_H = 0.03
+SIDEWALK_H = 0.03  # sidewalk top above the lawn (a small clean step)
+DRIVE_H = 0.02
 STOOP_H = 0.15
 GUTTER_W = 0.45
 JOINT_SIDEWALK = 1.5  # m between sidewalk joints
@@ -381,7 +381,7 @@ def front_walk(door: dict, drive: dict | None, sidewalks, road, lab_vis, half, r
 # ---------------------------------------------------------------- meshes
 
 
-def strip_mesh(top: MeshBuf, edge: MeshBuf, poly, ground, h: float, uvf, colorf, edge_shade: float = 0.72):
+def strip_mesh(top: MeshBuf, edge: MeshBuf, poly, ground, h, uvf, colorf, edge_shade: float = 0.85):
     """Flat slab `h` above the ground on `poly` (segmentised so it follows the terrain), with vertical
     edge faces down to just below the ground."""
     for p in polys_of(poly):
@@ -696,6 +696,15 @@ def driveways_from_ortho(
                         "v0": d0,
                         "v1": d1,
                         "poly": _rect(p, nd, td, 0, L, d0, d1),
+                        # flared apron at the curb cut
+                        "apron": Polygon(
+                            [
+                                p + nd * (L - 1.0) + td * d0,
+                                p + nd * (L - 1.0) + td * d1,
+                                p + nd * (L + 0.25) + td * (d1 + 0.6),
+                                p + nd * (L + 0.25) + td * (d0 - 0.6),
+                            ]
+                        ),
                         "source": "ortho",
                     }
                 )
@@ -808,3 +817,104 @@ def trace_paving(pale, pavers, hidden, allowed, half: float, res: float, min_are
         out.append(smooth_polys(g.simplify(0.12), min_area=min_area, iters=2))
     pav, conc = out
     return conc.difference(pav).buffer(0), pav
+
+
+# ---------------------------------------------------------------- shape fitting (walks)
+
+
+def _longest_path(edges: list[tuple[tuple, tuple, float]]):
+    """Longest shortest-path in a graph given as (a, b, length) edges (double Dijkstra sweep)."""
+    import heapq
+
+    adj: dict = {}
+    for a, b, w in edges:
+        adj.setdefault(a, []).append((b, w))
+        adj.setdefault(b, []).append((a, w))
+    if not adj:
+        return []
+
+    def far(src):
+        dist, prev, pq = {src: 0.0}, {}, [(0.0, src)]
+        while pq:
+            d, u = heapq.heappop(pq)
+            if d > dist[u]:
+                continue
+            for v, w in adj[u]:
+                nd = d + w
+                if nd < dist.get(v, 1e18):
+                    dist[v], prev[v] = nd, u
+                    heapq.heappush(pq, (nd, v))
+        end = max(dist, key=dist.get)
+        return end, prev
+
+    start = next(iter(adj))
+    a, _ = far(start)
+    b, prev = far(a)
+    path = [b]
+    while path[-1] != a:
+        path.append(prev[path[-1]])
+    return path[::-1]
+
+
+def centreline(poly: Polygon, step: float = 0.25) -> LineString | None:
+    """Medial axis of a walk polygon (Voronoi edges of its densified boundary that lie inside it),
+    reduced to its longest path, smoothed and extended to the polygon's ends."""
+    p = poly.simplify(0.05)
+    if p.is_empty or p.area < 0.5:
+        return None
+    pts = shapely.MultiPoint(np.asarray(p.exterior.segmentize(step).coords)[:-1])
+    vor = shapely.voronoi_polygons(pts, only_edges=True)
+    shapely.prepare(p)
+    inner = p.buffer(-0.05)
+    edges = []
+    for e in getattr(vor, "geoms", [vor]):
+        if e.length < 1e-6 or not inner.contains(e):
+            continue
+        c = np.round(np.asarray(e.coords), 3)
+        edges.append((tuple(c[0]), tuple(c[-1]), float(e.length)))
+    path = _longest_path(edges)
+    if len(path) < 2:
+        return None
+    xy = np.asarray(path, float)
+    if len(xy) >= 5:  # moving average, ends kept
+        k = 5
+        sm = np.vstack([np.convolve(xy[:, i], np.ones(k) / k, mode="valid") for i in range(2)]).T
+        xy = np.vstack([xy[:1], sm, xy[-1:]])
+    ln = LineString(xy).simplify(0.05)
+    # the medial axis stops half a width short of each end: extend to the outline
+    out = []
+    for end, nxt in ((0, 1), (-1, -2)):
+        c = np.asarray(ln.coords)
+        d = c[end] - c[nxt]
+        d /= max(np.linalg.norm(d), 1e-9)
+        ray = LineString([c[end], c[end] + d * 3.0])
+        hit = ray.intersection(p.exterior)
+        if hit.is_empty:
+            out.append(c[end])
+        else:
+            g = min(getattr(hit, "geoms", [hit]), key=lambda q: Point(c[end]).distance(q))
+            out.append(np.asarray(g.coords[0]))
+    c = np.asarray(ln.coords)
+    return LineString(np.vstack([out[0], c[1:-1], out[1]]) if len(c) > 2 else np.vstack([out[0], out[1]]))
+
+
+def fit_walk(poly: Polygon, min_w: float = 0.8, max_w: float = 1.6):
+    """Constant-width walk along the polygon's centreline: (walk polygon, centreline, width) or None if
+    the shape is not walk-like (length under 2.5 widths: a bed, a patio)."""
+    ln = centreline(poly)
+    if ln is None or ln.length < 1.0:
+        return None
+    s = np.linspace(0, ln.length, max(5, int(ln.length / 0.25)))
+    pts = shapely.points([ln.interpolate(v).coords[0] for v in s[1:-1]])
+    d = shapely.distance(poly.exterior, pts)
+    w = float(np.clip(2 * np.median(d), min_w, max_w))
+    if ln.length < 2.5 * w:
+        return None
+    return ln.buffer(w / 2, cap_style=2, join_style=1, quad_segs=6), ln, w
+
+
+def paver_mask(rgb: np.ndarray) -> np.ndarray:
+    """Red-brick pavers by hue (ratios, so shaded brick still counts): red over green and blue."""
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    lum = rgb.mean(-1)
+    return (r > g * 1.1) & (r > b * 1.22) & (g > b * 0.95) & (lum > 50) & (lum < 215) & ((r - b) > 18)

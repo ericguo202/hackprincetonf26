@@ -80,3 +80,15 @@ def test_gutter_and_line_uv():
     assert abs(g.area - (road.area - box(-3.55, -49.55, 3.55, 49.55).area)) < 1e-6
     uv = line_uv(LineString([(0, -50), (0, 50)]), 1.5)(np.array([5.0]), np.array([0.0]))
     assert np.allclose(uv, [[50 / 1.5, 5 / 1.5]])
+
+
+def test_fit_walk_follows_an_arc_at_constant_width():
+    from worldgen.block_hardscape import fit_walk
+
+    arc = LineString([(np.cos(a) * 6, np.sin(a) * 6) for a in np.linspace(0, 2.5, 40)])
+    poly = arc.buffer(0.55)
+    band, line, w = fit_walk(poly)
+    assert abs(w - 1.1) < 0.15
+    assert abs(line.length - arc.length) < 1.5
+    assert band.intersection(poly).area / band.union(poly).area > 0.85
+    assert fit_walk(Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])) is None  # a square bed is not a walk

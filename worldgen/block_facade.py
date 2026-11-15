@@ -20,6 +20,7 @@ REG = {
     "window2": ((256, 0, 640, 384), (1.75, 1.45)),
     "door": ((640, 0, 896, 512), (1.0, 2.15)),
     "garage": ((0, 512, 1024, 992), (4.9, 2.2)),
+    "garage_s": ((0, 512, 512, 992), (2.45, 2.2)),  # single door: the left half of the double, 2.7 m
     "garage1": ((640, 0, 896, 512), (1.0, 2.15)),  # unused placeholder
 }
 
@@ -172,8 +173,10 @@ def place_openings(
             return float(np.linalg.norm(e["a"] + e["t"] * s_ - q))
 
         e = min(edges, key=_dg)
-        gw = min(gw, e["L"] - 0.3)
-        if gw >= 2.2 and _dg(e) < 2.5:
+        gw = 4.9 if gw >= 4.0 else 2.7  # real door sizes: double 16 ft, single 9 ft
+        if gw > e["L"] - 0.3:
+            gw = 2.7
+        if gw <= e["L"] - 0.3 and _dg(e) < 2.5:
             s0 = float(np.clip((q - e["a"]) @ e["t"] - gw / 2, 0.15, e["L"] - gw - 0.15))
             _quad_on_wall(
                 buf,
@@ -184,7 +187,7 @@ def place_openings(
                 gw,
                 y_ground + 0.02,
                 min(2.2, wall_h - 0.25),
-                "garage",
+                "garage" if gw > 4.0 else "garage_s",
             )
             e["busy"].append((s0 - 0.3, s0 + gw + 0.3))
             res["garage"] = {"p": e["a"] + e["t"] * (s0 + gw / 2), "n": e["n2"], "w": gw}
