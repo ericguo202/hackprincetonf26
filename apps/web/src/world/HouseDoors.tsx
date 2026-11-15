@@ -1,13 +1,17 @@
 // Lane C: Render house interior doors with animated door leaves and collision.
 // While closed: fixed CuboidCollider (ZONE_COLLIDER) fills the doorway.
 // Door leaf: off-white mesh hinged at point a, rotating 90° over 0.3 s when opened.
+// Doors to the outside swing outward, away from the house (doorInteract.doorSwingSign);
+// room-to-room doors keep the +90° swing.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group } from "three";
 
 import { ZONE_COLLIDER } from "./collisionGroups";
+import type { Room } from "../contracts.gen";
+import { doorSwingSign } from "./doorInteract";
 import type { OpenedDoor } from "./doorSplit";
 import { useDoorState } from "./doorState";
 
@@ -16,9 +20,11 @@ type Props = {
   doors: readonly OpenedDoor[];
   /** Boxes found in collision.glb's walls node, for the dev probe. */
   wallBoxes: number;
+  /** This house's rooms.json rooms: an outside door's swing direction comes from its room. */
+  rooms: readonly Room[];
 };
 
-export function HouseDoors({ listingId, doors, wallBoxes }: Props) {
+export function HouseDoors({ listingId, doors, wallBoxes, rooms }: Props) {
   // Register this house's doors. A new split (a reloaded collision scene)
   // replaces them in place and keeps the open flags.
   useEffect(() => {
@@ -30,14 +36,16 @@ export function HouseDoors({ listingId, doors, wallBoxes }: Props) {
   return (
     <group>
       {doors.map((d) => (
-        <SingleDoor key={d.id} door={d} />
+        <SingleDoor key={d.id} door={d} rooms={rooms} />
       ))}
     </group>
   );
 }
 
-function SingleDoor({ door }: { door: OpenedDoor }) {
+function SingleDoor({ door, rooms }: { door: OpenedDoor; rooms: readonly Room[] }) {
   const isOpen = useDoorState((s) => s.isOpen(door.id));
+  // +1 or -1: outside doors open outward, the rest as before (+90 deg).
+  const swing = useMemo(() => doorSwingSign(door, rooms) * (Math.PI / 2), [door, rooms]);
   const [initialProgress] = useState(() => (isOpen ? 1 : 0));
   const hingeRef = useRef<Group>(null);
   const progress = useRef(initialProgress);
@@ -61,7 +69,7 @@ function SingleDoor({ door }: { door: OpenedDoor }) {
       // Smoothstep easing over 0.3 s
       const eased = t * t * (3 - 2 * t);
       if (hingeRef.current) {
-        hingeRef.current.rotation.y = eased * (Math.PI / 2);
+        hingeRef.current.rotation.y = eased * swing;
       }
     }
   }, 0);
@@ -82,7 +90,7 @@ function SingleDoor({ door }: { door: OpenedDoor }) {
 
       {/* Door leaf mesh: hinged at point a, rotates 90 deg when open */}
       <group position={[door.a[0], door.floorY, door.a[1]]} rotation-y={yaw}>
-        <group ref={hingeRef} rotation-y={initialProgress * (Math.PI / 2)}>
+        <group ref={hingeRef} rotation-y={initialProgress * swing}>
           <mesh position={[door.width / 2, 1.0, 0]} castShadow receiveShadow>
             <boxGeometry args={[door.width, 2.0, 0.04]} />
             <meshStandardMaterial color="#f0ede6" roughness={0.7} />

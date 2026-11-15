@@ -6,7 +6,7 @@ import { doorsFor, useDoorState } from "./doorState";
 
 const A = "hou_236595179";
 const B = "hou_237901269";
-const door = (id: string): OpenedDoor => ({ id, a: [2.337, -7.745], b: [3.086, -7.747], floorY: -0.003, width: 0.75 });
+const door = (id: string): OpenedDoor => ({ id, a: [2.337, -7.745], b: [3.086, -7.747], floorY: -0.003, width: 0.75, toOutside: false });
 const R3_R9 = door(`${A}.r3->${A}.r9`);
 const B_DOOR = door(`${B}.r1->${B}.r2`);
 const SRC = { collision: "glb" as const, wallBoxes: 64 };

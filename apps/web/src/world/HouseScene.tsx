@@ -111,7 +111,7 @@ export function HouseScene({ pack, listingId }: Props) {
           })}
         </RigidBody>
       ) : null}
-      {split ? <HouseDoors listingId={listingId} doors={split.doors} wallBoxes={split.wallBoxes} /> : null}
+      {split ? <HouseDoors listingId={listingId} doors={split.doors} wallBoxes={split.wallBoxes} rooms={rooms} /> : null}
       <HouseGround rooms={rooms} door={door} />
       <HouseCeilings rooms={rooms} />
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}

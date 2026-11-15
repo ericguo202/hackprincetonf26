@@ -169,6 +169,7 @@ describe("interior door vs front door precedence", () => {
         b: [fd[0] + dx, fd[2] + 0.4],
         floorY: 0,
         width: 0.8,
+        toOutside: false,
       });
       const pos = off(fd, 0.5); // 0.5 m from the front door
       expect(doorTargetAt(H7014, pos, [beside(0.7)], doors)?.kind).toBe("interior"); // 0.2 m away

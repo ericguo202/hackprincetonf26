@@ -26,6 +26,8 @@ export interface OpenedDoor {
   b: Point2;
   floorY: number;
   width: number;
+  /** The rooms.json opening leads outside (to_room null): its leaf swings outward (doorInteract.doorSwingSign). */
+  toOutside: boolean;
 }
 
 export interface SplitResult {
@@ -180,6 +182,7 @@ export function splitClosedDoors(
     mid: Point2;
     floorY: number;
     width: number;
+    toOutside: boolean;
   }
 
   const candidateDoors: CandidateDoor[] = [];
@@ -206,6 +209,7 @@ export function splitClosedDoors(
         mid,
         floorY: r.floor_y ?? 0,
         width,
+        toOutside: o.to_room == null,
       });
     }
   }
@@ -282,6 +286,7 @@ export function splitClosedDoors(
         b: d.b,
         floorY: d.floorY,
         width: d.width,
+        toOutside: d.toOutside,
       });
     }
   });

@@ -4,9 +4,10 @@
 // - Determining if a door can be closed (player not within 0.4 m of door line)
 // - Prompt text ("E  Open door" / "E  Close door")
 
-import type { Point2 } from "../contracts.gen";
+import type { Point2, Room } from "../contracts.gen";
+import { pointInPolygon } from "./geometry";
 import type { OpenedDoor } from "./doorSplit";
-import { frontDoorInRange, type Door, type Vec3 } from "./pack";
+import { doorOutward, frontDoorInRange, type Door, type Vec3 } from "./pack";
 
 export const DOOR_INTERACT_RADIUS_M = 1.5;
 export const DOOR_CLOSE_CLEARANCE_M = 0.4;
@@ -112,4 +113,56 @@ export function doorTargetAt(
   if (action === "interior" && interior) return { kind: "interior", door: interior.door, dist: interior.distance };
   if (action === "front" && front) return { kind: "front", door: front.door, dist: front.dist };
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Swing direction
+// ---------------------------------------------------------------------------
+
+/**
+ * Unit vector (house frame XZ) pointing out of the house through an outside
+ * door: the opening's wall normal, signed away from the room the opening
+ * belongs to (the room whose to_room-null door opening sits at this door).
+ * Falls back to pack.doorOutward (the house footprint's nearest edge) when
+ * that room can't tell. Null for a zero-width door.
+ */
+export function outsideDirection(door: OpenedDoor, rooms: readonly Room[]): Point2 | null {
+  const dx = door.b[0] - door.a[0];
+  const dz = door.b[1] - door.a[1];
+  const len = Math.hypot(dx, dz);
+  if (!(len > 1e-9)) return null;
+  const n: Point2 = [-dz / len, dx / len];
+  const mid: Point2 = [(door.a[0] + door.b[0]) / 2, (door.a[1] + door.b[1]) / 2];
+  const own = rooms.find((r) =>
+    (r.openings ?? []).some(
+      (o) =>
+        o.type === "door" &&
+        o.to_room == null &&
+        Math.hypot((o.a[0] + o.b[0]) / 2 - mid[0], (o.a[1] + o.b[1]) / 2 - mid[1]) < 0.25,
+    ),
+  );
+  if (own) {
+    const step = 0.3;
+    const plusIn = pointInPolygon([mid[0] + n[0] * step, mid[1] + n[1] * step], own.polygon);
+    const minusIn = pointInPolygon([mid[0] - n[0] * step, mid[1] - n[1] * step], own.polygon);
+    if (plusIn !== minusIn) return plusIn ? [-n[0], -n[1]] : n;
+  }
+  const [ox, oz] = doorOutward([mid[0], door.floorY, mid[1]], [...rooms]);
+  return [ox, oz];
+}
+
+/**
+ * Which way the leaf turns about its hinge at `a` (HouseDoors: rotation-y of
+ * +-90 deg, with the leaf along a -> b). Room-to-room doors keep +1, as
+ * before. Outside doors pick the sign that puts the open leaf's free edge on
+ * the outside: at +90 deg the free edge moves along (b - a) turned to
+ * (dz, -dx), so +1 when that faces outside, else -1.
+ */
+export function doorSwingSign(door: OpenedDoor, rooms: readonly Room[]): 1 | -1 {
+  if (!door.toOutside) return 1;
+  const out = outsideDirection(door, rooms);
+  if (!out) return 1;
+  const dx = door.b[0] - door.a[0];
+  const dz = door.b[1] - door.a[1];
+  return dz * out[0] - dx * out[1] >= 0 ? 1 : -1;
 }
