@@ -7,7 +7,7 @@
   },
   "radius_m": 200,
   "live_pack_version_note": "The one pack version everything uses (publish, audit, costar, the agent). Change it only with `python -m worldgen.versions pin`, never by hand; builders refuse to write into it.",
-  "live_pack_version": 3,
+  "live_pack_version": 5,
   "pack_history": [
     {
       "version": 1,
@@ -29,6 +29,13 @@
       "date": "2026-11-14 23:03",
       "reason": "furniture v3: v2's 147 assets unchanged + 3 FurniMesh cribs (crib_fm_01..03) and 2 team-made 55 in TVs with a tv_screen material (tv_team_stand, tv_team_wall); block/, spawns and houses byte-identical to v2 (build_block --block-from 2)",
       "compared_to_live": "only furniture_catalog and version differ from v2 (manifest diff); houses and block copied unchanged; contracts v2.5.0 validate 0 errors"
+    },
+    {
+      "version": 5,
+      "previous": 3,
+      "date": "2026-11-15 00:44",
+      "reason": "furniture v4: v3's 152 assets unchanged + 2 team-made changing tables; block, spawns and houses byte-identical to v3 (build_block --block-from 3 --houses-from 3)",
+      "compared_to_live": "manifest diff vs v3: only version 3->5 and furniture_catalog furniture/v3/catalog.json -> furniture/v4/catalog.json; every other file in the pack byte-identical (diff -rq); furniture v4 = v3's 152 assets byte-identical (catalog entries equal apart from the furniture/v4/ path) + changing_table_team_white and changing_table_team_wood (0.90 x 0.50 x 0.95 m, cover half); contracts/validate.py on packs/hou_navidad_01/v5: 2328 documents checked, 0 errors (v3: 2326, 0 errors)"
     }
   ],
   "houses": [
