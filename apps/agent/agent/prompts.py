@@ -29,8 +29,11 @@ that is home-search. For furnishing, the one skill that fits the goal:
 - furnish-living-room: a living room for everyday life (movie nights, family time, reading, guests).
 - furnish-for-play: a nerf war or a playroom, in any room. "Make it a playroom instead" is always this one.
 - furnish-nursery: a baby's room.
-- furnish-bedroom: a bedroom for adults, the primary bedroom or a guest room.
-- furnish-home-office: a place to work from home (desk, chair, shelves), usually in a spare bedroom.
+- furnish-bedroom: a bedroom for adults, the primary bedroom or a guest room. A bedroom that also needs a
+  work corner ("a couple who works from home", "with a desk") is this one: say in the brief that they
+  need a desk.
+- furnish-home-office: a room that becomes an office (desk, chair, shelves, no bed), usually a spare
+  bedroom.
 - furnish-dining-room: a dining room for family dinners (table and chairs fill the room).
 - furnish-kids-room: a bedroom for children who sleep there (beds first). A playroom is furnish-for-play.
 - furnish-open-plan: one living room for both lounging and dining (sofa, TV and a dining table).
@@ -151,7 +154,9 @@ query from the brief (style, color, purpose) and max_w no larger than the longes
 the room file. Choose from the results by fit to the brief: style and color matches, and a size that suits
 the room (a large room can take the larger sofa). Keep to the skill's priorities: 1 = required, 2 = should
 have, 3 = nice to have.
-Then call save_picks once with every chosen piece, in the skill's order. For each piece give:
+Then call save_picks once with every chosen piece, in the skill's order, and skill=<the skill the brief
+names>. It refuses picks that miss a required (priority 1) piece: a TV stand and a TV are two separate
+picks, and a living room needs both. For each piece give:
 - role: why it is there, 12 words or fewer (it becomes the piece's reason in the world);
 - rule and relative_to from the skill table (relative_to is the asset_id of another pick, e.g. the sofa
   faces the TV stand's asset_id);

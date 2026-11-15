@@ -9,7 +9,7 @@
         "max_words": 45,
         "committed": true,
         "room_label": "living_room",
-        "categories_all": ["dining_table", "tv_stand"],
+        "categories_all": ["dining_table", "tv_stand", "tv"],
         "categories_any": ["sofa", "sectional"],
         "valid": true,
         "max_seconds": 180

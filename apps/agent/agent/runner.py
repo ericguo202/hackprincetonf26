@@ -49,6 +49,44 @@ async def player_line(ctx: AgentContext) -> str:
     return f"[Player: in_house={zone if zone != 'block' else 'none'}, block_id={ctx.block_id}]\n"
 
 
+async def commit_leftovers(ctx: AgentContext, emit: Emit) -> None:
+    """Safety net: a plan the layout planner built this turn but never committed (it reported first) is
+    committed here if it still validates, so what the player is told matches the world. A plan with
+    conflicts is never sent."""
+    from agent import tools
+
+    for room_id, plan in list(tools.UNCOMMITTED.pop(ctx.session_id, {}).items()):
+        try:
+            r = await tools.send_plan(ctx, plan)
+        except Exception as e:
+            log.warning("uncommitted plan for %s not sent: %s", room_id, e)
+            await emit(
+                {
+                    "type": "agent.tool",
+                    "data": {
+                        "agent": "layout-planner",
+                        "tool": "commit_placement",
+                        "status": "error",
+                        "summary": f"plan for {room_id} not placed: {e}"[:140],
+                    },
+                }
+            )
+            continue
+        log.warning("layout planner left %s uncommitted; committed %s", room_id, r["plan_id"])
+        summary = f"{r['placed']} pieces placed in the world ({r['plan_id']})"
+        await emit(
+            {
+                "type": "agent.tool",
+                "data": {
+                    "agent": "layout-planner",
+                    "tool": "commit_placement",
+                    "status": "finished",
+                    "summary": summary,
+                },
+            }
+        )
+
+
 async def run_turn(ctx: AgentContext, text: str, emit: Emit, agent: Any = None) -> str | None:
     """Run one turn; returns its LangSmith trace link (None when tracing is off)."""
     lock = _locks.setdefault(ctx.session_id, asyncio.Lock())
@@ -60,6 +98,9 @@ async def run_turn(ctx: AgentContext, text: str, emit: Emit, agent: Any = None) 
         ok = False
         run_id = RUNS[ctx.session_id] = uuid.uuid4()
         link = asyncio.create_task(trace.trace_url(run_id))  # resolves while the agent runs
+        from agent import tools
+
+        tools.UNCOMMITTED.pop(ctx.session_id, None)  # never carry a failed turn's draft into this one
         try:
             agent = agent or get_agent()
             content = await player_line(ctx) + text
@@ -79,6 +120,7 @@ async def run_turn(ctx: AgentContext, text: str, emit: Emit, agent: Any = None) 
                 for event in mapper.handle(chunk):
                     await emit(event)
             ok = True
+            await commit_leftovers(ctx, emit)
         except Exception as e:  # the stream must end cleanly for the player
             log.exception("agent run failed")
             await emit({"type": "error", "data": {"message": f"agent failed: {type(e).__name__}: {e}"[:300]}})

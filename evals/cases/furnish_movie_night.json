@@ -12,7 +12,7 @@
         "tools": ["get_room_geometry", "search_assets", "place_picks", "commit_placement"],
         "committed": true,
         "room_label": "living_room",
-        "categories_all": ["tv_stand"],
+        "categories_all": ["tv_stand", "tv"],
         "categories_any": ["sofa", "sectional", "loveseat"],
         "min_objects": 3,
         "valid": true,

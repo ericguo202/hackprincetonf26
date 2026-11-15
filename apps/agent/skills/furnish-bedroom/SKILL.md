@@ -7,7 +7,9 @@ description: "Furnish a bedroom for adults, a couple's primary bedroom or a gues
 
 Use this for "furnish the primary bedroom for a couple", "set up the bedroom", "make the spare bedroom a
 guest room", "a room for my parents when they visit". For a baby use `furnish-nursery`; for children who
-sleep there use `furnish-kids-room`; for a desk in a bedroom use `furnish-home-office`.
+sleep there use `furnish-kids-room`; for a room that becomes an office with no bed use
+`furnish-home-office`. A bedroom that also needs a work corner ("a couple who works from home", "with a
+desk") stays here: add the desk rows below.
 
 ## Pieces (curator: search these categories; planner: place them in this order)
 
@@ -19,7 +21,12 @@ sleep there use `furnish-kids-room`; for a desk in a bedroom use `furnish-home-o
 | 4 | `rug` | 2 | `center` | none | Rugs never block anything; it may lie partly under the bed. |
 | 5 | `table_lamp` | 3 | `center` | the nightstand | It stands on the nightstand, so it must be no wider and no deeper than it. |
 | 6 | `wardrobe` | 3 | `against_wall` | none | Primary bedroom only. Tall: the tools keep it off the windows. Room under 15 m2: the one-door wardrobe (`max_w` 0.6). |
-| 7 | `armchair` | 3 | `corner` | none | A reading chair. Guest room: a place to put a bag down. |
+| 7 | `armchair` | 3 | `corner` | none | A reading chair. Guest room: a place to put a bag down. Skip it when there is a desk. |
+| 8 | `desk` | 1 when the brief says they work from home or asks for a desk, else skip | `against_wall` | none | A wall the bed does not use; under 1.0 m, so it may stand under a window. `max_w` 1.2. |
+| 9 | `office_chair` | 1 with the desk | `facing` | the desk | `facing` pulls it up to the desk's front. |
+
+Work corner: place the desk and chair before the dresser (search them with the others; in save_picks put
+them right after the nightstands) so they get a wall, and drop the wardrobe first if the room is tight.
 
 Bed size, from `area_m2` and the longest free wall in the room file (search `bed` with this `max_w`):
 

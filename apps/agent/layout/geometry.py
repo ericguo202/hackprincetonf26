@@ -19,6 +19,7 @@ Vec = tuple[float, float]
 ON_EDGE_M = 0.05  # an opening endpoint this close to a wall line lies on that wall
 DOOR_MARGIN_M = 0.10  # keep furniture this far from the door jambs along the wall
 DOOR_SWING_MIN_M = 0.80  # keep-clear depth inside the room in front of a door (its swing)
+DOOR_SWING_MAX_M = 1.00  # ...and at most this deep, however wide the opening
 MIN_WALL_M = 0.30  # shorter free wall pieces are useless for placement
 
 
@@ -218,7 +219,9 @@ def room_geometry(room: dict) -> RoomGeometry:
         width = math.dist(a, b)
         seg = LineString([a, b])
         if o["type"] == "door":
-            depth = max(width, DOOR_SWING_MIN_M)
+            # A door leaf swings as deep as it is wide; a wide opening (double door, an open passage to
+            # the next room) keeps a walkway clear, not a zone as deep as the opening is wide.
+            depth = min(max(width, DOOR_SWING_MIN_M), DOOR_SWING_MAX_M)
             far = [(p[0] + inward[0] * depth, p[1] + inward[1] * depth) for p in (b, a)]
             keep = Polygon([a, b, *far]).buffer(DOOR_MARGIN_M, join_style=2).intersection(poly)
         else:

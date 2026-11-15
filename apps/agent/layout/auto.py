@@ -19,9 +19,25 @@ from collections.abc import Callable
 
 from layout.geometry import RoomGeometry
 from layout.propose import DEFAULT_RULE, TARGET_NEEDED, propose_poses
+from layout.validate import sits_at
 
 DIFFERENT_M = 1.0  # an anchor pose this far from an earlier one, or turned this much, counts as new
 DIFFERENT_DEG = 45.0
+SEAT_LOOKAHEAD = 40  # table poses tried for one where its chair still fits
+
+
+def _seat_fits(
+    geo: RoomGeometry, table: dict, pose: dict, seat: tuple[dict, dict], pairs: list[tuple[dict, dict]]
+) -> bool:
+    """Whether the seat pick can still be pulled up to the table standing at `pose`."""
+    obj = {
+        "instance_id": "_table",
+        "asset_id": table["id"],
+        **{k: pose[k] for k in ("x", "y", "z", "rot_deg")},
+    }
+    pick, seat_asset = seat
+    trial = propose_poses(geo, seat_asset, pick.get("rule") or "facing", "_table", [*pairs, (obj, table)], 1)
+    return bool(trial["poses"])
 
 
 def _differs(pose: dict, earlier: list[dict]) -> bool:
@@ -85,6 +101,24 @@ def auto_place(
         a = get_asset(asset_id)
         rel_iid = instance_of.get(pick.get("relative_to") or "")
         rule = pick.get("rule") or DEFAULT_RULE.get(a.get("placement") or "", "center")
+        rel_pick = next((q for q in picks if q["asset_id"] == pick.get("relative_to")), None)
+        seat_of_table = rel_pick is not None and sits_at(a, get_asset(rel_pick["asset_id"]))
+        if seat_of_table and rel_iid is None:
+            # A desk chair without its desk is not a work corner: never float it somewhere else.
+            dropped.append(
+                {"asset_id": asset_id, "role": pick.get("role"), "why": "its table was not placed"}
+            )
+            continue
+        # Seats that belong at this table (office chair at a desk): the table takes its best pose that
+        # leaves room for the first of them, not a spot where the chair cannot pull up.
+        seat = next(
+            (
+                (q, get_asset(q["asset_id"]))
+                for q in picks
+                if q.get("relative_to") == pick["asset_id"] and sits_at(get_asset(q["asset_id"]), a)
+            ),
+            None,
+        )
         if rule in TARGET_NEEDED and rel_iid is None:
             rule = DEFAULT_RULE.get(a.get("placement") or "", "center")
             if rule in TARGET_NEEDED:
@@ -92,8 +126,13 @@ def auto_place(
         for _ in range(int(pick.get("count", 1))):
             is_anchor = anchor is None and rel_iid is None
             limit = 10 if is_anchor and avoid else 5
-            out = propose_poses(geo, a, rule, rel_iid, pairs, limit=limit)
+            out = propose_poses(geo, a, rule, rel_iid, pairs, limit=SEAT_LOOKAHEAD if seat else limit)
+            if seat and out["poses"]:
+                fits = [p for p in out["poses"] if _seat_fits(geo, a, p, seat, pairs)]
+                out["poses"] = (fits or out["poses"])[:limit]
             fallback = DEFAULT_RULE.get(a.get("placement") or "", "center")
+            if seat_of_table:
+                fallback = rule  # pulled up to its table or dropped, never placed elsewhere
             if not out["poses"] and rule != fallback and fallback not in TARGET_NEEDED:
                 out = propose_poses(geo, a, fallback, None, pairs, limit=limit)
                 rule = fallback
@@ -146,3 +185,37 @@ def auto_place(
         "swapped": swapped,
         "notes": notes,
     }
+
+
+ANCHOR_TRIES = 6  # anchor spots tried when a must-have piece does not fit around the first one
+
+
+def _must_haves_dropped(result: dict, picks: list[dict]) -> int:
+    prio = {}
+    for p in picks:
+        for a in [p["asset_id"], *(p.get("alternates") or [])]:
+            prio.setdefault(a, p.get("priority", 2))
+    return sum(1 for d in result["dropped"] if prio.get(d["asset_id"], 2) == 1)
+
+
+def auto_place_all(geo: RoomGeometry, picks: list[dict], get_asset: Callable[[str], dict], **kw) -> dict:
+    """auto_place, retried with the anchor in other spots while a priority-1 piece is dropped.
+
+    The anchor's best spot can leave no room for a must-have (a queen bed centred on the long wall leaves
+    no wall for the desk in a 15 m2 bedroom); the first layout that keeps every must-have wins, else the
+    one that drops the fewest. Regenerate's `avoid` still applies to every try.
+    """
+    avoid = list(kw.pop("avoid", None) or [])
+    tried: list[dict] = []
+    best, best_miss = None, None
+    for _ in range(ANCHOR_TRIES):
+        r = auto_place(geo, picks, get_asset, avoid=(avoid + tried) or None, **kw)
+        miss = _must_haves_dropped(r, picks)
+        if best is None or miss < best_miss:
+            best, best_miss = r, miss
+        if miss == 0 or r["anchor"] is None or any(not _differs(r["anchor"], [t]) for t in tried):
+            break
+        tried.append(r["anchor"])
+    if tried and best is not None and best["anchor"] and _differs(best["anchor"], tried[:1]):
+        best["notes"].append("anchor moved from its first-choice spot so every must-have piece fits")
+    return best

@@ -37,7 +37,7 @@ from data import packs
 from layout import DEFAULT_RULE, RULES, room_geometry
 from layout import propose_poses as _propose
 from layout import validate_layout as _validate
-from layout.auto import auto_place
+from layout.auto import auto_place_all
 from layout.validate import object_conflicts
 
 PLAN_PERMISSIONS = [FilesystemPermission(operations=["write"], paths=["/plans/**"], mode="deny")]
@@ -162,6 +162,33 @@ def load_plan(room_id: str) -> dict:
 
 def save_plan(plan: dict) -> None:
     FILES.write_json(plan_path(plan["room_id"]), plan)
+    _track_uncommitted(plan)
+
+
+# Plans written this turn but not yet committed, per thread (= session) and room. The runner commits a
+# validated one left behind when the planner reports without calling commit_placement (it happened: the
+# player is told "the playroom is set up" and the old layout stays in the world).
+UNCOMMITTED: dict[str, dict[str, dict]] = {}
+
+
+def _thread_id() -> str | None:
+    try:
+        from langgraph.config import get_config
+
+        return get_config().get("configurable", {}).get("thread_id")
+    except RuntimeError:  # outside a graph run (unit tests)
+        return None
+
+
+def _track_uncommitted(plan: dict) -> None:
+    thread = _thread_id()
+    if thread is None:
+        return
+    rooms = UNCOMMITTED.setdefault(thread, {})
+    if plan.get("status") == "placed" or not plan.get("objects"):
+        rooms.pop(plan["room_id"], None)
+    else:
+        rooms[plan["room_id"]] = json.loads(json.dumps(plan))
 
 
 def placed_pairs(plan: dict, skip: str | None = None) -> list[tuple[dict, dict]]:
@@ -443,16 +470,81 @@ class Pick(BaseModel):
     )
 
 
+SEATING = ("sofa", "sectional", "loveseat")
+# The priority-1 pieces of each furnishing skill (the tables in skills/<name>/SKILL.md), as groups of
+# categories: one pick from every group. A skill with several lists (furnish-for-play: nerf war or
+# playroom) is met by any one of them. save_picks refuses picks that miss a group, unless nothing in the
+# catalog for that group fits the room. A wall-mounted TV stands in for the TV stand (the skills say so).
+REQUIRED: dict[str, list[list[tuple[str, ...]]]] = {
+    "furnish-living-room": [[("tv_stand",), ("tv",), SEATING, ("coffee_table",)]],
+    "furnish-game-room": [[("tv_stand",), ("tv",), SEATING, ("coffee_table",)]],
+    "furnish-open-plan": [
+        [("tv_stand",), ("tv",), SEATING, ("coffee_table",), ("dining_table",), ("dining_chair",)]
+    ],
+    "furnish-for-play": [[SEATING, ("bookshelf",)], [("play_mat",), ("toy_storage",)]],
+    "furnish-bedroom": [[("bed",), ("nightstand",)]],
+    "furnish-kids-room": [[("bed",), ("toy_storage",)]],
+    "furnish-nursery": [[("crib",), ("dresser",)]],
+    "furnish-home-office": [[("desk",), ("office_chair",)]],
+    "furnish-dining-room": [[("dining_table",), ("dining_chair",)]],
+}
+FurnishSkill = Literal[
+    "furnish-living-room",
+    "furnish-game-room",
+    "furnish-open-plan",
+    "furnish-for-play",
+    "furnish-bedroom",
+    "furnish-kids-room",
+    "furnish-nursery",
+    "furnish-home-office",
+    "furnish-dining-room",
+]
+_SKILL_RE = re.compile(r"furnish-[a-z]+(?:-[a-z]+)*")
+
+
+def _brief_skill(room_id: str) -> str | None:
+    """The furnishing skill the concierge's brief names, when save_picks was not told."""
+    try:
+        r = StateFiles().backend.read(f"/briefs/{listing_of(room_id)}.md", offset=0, limit=10_000)
+    except Exception:  # no graph run (tests) or no brief
+        return None
+    if r.error or r.file_data is None:
+        return None
+    found = [s for s in _SKILL_RE.findall(r.file_data["content"]) if s in REQUIRED]
+    return found[0] if found else None
+
+
+def missing_required(skill: str, chosen: list[dict], fits: Callable[[dict], bool]) -> list[str]:
+    """Required category groups of `skill` the chosen assets miss (empty when one of its lists is met).
+    A group is waived when no catalog asset in it fits the room."""
+    cats = {a["category"] for a in chosen}
+    wall_tv = any(a["category"] == "tv" and a.get("placement") == "wall" for a in chosen)
+
+    def met(group: tuple[str, ...]) -> bool:
+        if cats & set(group) or (group == ("tv_stand",) and wall_tv):
+            return True
+        return not any(a["category"] in group and fits(a) for a in packs.catalog())
+
+    best: list[str] | None = None
+    for option in REQUIRED.get(skill, []):
+        miss = [" or ".join(g) for g in option if not met(g)]
+        if best is None or len(miss) < len(best):
+            best = miss
+    return best or []
+
+
 @tool(parse_docstring=True)
-def save_picks(room_id: str, items: list[Pick]) -> str:
+def save_picks(room_id: str, items: list[Pick], skill: FurnishSkill | None = None) -> str:
     """Save the chosen furniture for a room to /plans/<room_id>.picks.json, where the layout planner reads it.
 
-    Checks every asset_id (and alternate) is in the catalog and can fit the room, and that relative_to names
-    another pick. Replaces earlier picks and starts a fresh regenerate history for the room.
+    Checks every asset_id (and alternate) is in the catalog and can fit the room, that relative_to names
+    another pick, and that every required (priority 1) piece of the skill is there: a living room without a
+    TV is refused. Replaces earlier picks and starts a fresh regenerate history for the room.
 
     Args:
         room_id: Room the picks are for.
         items: The pieces, most important first.
+        skill: The furnishing skill the brief names, e.g. furnish-living-room. Always pass it.
     """
 
     def run() -> dict:
@@ -463,15 +555,19 @@ def save_picks(room_id: str, items: list[Pick]) -> str:
         minx, minz, maxx, maxz = geo.poly.bounds
         longest_side = max(maxx - minx, maxz - minz)
 
-        def check_fits(asset_id: str) -> dict:
-            a = asset(asset_id)
+        def too_big(a: dict) -> str | None:
             w, d = a["size_m"]["w"], a["size_m"]["d"]
             on_wall = a.get("placement") in ("wall", "corner")
             limit, what = (longest_wall, "longest free wall") if on_wall else (longest_side, "room")
             if (w if on_wall else max(w, d)) > limit:
-                raise ToolError(
-                    f"{asset_id} is {w:.2f} m wide; the {what} is {limit:.2f} m. Pick a smaller one."
-                )
+                return f"{a['id']} is {w:.2f} m wide; the {what} is {limit:.2f} m. Pick a smaller one."
+            return None
+
+        def check_fits(asset_id: str) -> dict:
+            a = asset(asset_id)
+            why = too_big(a)
+            if why:
+                raise ToolError(why)
             return a
 
         picks = [raw if isinstance(raw, Pick) else Pick.model_validate(raw) for raw in items]
@@ -486,6 +582,15 @@ def save_picks(room_id: str, items: list[Pick]) -> str:
             saved.append(
                 {**p.model_dump(), "name": a["name"], "category": a["category"], "size_m": a["size_m"]}
             )
+        which = skill or _brief_skill(room_id)
+        if which:
+            chosen = [asset(p.asset_id) for p in picks]
+            miss = missing_required(which, chosen, lambda a: too_big(a) is None)
+            if miss:
+                raise ToolError(
+                    f"{which} requires {', '.join(miss)}, and the picks have none. search_assets for "
+                    "it and call save_picks again with every piece."
+                )
         out = {"room_id": room_id, "items": saved}
         FILES.write_json(picks_path(room_id), out)
         FILES.write_json(history_path(room_id), [])
@@ -569,7 +674,7 @@ def place_picks(
             raise ToolError(f"no picks for {room_id}; the asset-curator saves them with save_picks")
         history = FILES.read_json(history_path(room_id)) or []
         room = load_room(room_id)
-        result = auto_place(
+        result = auto_place_all(
             room_geometry(room),
             picks["items"],
             asset,
@@ -775,32 +880,38 @@ async def commit_placement(room_id: str, runtime: ToolRuntime[AgentContext]) -> 
     ctx = runtime.context
 
     async def run() -> dict:
-        room = load_room(room_id)
-        plan = _validate(load_plan(room_id), room, asset)
-        if plan["conflicts"]:
-            save_plan(plan)
-            raise ToolError(
-                f"plan has {len(plan['conflicts'])} conflicts; fix them first: {plan['conflicts']}"
-            )
-        if not plan["objects"]:
-            raise ToolError("plan is empty")
-        sent = {**plan, "status": "placed"}
-        if settings.FAKE_PLACEMENT:  # AGENTS.md section 12: hand-authored plan, same ids
-            fake = packs._read_pack(f"{packs.pack_root(ctx.block_id)}/plans/{room['label']}.json")
-            sent = {
-                **fake,
-                "plan_id": plan["plan_id"],
-                "listing_id": plan["listing_id"],
-                "room_id": room_id,
-                "status": "placed",
-                "conflicts": [],
-            }
-        result = await game_api.post_plan(ctx.block_id, ctx.player_id, sent, room_label=room.get("label"))
-        plan["status"] = "placed"
-        save_plan(plan)
-        return {"plan_id": plan["plan_id"], "placed": result.get("placed", len(sent["objects"]))}
+        plan = load_plan(room_id)
+        try:
+            return await send_plan(ctx, plan)
+        finally:
+            save_plan(plan)  # with its conflicts, or status placed
 
     return await _arun(run)
+
+
+async def send_plan(ctx: AgentContext, plan: dict) -> dict:
+    """Re-validate a plan and post it to the game. Updates `plan` in place (conflicts, status placed).
+    Shared by commit_placement and the runner's safety net for a plan left uncommitted."""
+    room = load_room(plan["room_id"])
+    plan.update(_validate(plan, room, asset))
+    if plan["conflicts"]:
+        raise ToolError(f"plan has {len(plan['conflicts'])} conflicts; fix them first: {plan['conflicts']}")
+    if not plan["objects"]:
+        raise ToolError("plan is empty")
+    sent = {**plan, "status": "placed"}
+    if settings.FAKE_PLACEMENT:  # AGENTS.md section 12: hand-authored plan, same ids
+        fake = packs._read_pack(f"{packs.pack_root(ctx.block_id)}/plans/{room['label']}.json")
+        sent = {
+            **fake,
+            "plan_id": plan["plan_id"],
+            "listing_id": plan["listing_id"],
+            "room_id": plan["room_id"],
+            "status": "placed",
+            "conflicts": [],
+        }
+    result = await game_api.post_plan(ctx.block_id, ctx.player_id, sent, room_label=room.get("label"))
+    plan["status"] = "placed"
+    return {"plan_id": plan["plan_id"], "placed": result.get("placed", len(sent["objects"]))}
 
 
 # --- game (Lane D internal API) ----------------------------------------------------------------------

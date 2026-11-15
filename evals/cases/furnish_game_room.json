@@ -9,7 +9,7 @@
         "max_words": 45,
         "committed": true,
         "room_label": "living_room",
-        "categories_all": ["tv_stand"],
+        "categories_all": ["tv_stand", "tv"],
         "categories_any": ["sectional", "sofa", "beanbag", "ottoman"],
         "valid": true,
         "max_seconds": 180
