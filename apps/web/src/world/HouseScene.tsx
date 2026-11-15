@@ -12,6 +12,8 @@ import type { Point2, Room } from "../contracts.gen";
 import { FurnitureLayer } from "./FurnitureLayer";
 import { BuildController } from "./BuildController";
 import { disableToneMapping } from "./interiorMaterials";
+import { prepareScanWalls, useScanWalls } from "./scanWalls";
+import { ScanWallDriver } from "./ScanWallDriver";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { extractWallBoxes, houseWalls } from "./doorSplit";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
@@ -40,6 +42,12 @@ const FLOOR_COLORS: Record<string, string> = {
 };
 
 type Props = { pack: LoadedPack; listingId: string };
+
+/** interior.glb, once per loaded scene: unlit photos opt out of tone mapping; scan-position walls set up, all hidden (scanWalls.ts). */
+function prepareInterior(scene: Object3D) {
+  disableToneMapping(scene);
+  useScanWalls.getState().set(prepareScanWalls(scene));
+}
 
 export function HouseScene({ pack, listingId }: Props) {
   const house = pack.manifest.houses.find((h) => h.listing_id === listingId);
@@ -87,7 +95,7 @@ export function HouseScene({ pack, listingId }: Props) {
         url={base && packUrl(base, house.interior)}
         label={house.interior}
         // Finished photo textures: no second tone-mapping pass (interiorMaterials.ts).
-        prepare={disableToneMapping}
+        prepare={prepareInterior}
         placeholder={<PlaceholderHouseRender rooms={rooms} door={door} />}
       />
       <GlbOrPlaceholder
@@ -122,6 +130,8 @@ export function HouseScene({ pack, listingId }: Props) {
       {/* v6+ houses bring their scanned yard (collision `ground` node): no slab, no fence. */}
       {showPlaceholderGround(collisionScene) ? <HouseGround rooms={rooms} door={door} /> : null}
       <HouseCeilings rooms={rooms} />
+      {/* Only the scan-position wall set nearest the camera is drawn (no-op without backdrop_s nodes). */}
+      <ScanWallDriver />
       {door ? <ExitMarker door={door} rooms={rooms} /> : null}
       <LoadBoundary url={`furniture:${listingId}`} label="furniture" fallback={null}>
         <Suspense fallback={null}>
