@@ -24,4 +24,5 @@ exit code is 1 if any case failed. The check list and the case format are in the
 | `edit_move_couch` | an edit changes the existing plan |
 | `furnish_primary_bedroom` | `furnish-bedroom`: primary bedroom for a couple (7014) |
 | `furnish_home_office` | `furnish-home-office`: desk and chair in the spare bedroom (7014) |
+| `furnish_dining_room` | `furnish-dining-room`: table and chairs in the dining room (7014) |
 | `home_search_infant` | 0:25 home search: parallel auditors, beacon on 7014 Navidad |

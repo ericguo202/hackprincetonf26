@@ -1,0 +1,19 @@
+{
+  "id": "furnish_dining_room",
+  "description": "furnish-dining-room in the hero house's dining room (r5, 8.1 m2, 3 windows): a table for four in the middle, chairs facing it",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Set up the dining room for family dinners",
+      "expect": {
+        "max_words": 45,
+        "committed": true,
+        "room_label": "dining_room",
+        "categories_all": ["dining_table", "dining_chair"],
+        "categories_any": ["rug", "plant", "bench"],
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}
