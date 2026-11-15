@@ -146,15 +146,25 @@ def gridded(
     )
 
 
-def curbs(buf: MeshBuf, road, ground, half: float, uvf, top_buf: MeshBuf | None = None) -> None:
-    """Vertical curb faces along the road outline (facing into the road), and a 15 cm curb top band."""
+def curbs(
+    buf: MeshBuf,
+    road,
+    ground,
+    half: float,
+    uvf,
+    top_buf: MeshBuf | None = None,
+    skip=None,
+    top_w: float = 0.15,
+) -> None:
+    """Vertical curb faces along the road outline (facing into the road), and a curb top band
+    `top_w` wide. Segments whose middle lies in `skip` (driveway curb cuts) get neither."""
     lim = half - 0.01
     for p in polys_of(road):
         for ring in [p.exterior, *p.interiors]:
             xy = np.asarray(ring.coords)
             # dense resample so the face follows the ground
             ln = LineString(xy)
-            n = max(2, int(ln.length / 1.0))
+            n = max(2, int(ln.length / 0.5))
             pts = np.array([ln.interpolate(i / n, normalized=True).coords[0] for i in range(n + 1)])
             g = ground(pts[:, 0], pts[:, 1])
             s = 0.0
@@ -165,6 +175,9 @@ def curbs(buf: MeshBuf, road, ground, half: float, uvf, top_buf: MeshBuf | None 
                     s += L
                     continue
                 mid = (a + b) / 2
+                if skip is not None and skip.contains(Point(mid)):
+                    s += L
+                    continue
                 t = (b - a) / L
                 nrm = np.array([t[1], 0, -t[0]])
                 probe = mid + 0.3 * nrm[[0, 2]]
@@ -178,7 +191,7 @@ def curbs(buf: MeshBuf, road, ground, half: float, uvf, top_buf: MeshBuf | None 
                 ]
                 buf.quad(*P, uv=np.array([[s, 0], [s + L, 0], [s + L, CURB], [s, CURB]]) / 1.8, facing=nrm)
                 # curb top: a 15 cm band hides the seam between the curb face and the land mesh
-                back = -0.15 * nrm
+                back = -top_w * nrm
                 T = [
                     P[3],
                     P[2],

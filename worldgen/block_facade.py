@@ -122,9 +122,19 @@ def driveway_score(ortho, a, t, nrm2, L) -> np.ndarray:
 
 
 def place_openings(
-    buf: MeshBuf, wall_poly, y_ground: float, wall_top: float, road_lines, ortho, two_story: bool, rng
+    buf: MeshBuf,
+    wall_poly,
+    y_ground: float,
+    wall_top: float,
+    road_lines,
+    ortho,
+    two_story: bool,
+    rng,
+    door_at=None,
 ) -> dict:
-    """Windows, front door and garage door on the outer walls of one building."""
+    """Windows, front door and garage door on the outer walls of one building.
+    Returns {"garage": {"p", "n", "w"}, "door": {"p", "n"}, "windows": n}: centre (x, z) on the wall,
+    outward normal (x, z), width. `door_at` (x, z) puts the front door on the wall nearest that point."""
     ring = np.asarray(wall_poly.exterior.coords)
     # orientation of the ring in x-z: positive shoelace -> outward = (t_z, -t_x)
     x, z = ring[:, 0], ring[:, 1]
@@ -178,9 +188,32 @@ def place_openings(
             "garage",
         )
         e["busy"].append((s0 - 0.3, s0 + 5.2))
-        res["garage"] = True
-    # front door: longest street-facing edge with room left
+        res["garage"] = {"p": e["a"] + e["t"] * (s0 + 2.45), "n": e["n2"], "w": 4.9}
+    # front door: longest street-facing edge with room left (or the wall nearest door_at)
     fronts = sorted([e for e in edges if e["front"] > 0.5], key=lambda e: -e["L"])
+    if door_at is not None and edges:
+        q = np.asarray(door_at, float)
+
+        def _d(e):
+            s_ = float(np.clip((q - e["a"]) @ e["t"], 0, e["L"]))
+            return float(np.linalg.norm(e["a"] + e["t"] * s_ - q))
+
+        e = min(edges, key=_d)
+        s0 = float(np.clip((q - e["a"]) @ e["t"] - 0.5, 0.1, max(e["L"] - 1.1, 0.1)))
+        _quad_on_wall(
+            buf,
+            e["a"],
+            e["t"],
+            np.r_[e["n2"][0], 0, e["n2"][1]],
+            s0,
+            1.0,
+            y_ground + 0.02,
+            min(2.15, wall_h - 0.15),
+            "door",
+        )
+        e["busy"].append((s0 - 0.5, s0 + 1.5))
+        res["door"] = {"p": e["a"] + e["t"] * (s0 + 0.5), "n": e["n2"]}
+        fronts = []
     for e in fronts:
         free = _free_spans(e)
         free = [f for f in free if f[1] - f[0] >= 1.6]
@@ -199,7 +232,7 @@ def place_openings(
                 "door",
             )
             e["busy"].append((s0 - 0.5, s0 + 1.5))
-            res["door"] = True
+            res["door"] = {"p": e["a"] + e["t"] * (s0 + 0.5), "n": e["n2"]}
             break
     # windows
     nwin = 0
