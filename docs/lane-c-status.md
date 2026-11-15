@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 221 tests in 14 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 243 tests in 17 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -105,11 +105,11 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 - **No block pack:** Lane A hasn't published one. No `block/render.glb` or `collision.glb`, and `spawns` is `[]`, so the block is always placeholder geometry.
 - **No listings index:** `listings/index.json` doesn't exist yet (Lane A's `costar.py` is a stub). No listing has a door point, so you can't walk into a house from the block. Use `VITE_START_ROOM`.
 - **Furniture renders as boxes** until real meshes are published. The labelled box is also the deliberate fallback if they never are. With Lane A's `publish --local`, the library lands in `public/packs/furniture/v1/`, so real meshes should start loading; that path isn't verified.
-- **Interior looks washed out:** Lane A's HANDOFF suggests `material.toneMapped = false` on `interior.glb` meshes, since its textures are finished photos. Not done.
+- **Interior looks washed out: fixed (section 17, not checked in a browser).** `interior.glb` meshes now have `material.toneMapped = false`, since their textures are finished photos (Lane A's HANDOFF suggestion). It applies only to the interior.
 - **Blocky walls up close:** walls look blocky within about 30 cm. The camera arm pulls in 0.15 m from walls, so this can show indoors.
 - **Character and collider don't line up:** the model is 1.3 m with feet on the floor, but ecctrl floats the 1.3 m capsule 0.3 m up, so the collider spans 0.3–1.6 m. Shot hitboxes for remote players should match the model, not the capsule: centre at feet + 0.65 m, which is 0.30 m below the body centre (`FOOT_BELOW_CENTRE_M` − 0.65).
 - **7014's doors are unchecked:** the radius is now 0.25 m, so per Lane A's widths every bathroom door in both houses should fit, and 6915 is confirmed headless (section 12). 7014 hasn't been run: its pack isn't on this machine or any branch. Run `apps/web/scripts/door-check.ts` on it once Lane A's publish lands.
-- **Jump apex vs ceiling:** the 1.6 m eye sits exactly at the capsule top. A normal jump (4 m/s) peaks at about 2.40 m, which puts the first-person eye within the 0.1 m near plane of a 2.43 m ceiling, so the roof can clip at the top of a jump. Fixes: a lower `jumpVel` (3 m/s gives about a 0.46 m apex), or an eye a little below the capsule top. Not done.
+- **Jump apex vs ceiling: fixed (section 17, not checked in a browser).** `jumpVel` is now 3.0 m/s (about a 0.46 m apex), down from 4.0 (about 0.8 m). The 1.6 m first-person eye no longer reaches the 2.43 m ceilings at the top of a jump. Crouch still sets it to 0.
 - **No respawn yet:** `indoorSpawns` computes indoor spawns, but nothing uses them yet. That's the foam-fight round loop, Lane D server and C client.
 - **Weapon choice:** the character holds the kit's `RocketLauncher`, tinted foam orange. Despite the name it's a chunky cartoon tube, the only prop in the kit that reads as a toy; the pistols and rifles are realistic. Changing it is one constant: `CHARACTER.keepWeapon`.
 
@@ -189,7 +189,7 @@ Merged to main this session:
 | Spawn drop height | 1.0 m | `FOOT_BELOW_CENTRE_M` + 0.1 | `World.tsx` |
 | Remote hitbox | centre 0.30 m below body centre, radius 0.25, half-height 0.40 | centre 0.15 m below body centre, radius 0.25, half-height 0.625 | section 5, HANDOFF to Lane D |
 | Spawn clearance, door trigger | 0.6 / 0.9 / 1.2 m | unchanged (radius-based) | — |
-| `jumpVel` | 4.0 (about 0.8 m apex) | about 3.0, or the head goes through 2.43 m ceilings | `movement.ts` |
+| `jumpVel` | 3.0 (about 0.46 m apex; section 17) | 3.0 is fine: the eye rises to about 2.1 m | `movement.ts` |
 
 **Tests that need new expectations:**
 1. `characterRig.test`: "1.3 m tall" becomes 1.75, and the `heightM` formula check gains `+ floatHeight`.
@@ -362,3 +362,32 @@ Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, 
 - **One-shot replay restored:** `if (prev === next && !plan.once) return`, now in `characterRig.crossfadeTo` and tested on the real rig. A repeated one-shot (hit, jump, death, Duck) restarts from frame 0. A repeated loop carries on.
   - **Shoot is a loop:** `Idle_Shoot` (or `Run_Shoot`) loops, so rapid blaster fire is one continuous clip, and this line never governed it.
   - **The crossfade effect only re-runs when its inputs change:** `animState`, `moving` or the rig. So a state that repeats without changing (`hit` → `hit`) doesn't re-trigger at all. A per-event replay would need a counter prop.
+
+## 17. Interior tone mapping off; jumpVel 3
+
+Neither fix has been checked in a browser. Both rest on code and unit tests only.
+
+- **Interior colours:** `world/interiorMaterials.ts` `disableToneMapping(root)` sets `toneMapped = false` (and `needsUpdate`) on every mesh material under the loaded `interior.glb` scene. The materials are `KHR_materials_unlit`, so `MeshBasicMaterial`, with finished photo textures. It runs once per loaded scene, before the first paint, through a new optional `prepare` prop on `GlbOrPlaceholder`. Only `HouseScene`'s interior passes it, so furniture, characters, effects and the block keep tone mapping. `alphaTest` / alpha mask is untouched, so doorways stay cut out. Tests: interior meshes (multi-material and nested included) are switched off, other scenes are unchanged, `alphaTest` is kept, and a second pass is a no-op.
+- **Jump height:** `MOVEMENT.jumpVel` is 3.0 (was 4.0), so the jump peaks at about 0.46 m and the first-person eye at about 2.1 m, under 2.43 m ceilings. Crouch still sets `jumpVel` to 0. No test pinned the old value.
+- **Checks:** typecheck, lint and 227 tests pass. A production build with `VITE_DEV_PLAN`, `VITE_START_ROOM` and `VITE_DEV_REMOTES` set contains none of `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM` or `__laneC`.
+
+## 18. Furniture keyed on content, not array identity
+
+**The bug:** `net/game.ts` (Lane D) writes `houses: j.houses` from Colyseus `toJSON()` on every state patch. So `store.houses[zone].objects` is a new array about 20 times a second per connected player, even when the furniture hasn't changed (Lane B's 18:12 HANDOFF line to Lane D). FurnitureLayer memoized `objects` and `rects` on array identity, and its layout effect ran on `[planId, zone, rects]`. So footprints, `houseSpawns` + `setSpawns`, and the local player's push-out/teleport all re-ran on every patch. In multiplayer that would teleport a player standing next to furniture in small jumps, and churn indoor spawns.
+
+**Fixed on the Lane C side**, so it holds whatever Lane D does:
+- **`world/furnitureKey.ts`:** `furnitureKey(house)` builds a content key from `plan_id` plus each object, sorted by `instance_id`, as `instance_id|asset_id|x|y|z|rot_deg`. Positions are rounded to 1 mm and rotation to 0.1°, so float noise isn't a change.
+- **`world/useFurniturePlan.ts`:**
+  - `useStableFurniture(house)` keeps the objects array from the first render with a given key, and only replaces it when the key changes.
+  - `useFurnitureLayout` is FurnitureLayer's former layout effect (spawns, then push-out moving the real body), now keyed on the content key, zone, rooms and footprints (`rects`, so a catalog change re-runs it too).
+- **FurnitureLayer:** uses both hooks. It remounts its furniture group on the content key instead of `plan_id`, so any change tears down the old RigidBodies with no ghost colliders, including a re-furnish that reuses a `plan_id`. An identical patch never remounts.
+- **Constraint:** the effect also depends on `rooms` by identity. `HouseScene` memoizes `rooms` per house, so that holds today; passing a fresh array there would bring the per-patch re-runs back.
+
+**Tests:**
+- `furnitureKey.test.ts`: same content in a new array, reordered, or below-noise float changes give the same key. A moved, rotated, swapped, added or removed object, or the same `plan_id` with different objects, gives a different key.
+- `useFurniturePlan.test.tsx`: renders the hooks with react-dom, with a fake local player inside the fixture sofa.
+  - **50 identical-content new arrays:** push-out and `setSpawns` run once, the player is pushed out once, and the objects array keeps one identity.
+  - **A real change (the sofa moved, same `plan_id`):** they run exactly once more, and the remount key changes.
+- The existing re-furnish and push-out tests still pass.
+
+**Not seen in a browser with two players.** It's verified by unit tests only; the ~20 Hz patch stream from a real game server was simulated, not observed.

@@ -12,7 +12,12 @@ export const MOVEMENT = {
   capsuleRadius: 0.25,
   maxWalkVel: 2.6,
   maxRunVel: 4.8,
-  jumpVel: 4.0,
+  /**
+   * 3.0 m/s, about a 0.46 m apex (was 4.0, about 0.8 m): at 4.0 the 1.6 m
+   * first-person eye reached ~2.4 m and clipped through 2.43 m ceilings.
+   * Crouch sets it to 0 (Player.tsx).
+   */
+  jumpVel: 3.0,
   floatHeight: 0.3,
 } as const;
 
