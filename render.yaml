@@ -82,9 +82,9 @@ projects:
               - key: PACK_BASE_URL
                 sync: false
               - key: PACK_VERSION
-                value: "1"
+                value: "2"
               - key: FURNITURE_VERSION
-                value: "1"
+                value: "2"
               - key: BLOCK_ID
                 value: hou_navidad_01
               - key: USE_FIXTURES
@@ -118,7 +118,9 @@ projects:
               - key: VITE_AGENT_URL
                 fromService: { type: web, name: agent, envVarKey: RENDER_EXTERNAL_URL }
               - key: VITE_PACK_BASE_URL
-                sync: false
+                value: /packs/packs/hou_navidad_01/v2
+              - key: VITE_HERO_LISTING
+                value: hou_236595179
               - key: VITE_MATTERPORT_SDK_KEY
                 sync: false
               - key: VITE_SOLO

@@ -70,19 +70,16 @@ An `apps/web/.env.local` is ignored.
 
 | Var | Effect |
 | --- | --- |
-| `VITE_PACK_BASE_URL` | Pack folder, e.g. `/packs/hou_navidad_01/v1`. Unset means the contract fixtures and placeholder geometry. The published root (listings, shared `furniture/v<N>/`) is derived from it by `publishedRoot()`: three levels up for `.../packs/<block>/v<N>`. |
+| `VITE_PACK_BASE_URL` | Pack folder, e.g. `/packs/packs/hou_navidad_01/v2`. Unset means the contract fixtures and placeholder geometry. The published root (listings, shared `furniture/v<N>/`) is derived from it by `publishedRoot()`: three levels up for `.../packs/<block>/v<N>`. |
 | `VITE_START_ROOM` | `<listing_id>.rN`: start inside that house at the room's area centroid, skipping the block. The only way into a house until a listings index exists. A wrong ID logs one warning and starts on the block. |
 | `VITE_DEV_PLAN` | Furnish the current house from `contracts/fixtures/placement_plan.json`, moved to centre on the target room (pieces that don't fit are dropped with a warning). Dev stand-ins cover any asset the catalog lacks, matched by category. **P** swaps between this plan and plan B (`devFurniture.ts`), which drops a sectional on the room centre to exercise push-out. |
 | `VITE_DEV_REMOTES` | **Dev builds only, never deployed:** gated on `import.meta.env.DEV`, so `vite build` drops them even if the var is set on the host (checked: a production build with it set contains no trace of them). Two fake remote players in my zone on scripted paths (a runner on a circle; a walker that pauses and shoots), written into `store.players` at 20 Hz with arrival jitter. Your shots hit them: 3 hits play their death animation, and they respawn after 3 s. The console logs each `fire` payload. |
 | `VITE_SOLO` | Lane D's: `net/game.ts` skips the game server. |
 
-Current local `/.env.local`:
-`VITE_PACK_BASE_URL=/packs/hou_navidad_01/v1`, `VITE_START_ROOM=hou_237901269.r4`, `VITE_DEV_PLAN=1`, `VITE_DEV_REMOTES=1`.
-
-**Heads-up:** Lane A has since made 7014 Navidad (`hou_236595179`, living room `hou_236595179.r3`) the hero house.
-- **Rebuild the local pack:** `cd worldgen && uv run python -m worldgen.publish hou_navidad_01 --local`.
-- **Base URL:** that copies to `apps/web/public/packs/packs/...`, so the base becomes `/packs/packs/hou_navidad_01/v1`. It also copies the furniture library, so real furniture can load.
-- **Start room:** point `VITE_START_ROOM` at `hou_236595179.r3`. The pack on disk today is still the older zip, which only has 6915 (`hou_237901269`).
+Pack v2 is the live pack (Lane A, HANDOFF 22:20). It is committed and served from `apps/web/public/packs/` (listings index, `packs/hou_navidad_01/v2/`, `furniture/v2/`); v1 is no longer published.
+- **Local `/.env.local` for v2:** `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v2`, plus `VITE_SOLO=1` to run without the game server. Add `VITE_START_ROOM=hou_236595179.r3` (7014's living room) to skip the block, and `VITE_DEV_PLAN=1` / `VITE_DEV_REMOTES=1` as needed.
+- **Hero house:** 7014 Navidad (`hou_236595179`), listed first in the v2 manifest. Render sets `VITE_HERO_LISTING=hou_236595179`.
+- **Spawns:** v2's manifest has 8 sidewalk spawns in front of 7014, so the derived spawn (section 12) is only a fallback now.
 
 ## 4. `window.__laneC` (dev builds only)
 
@@ -441,3 +438,25 @@ A two-slot weapon bar in the style of a battle-royale hotbar, bottom centre: **1
 - **Visibility** (`barView`): only in foam mode, whether or not the pointer is locked. Greyed (40%, grayscale) while eliminated (`useMeAlive`). Hidden while a text input, textarea or contenteditable has focus, so it doesn't cover the chat panel. `pointer-events: none` throughout. Scales to 0.75 below 700 px wide.
 - **Icons:** original inline SVGs (orange toy blaster with a dart, bendy green noodle tube). No logos, not traced from the kit or any product. CC0, recorded in the `weaponIcons.tsx` header (`public/characters/CREDITS.md` lists model files only).
 - **Tested** (`hotbar.test.ts`, `WeaponBar.test.tsx`): slot order from the keys, highlight per weapon, explore hidden / foam shown / dead dimmed, typing hides, cooldown fraction at t = 0, half and full for both weapons, sweep only on the selected slot. **Not yet seen in a browser:** the Chrome extension wasn't connected, so the F / 1 / 2 / shot check is still to do. The dev server compiles and serves every new module.
+
+## 22. Pack v2 block: door heights, block tone mapping, baked sun
+
+Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
+
+- **Door heights.** `Listing.world.position.y` is now the block ground at each front door (7014 0.348 m, 6915 0.103 m).
+  - `houseToBlock` / `blockToHouse` already added and removed `position.y`, so `Door.block`, `exitTo` and `deriveSpawn` were already at ground height.
+  - What changed: the landing is explicit. `world/landing.ts` `bodyCentreAt(floor)` = floor + `FOOT_BELOW_CENTRE_M` (0.95) + `SPAWN_DROP_M` (0.05). It replaces World.tsx's untested 1 m lift (the same 1.0 m total today, but now tied to the capsule).
+  - The block door marker's ring and label now add the door's local y (they sat on the group at `position.y` already).
+  - The door trigger compares XZ only, so a raised ground can't stop it firing. A test stands a body on the raised ground and checks it does fire.
+- **Tested with the real v2 listings index and rooms.json** (`world/landing.test.ts`):
+  - 7014: door local y −0.003, so `exitTo` y = 0.345 and the body lands at 1.345.
+  - 6915: door local y 0.004, so `exitTo` y = 0.107 and the body lands at 1.107.
+  - Entering lands on the room `floor_y` (−0.003 / 0.004) in the house frame.
+  - `door-check.ts` on both v2 houses exits 0. Closets, 7014's kitchen and dining room, and 6915's kitchen are unreachable, the same as v1 (byte-for-byte the same houses).
+- **Block tone mapping.** `disableToneMapping(root, { only })`, plus `disableUnlitToneMapping`, which switches off only `MeshBasicMaterial`. It's passed as BlockScene's render `prepare`. v2's `render.glb` has 37 materials: 19 unlit (ground, paving, curbs, far-zone tiles) are switched off; 18 lit (roofs, walls, trim, fences, bark, leaves) keep tone mapping. Unit-tested on a stand-in scene.
+- **Sun.** `world/sun.ts` `SUN_DIR_BLOCK` = (−0.355, 0.541, 0.762), azimuth 205°, elevation 32.8°. A test checks the vector against the angles (+X east, +Z south).
+  - `world/SunLight.tsx` replaces World.tsx's fixed light: intensity 1.2 kept, light at target + dir × 60 m, target = the local player's body.
+  - Its shadow box is 60 × 60 m around the player (2048² map) and follows them every frame at `SUN_PRIORITY` −5. That's after physics and the camera, never positive.
+  - Indoors the same sun is rotated into the house frame (`sunDirInHouse`). Sky's `sunPosition` uses the same direction. Ambient 0.45 is unchanged.
+- **Not seen in a browser:** the landing on the real `collision.glb` lawn, the unlit block's look with tone mapping off, live shadows lining up with the baked ones, and shadow-edge shimmer as the box follows the player (no texel snapping yet).
+- **Trees (note 4), not done:** the 168 live oaks are 9 meshes as about 340 separate draw calls. Make an `InstancedMesh` per variant only if the frame rate drops on weaker laptops. Lane A saw 60 fps on an M-series laptop.

@@ -529,7 +529,11 @@ def street_lines(block: dict) -> list[tuple[str, LineString]]:
 
 
 def house_world(
-    rooms: list[dict], geo: dict, block: dict, footprints: list[Polygon] | None = None
+    rooms: list[dict],
+    geo: dict,
+    block: dict,
+    footprints: list[Polygon] | None = None,
+    ground=None,
 ) -> tuple[dict, dict]:
     """Listing.world for a house with an interior, and a report of how it was derived.
 
@@ -538,7 +542,8 @@ def house_world(
        (fit_to_footprint): the Matterport pose is an on-site estimate (source "processing"); for 7014 Navidad
        its heading is 9 deg off the footprint and 17 m2 of the house fell outside it.
     3. The front door is the outside door facing the street (front_door).
-    position y is 0: the house floor sits at block ground level until the block has terrain."""
+    4. position y: the block's ground height at the front door when `ground` ((x, z) -> y or None, from the
+       live pack's block/collision.glb) is given, so a player leaving the house lands on the lawn; else 0."""
     c = block["center"]
     pos, heading = matterport_pose(geo, c["lat"], c["lon"])
     report: dict = {
@@ -564,8 +569,15 @@ def house_world(
             report["footprint_fit"] = "rejected"
     door, why = front_door(rooms, pos, heading, street_lines(block))
     report.update(method=method, door=why)
+    y = 0.0
+    if ground is not None:
+        dx, dz = house_to_block((door[0], door[2]), pos, heading)
+        gy = ground(dx, dz)
+        if gy is not None:
+            y = round(gy, 3)
+            report["ground_y_at_door"] = y
     world = {
-        "position": [round(pos[0], 2), 0.0, round(pos[1], 2)],
+        "position": [round(pos[0], 2), y, round(pos[1], 2)],
         "heading_deg": round(heading, 1),
         "door": door,
     }
@@ -613,8 +625,19 @@ def place_house(listing: dict, hdir: Path, block: dict, out: Path, use_vexcel: b
             footprints = vexcel_footprints(listing["lat"], listing["lon"], block, out / "cache" / "vexcel")
         except Exception as e:  # no key, budget, network: keep the Matterport pose
             print(f"warning: {listing['id']}: no Vexcel footprint ({type(e).__name__})", file=sys.stderr)
-    listing["world"], report = house_world(rooms, geo, block, footprints)
+    listing["world"], report = house_world(rooms, geo, block, footprints, live_block_ground(block, out))
     return report
+
+
+def live_block_ground(block: dict, out: Path):
+    """(x, z) -> ground y from the LIVE pack's block/collision.glb, or None when it has no block."""
+    from worldgen import build_block, versions
+
+    live = versions.live_version_or_none(block["block_id"])
+    if live is None:
+        return None
+    glb = versions.pack_dir(block["block_id"], live, out) / "block" / "collision.glb"
+    return build_block.ground_sampler(glb) if glb.is_file() else None
 
 
 # ---------------------------------------------------------------------------------------------------------

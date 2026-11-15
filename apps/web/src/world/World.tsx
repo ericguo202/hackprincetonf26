@@ -31,6 +31,9 @@ import {
   type ZoneState,
 } from "./pack";
 import { usePack } from "./usePack";
+import { bodyCentreAt } from "./landing";
+import { SUN_DIR_BLOCK, sunPosition } from "./sun";
+import { SunLight } from "./SunLight";
 import { DevPlan, DevProbe } from "./DevPlan";
 import { DevModeToggle } from "./DevModeToggle";
 import { DevRemotes } from "./DevRemotes";
@@ -44,9 +47,10 @@ import { DEV_MODE_TOGGLE_ON, DEV_PLAN_ON, START_ROOM } from "./devFlags";
 import { FIXTURE_RAW } from "./fixtures";
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
-/** Drop the body from a little above the floor so it never starts inside it. */
-const SPAWN_LIFT_M = 1;
-const lift = (p: Vec3): Vec3 => [p[0], p[1] + SPAWN_LIFT_M, p[2]];
+/** Sky's sun, far out along the baked sun direction (it only reads the direction). */
+const SKY_SUN = sunPosition([0, 0, 0], SUN_DIR_BLOCK, 100);
+/** A floor point (spawn, door landing, dev room) to the body centre: landing.ts. */
+const lift = bodyCentreAt;
 
 /**
  * Dev switch: VITE_START_ROOM=<room_id> starts inside that room's house at the
@@ -63,9 +67,9 @@ export function World() {
   return (
     <>
       <Canvas shadows camera={{ position: [0, 3.4, 9], fov: 50 }}>
-        <Sky sunPosition={[100, 40, 100]} />
+        {/* Sky and live sun both from the baked sun (sun.ts, Lane A HANDOFF 22:20). */}
+        <Sky sunPosition={SKY_SUN} />
         <ambientLight intensity={0.45} />
-        <directionalLight position={[20, 30, 10]} intensity={1.2} castShadow />
         {/* Fixed 1/60 s step with interpolation (the defaults) suits 60-144 Hz displays;
             the camera must follow the interpolated body, see CameraArm. */}
         <Physics updatePriority={PHYSICS_PRIORITY} timeStep={1 / 60} interpolate>
@@ -147,6 +151,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
   return (
     <>
       {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
+      <SunLight headingDeg={inHouse ? (pack.doors.find((d) => d.listing_id === zone)?.world.heading_deg ?? 0) : 0} />
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}
       {DEV_MODE_TOGGLE_ON ? <DevModeToggle /> : null}
