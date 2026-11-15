@@ -17,6 +17,7 @@ import { Sky } from "@react-three/drei";
 import { useStore } from "../store";
 import { Crosshair } from "../player/Crosshair";
 import { DoorPrompt } from "../player/DoorPrompt";
+import { SfxHud } from "../player/SfxHud";
 import { WeaponBar } from "../player/WeaponBar";
 import { FurnishPanel } from "../ui/FurnishPanel";
 import { Player } from "../player/Player";
@@ -87,6 +88,7 @@ export function World() {
       </Canvas>
       <Crosshair />
       <DoorPrompt />
+      <SfxHud />
       <WeaponBar />
       {pack.status === "ready" ? (
         <FurnishPanel

@@ -661,3 +661,25 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - Moving 1.5 texels moves it by exactly one texel, along that axis.
   - Moving along the sun direction doesn't change the light-space x/y cell.
   - It writes into `out`.
+
+## 31. Procedural sound effects
+
+**Not heard in a browser.** Checked by unit tests (with a fake AudioContext) and the production-build grep.
+
+- **`player/sfx.ts`:** WebAudio only, with no audio files and no dependencies.
+  - One shared `AudioContext`, created or resumed on the first pointer or key press (`unlockAudio`). Before that, `play()` returns false and creates nothing.
+  - A master gain of 0.3 and one shared 0.5 s noise buffer. Each sound is a recipe of 2 to 6 short-lived nodes (filtered noise bursts with a random buffer offset, and pitch-swept oscillators), all under 0.4 s.
+  - The sounds: blaster thwip, dart-on-player splat, dart-on-surface tick, noodle whoosh, noodle bonk, elimination pop with a sparkle, door click (plus a creak-lite on open), and a hurt thud.
+  - Each kind is rate-limited to one per 40 ms, my own sounds and others' separately.
+  - Combat sounds are silent in explore mode (`foamModeNow`); door clicks still play.
+- **Others' sounds:** others' shots, swings and surface ticks (`RemoteShots`), and pops I only saw, play at `remoteVolume(distance)`. That's 0.55 up close, falling with the square of the distance, and silent from 25 m. The distance is from my body.
+- **Where each sound is played:**
+  - `Blaster.tsx`: my shots and hits, swings and bonks, and elimination pops (full volume for mine, distance-scaled for others').
+  - `RemoteShots.tsx`: others' fire, swing and tick.
+  - `SfxHud.tsx` (mounted in `World.tsx` next to the crosshair): the gesture unlock, M to mute, door flips from `doorState` (doors forgotten on leaving a house are silent), and `store.hitsOnMe` going up (read only).
+- **Mute:** M wasn't bound anywhere. The setting is saved in localStorage under `lc.sfx.muted`, and storage errors are ignored. A small "Sound off (M)" tag shows bottom right only while muted.
+- **Tests (`sfx.test.ts`, 10):**
+  - Volume vs distance.
+  - The rate limiter: per key, and 40 calls in 0.2 s let 5 through.
+  - Mute persistence with a mocked storage, including blocked storage, and the M toggle.
+  - Nothing plays, and no context is created, before unlock. After unlock: a bounded number of nodes per sound, rate-limited, silent when muted, combat sounds silent in explore, and a remote sound beyond 25 m skipped.

@@ -48,6 +48,7 @@ import { useStore } from "../store";
 import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
 import { markAttack } from "./attackClock";
+import { distance, play, remoteVolume } from "./sfx";
 import { buildActiveNow } from "../world/buildState";
 
 type Props = {
@@ -144,6 +145,9 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
           markPop(id);
           spawnPop(c, popBitCount(mine));
           startRing([c[0], c[1] - FOOT_BELOW_CENTRE_M, c[2]]);
+          // Mine at full volume; one I only saw quieter, by distance (silent past 25 m).
+          if (mine) play("pop");
+          else play("pop", { volume: remoteVolume(distance(c, s.me.pos)), remote: true });
         }
       }),
     [spawnPop, startRing],
@@ -163,6 +167,8 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     const hit = noodleSwing(head, camDir, boxes);
     onFire(noodlePayload(head, camDir, hit));
     onShot?.(now); // the swing uses the `shoot` anim state
+    play("swing");
+    if (hit) play("bonk");
     if (hit) {
       showMarker("player");
       markHit(hit.id);
@@ -203,6 +209,9 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     // 3. Wire.
     onFire(firePayload(shot, hit));
     onShot?.(now);
+    play("fire");
+    if (hit.kind === "player") play("hitPlayer");
+    else if (hit.kind === "surface") play("hitSurface");
 
     // 4. Effects, all local and immediate.
     const end = pointAt(shot.origin, shot.dir, hit.t);

@@ -22,6 +22,8 @@ import { FOAM, usePuffPool, useTracerPool } from "../player/shotFx";
 import { SHOT_QUERY } from "./collisionGroups";
 import { REMOTE_FX_PRIORITY } from "./frameOrder";
 import { fxInMyZone, seenIds, swooshYaw, takeUnseen, unitDir } from "./remoteFx";
+import { distance, play, remoteVolume } from "../player/sfx";
+import { localPlayer } from "../player/playerControl";
 import { remoteBodies } from "./remoteTargets";
 import type { Vec3 } from "./remoteInterp";
 
@@ -31,6 +33,9 @@ const SWOOSH_S = 0.25;
 const SWOOSH_INNER_M = 1.1;
 const SWOOSH_OUTER_M = 1.5;
 const SWOOSH_ARC = Math.PI / 3; // 60 degrees
+
+/** Where I hear from: my body (live), else the store's position. */
+const listenerPos = () => localPlayer()?.getPos() ?? useStore.getState().me.pos;
 
 export function RemoteShots() {
   const { world, rapier } = useRapier();
@@ -72,13 +77,19 @@ export function RemoteShots() {
       for (const e of takeUnseen(list, seen.current)) {
         const dir = unitDir(e.dir);
         if (!dir || !fxInMyZone(e, bodies)) continue;
+        // Their sounds: quieter, by distance from me (silent past 25 m).
+        const me = listenerPos();
+        const vol = remoteVolume(distance(e.origin, me));
         if (e.kind === "noodle") {
           playSwoosh(e.origin, dir);
+          play("swing", { volume: vol, remote: true });
         } else {
           const t = castWorld(e.origin, dir);
           const end = pointAt(e.origin, dir, t ?? BLASTER.rangeM);
           tracers.spawn(e.origin, end);
           if (t !== null) puffs.spawn(end);
+          play("fire", { volume: vol, remote: true });
+          if (t !== null) play("hitSurface", { volume: remoteVolume(distance(end, me)), remote: true });
         }
       }
     }
