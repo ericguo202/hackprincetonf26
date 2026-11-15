@@ -20,10 +20,13 @@ export const MOVEMENT = {
  * Crouch (contracts v2.4.0 "crouch"). The kit has no crouch clip; its Duck
  * clip drops into a held low pose 0.97 m tall at our 1.3 m scale (measured
  * from the model: Duck 0.33-1.0 s), and the character plays Duck trimmed to
- * that hold (clips.ts CLIP_TRIM). The capsule shrinks to match: top at
- * topM with the same float gap, so half-height = (topM - float) / 2 - radius.
- * The camera eye is the body centre + ARM.headOffsetY, so it drops with the
- * capsule centre (0.315 m, against the model's 0.33 m) with no camera change.
+ * that hold (clips.ts CLIP_TRIM).
+ *
+ * The physics capsule does NOT change: resizing it through ecctrl crashed the
+ * game in a browser (the body tipped over). So halfHeight below is not given
+ * to ecctrl. It only defines CENTRE_ABOVE_FLOOR_M.crouched, whose difference
+ * from standing (0.315 m) is how far CameraArm and Blaster lower the eye. The
+ * remote hitbox uses topM.
  */
 export const CROUCH = {
   /** Top of the crouched model (and capsule) above the floor, metres. */

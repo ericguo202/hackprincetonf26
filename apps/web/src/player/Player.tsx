@@ -29,7 +29,7 @@ import { Blaster } from "./Blaster";
 import type { FirePayload, Hitbox } from "./blasterMath";
 import type { AnimState } from "../../../../contracts/game-state";
 import { CameraArm } from "./CameraArm";
-import { CENTRE_ABOVE_FLOOR_M, CROUCH, MOVEMENT } from "./movement";
+import { CROUCH, MOVEMENT } from "./movement";
 
 /** Hold to crouch (contracts v2.4.0). C rather than Ctrl, which the browser owns (Ctrl+W). */
 export const CROUCH_KEY = "KeyC";
@@ -217,8 +217,8 @@ export function Player({
     // the float spring settling do not pop.
     if (feet.current && bodyMesh.current) {
       const by = bodyMesh.current.getWorldPosition(bodyWorld.current).y;
-      const nominal = crouchedRef.current ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M;
-      const target = handle.isOnGround ? handle.standPoint.y - by : -nominal;
+      // The capsule keeps its standing size when crouched, so the nominal offset is always the standing one.
+      const target = handle.isOnGround ? handle.standPoint.y - by : -FOOT_BELOW_CENTRE_M;
       const k = 1 - Math.exp(-20 * Math.min(dt, 0.1));
       feet.current.position.y += (target - feet.current.position.y) * k;
     }
@@ -307,14 +307,14 @@ export function Player({
                   weapon={weapon}
                   // A file that passes the probe but fails to parse: the capsule, back at the body centre.
                   fallback={
-                    <group position-y={crouched ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M}>
-                      <PlaceholderCharacter halfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight} />
+                    <group position-y={FOOT_BELOW_CENTRE_M}>
+                      <PlaceholderCharacter />
                     </group>
                   }
                 />
               </group>
             ) : (
-              <PlaceholderCharacter halfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight} />
+              <PlaceholderCharacter />
             ))}
         </group>
       </Ecctrl>

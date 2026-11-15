@@ -32,7 +32,8 @@ function rayBox(r: Ray, lo: Vec3, hi: Vec3): number | null {
 const SECTIONAL = { lo: [0.04, 0, -2.4] as Vec3, hi: [2.84, 0.85, -0.5] as Vec3 };
 const TARGET: [number, number] = [1.44, -2.85]; // 0.45 m behind its south face
 const standing = hitboxFromBody("t", [TARGET[0], CENTRE_ABOVE_FLOOR_M.standing, TARGET[1]], "idle");
-const crouched = hitboxFromBody("t", [TARGET[0], CENTRE_ABOVE_FLOOR_M.crouched, TARGET[1]], "crouch");
+// Crouch keeps the standing capsule: the wire body centre is at standing height; only the model/hitbox is lower.
+const crouched = hitboxFromBody("t", [TARGET[0], CENTRE_ABOVE_FLOOR_M.standing, TARGET[1]], "crouch");
 
 type Shot = { aimY: number; standingHit: boolean; crouchedHit: boolean; sofaFirst: boolean };
 
