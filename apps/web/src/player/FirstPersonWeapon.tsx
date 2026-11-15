@@ -20,6 +20,7 @@ import { nowS, useAttackClock } from "./attackClock";
 import { setWeapon, updateNoodleJiggle } from "./characterRig";
 import { buildViewModel } from "./fpViewModel";
 import { meAliveNow } from "./foamMode";
+import { buildActiveNow } from "../world/buildState";
 import { bobPhase, bobStrength, FP_SCALE, fpPose, fpVisible, type FpPose } from "./fpWeaponMath";
 
 type Props = {
@@ -56,7 +57,8 @@ export function FirstPersonWeapon({ url, weapon, bodyHidden }: Props) {
     const f = follow.current;
     const o = offset.current;
     if (!f || !o) return;
-    const visible = fpVisible({ bodyHidden: bodyHidden.current, weapon, alive: meAliveNow() });
+    // Build mode (manual furnishing): nothing fires, so the weapon would only hide the room.
+    const visible = fpVisible({ bodyHidden: bodyHidden.current, weapon, alive: meAliveNow() }) && !buildActiveNow();
     const want = visible ? weapon : null;
     if (want !== shown.current) {
       shown.current = want;
