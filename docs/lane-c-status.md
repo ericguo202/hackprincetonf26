@@ -515,7 +515,7 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
 
 ## 25. E at front doors
 
-**Not seen in a browser.** It's checked by unit tests and the production-build grep only. The Chrome extension wasn't connected, and the dev server compiles and serves every changed module.
+**Seen in a browser (K, 7014 on pack v3):** E leaves the house, E enters it again from the block, and walking into the door still works. Everything else below rests on unit tests.
 
 - **What it does:** E is a shortcut for the existing zone switch, and walking into a door works exactly as before.
   - On the block, within 2.0 m (XZ, `FRONT_DOOR_KEY_M`) of any `pack.doors[].block`, the prompt reads "E  Enter <address>": the address comes from the listings index, falling back to the listing id.
@@ -531,4 +531,4 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - Only the current house's door counts.
   - The prompt text, including the id fallback.
   - Precedence: the pure table; a real interior door away from the front door; a synthetic interior door beside the front door (nearer, farther, tie). 7014's nearest real interior door is 2.7 m from its front door, so the two never compete there.
-- **Not seen in a browser:** the prompt on the block, entering and leaving with E, and the overlap with an interior door.
+- **Not seen in a browser:** an interior door and a front door both in range (they never compete on 7014), and 6915's front door.
