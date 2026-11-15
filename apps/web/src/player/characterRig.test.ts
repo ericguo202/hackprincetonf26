@@ -6,7 +6,8 @@ import { Box3, LoopRepeat, Mesh, MeshStandardMaterial, Vector3, type AnimationCl
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
-import { actionFor, blendedLift, buildRig, setWeapon, usedClips } from "./characterRig";
+import { actionFor, blendedLift, buildRig, crossfadeTo, setWeapon, usedClips } from "./characterRig";
+import { clipFor } from "./clips";
 import { CROUCH } from "./movement";
 import { LoopOnce } from "three";
 import { MOVEMENT } from "./movement";
@@ -159,5 +160,31 @@ describe("pool noodle prop", () => {
     expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, true]);
     setWeapon(rig, "blaster");
     expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([true, false]);
+  });
+});
+
+describe("crossfadeTo: repeated states", () => {
+  it("a repeated one-shot state replays from the start", () => {
+    const rig = buildRig(scene, clips);
+    const cur = crossfadeTo(rig, null, clipFor("hit"));
+    rig.mixer.update(0.3); // most of the way through HitReact (0.43 s)
+    expect(cur!.time).toBeGreaterThan(0.2);
+    const again = crossfadeTo(rig, cur, clipFor("hit"));
+    expect(again).toBe(cur); // same action...
+    expect(again!.time).toBe(0); // ...restarted
+    expect(again!.isRunning()).toBe(true);
+  });
+
+  it("a repeated looping state carries on without restarting", () => {
+    const rig = buildRig(scene, clips);
+    const cur = crossfadeTo(rig, null, clipFor("idle"));
+    rig.mixer.update(0.5);
+    const t = cur!.time;
+    expect(crossfadeTo(rig, cur, clipFor("idle"))).toBe(cur);
+    expect(cur!.time).toBeCloseTo(t, 9);
+  });
+
+  it("shoot is a loop (Idle_Shoot), so rapid fire keeps one continuous shoot clip", () => {
+    expect(clipFor("shoot").once).toBe(false);
   });
 });

@@ -16,7 +16,7 @@ import type { AnimState } from "../../../../contracts/game-state";
 import type { NetPlayer } from "../store";
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "../player/characterAsset";
 import type { Hitbox } from "../player/blasterMath";
-import { CENTRE_ABOVE_FLOOR_M, CROUCH, MOVEMENT } from "../player/movement";
+import { CROUCH, MOVEMENT } from "../player/movement";
 
 export type Vec3 = [number, number, number];
 
@@ -109,9 +109,14 @@ export function feetFromBody(body: Vec3, anim?: AnimState): Vec3 {
   return [body[0], body[1] - footBelowCentre(anim), body[2]];
 }
 
-/** Body centre above the feet for a wire state: crouched players float a smaller capsule. */
+/**
+ * Body centre above the feet. The same in every state: crouch does not resize
+ * the capsule (it crashed ecctrl in a browser), so a crouched player's centre
+ * stays at standing height and only the model (and hitbox) is lower.
+ */
 export function footBelowCentre(anim?: AnimState): number {
-  return anim === "crouch" ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M;
+  void anim; // kept in the signature: callers pass the state, and it is the same for all of them
+  return FOOT_BELOW_CENTRE_M;
 }
 
 /** Model height for a wire state: 1.3 m standing, the Duck hold (0.97 m) crouched. */

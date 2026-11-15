@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 218 tests in 14 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 221 tests in 14 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -269,21 +269,21 @@ Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, 
 
 **Crouch, client side:**
 - **Input:** hold **C**. Not Ctrl, which the browser owns (Ctrl+W).
-- **Capsule:** half-height 0.40 → 0.085 m, so its top drops to 0.97 m, the crouched model's top. That's done by passing ecctrl a different `capsuleHalfHeight` prop.
-- **Camera:** the eye is the body centre + 0.65, so it drops with the capsule, from 1.6 m to about 1.285 m.
-- **Movement:** walk only at 1.3 m/s; no run, no jump.
+- **Capsule: unchanged.** Crouch does NOT resize the capsule. An earlier version shrank it through ecctrl's `capsuleHalfHeight` prop, but ecctrl rebuilds the collider when that changes, and its balance spring can't re-stabilise the shorter capsule. In a browser the body tipped over and the game crashed. So the local player's physics capsule stays at standing height (0.3–1.6 m) while crouched.
+- **Camera:** only the eye drops. `CameraArm` and `Blaster` read a `crouchedRef` and lower the head by the difference between the standing and crouched body centres (0.315 m), from 1.6 m to about 1.285 m. Shots fire from that lowered head.
+- **Movement:** walk only at 1.3 m/s; no run. **Jumping is disabled while crouched** (`jumpVel` 0).
 - **Anim priority:** eliminated > hit > crouch > shoot > locomotion. A player firing from crouch stays `crouch` on the wire, so remotes see and hit the lower body that's actually there.
 - **Clip:** the Quaternius kit has no crouch clip and no crouch-walk. `crouch` plays the kit's `Duck` dodge trimmed to its first 0.5 s, down into its held 0.97 m pose, then clamped there. Nothing is faked or retargeted. Moving while crouched slides that pose, because no crouch-walk exists.
-- **Remote players:** a crouched remote's hitbox spans 0–0.97 m. Their feet ease between postures, because the anim flips at once while the body glides down.
+- **Remote players:** a crouched remote's hitbox spans 0–0.97 m and their model stands on the floor. Crouch keeps the standing capsule, so their body centre arrives at standing height, and the feet are always `FOOT_BELOW_CENTRE_M` below it (`remoteInterp.footBelowCentre`). Only the model and hitbox are lower. This was fixed in section 16: until then, the client still offset crouched remotes by the old crouched centre, which made them float 0.3 m and moved the hitbox to 0.315–1.285 m.
 - **Blaster:** `fire` always sends `weapon: "blaster"`.
 
-**Never seen in a browser.** All of the following is inferred from code and unit and headless tests only:
-- ecctrl rebuilding the collider when `capsuleHalfHeight` changes, and the body settling to the crouched height;
-- the camera dropping smoothly with it;
-- the Duck hold actually showing on the local and remote models;
-- the whole crouch feel: speed, the transition, and the sliding pose while moving.
+**Verified in a browser:** the capsule rebuild failing, which is why crouch no longer resizes it.
 
-Also not handled: standing up under something low. The capsule regrows into it.
+**Never seen in a browser** (inferred from code and unit tests): the eye drop, the Duck hold on the local and remote models, and the crouch feel (speed, transition, and the sliding pose while moving).
+
+**Collider vs hitbox:**
+- **Local player:** the collider stays at standing height while crouched, so it's taller than the crouched model. That can block a crouched player under something low that the model would fit under. With no capsule change, standing up under something low is no longer an issue.
+- **Remote crouched players:** hitboxes span 0–0.97 m (model-sized, from `anim === "crouch"`). That's what other players' shots test, so the cover finding below holds. It's what remotes see, not the local physics.
 
 **Cover finding** (headless, against 6915's real `collision.glb` and dev plan B, with the same numbers pinned in `apps/web/src/world/cover.test.ts`):
 - **Setup:** plan B's 0.85 m sectional (2.8 × 1.9 m) stands in the middle of the living room. The target is 0.45 m behind it. Five standing shooters with 1.6 m eyes each fire at a 25 × 5 grid of aim points on the target's standing body.
@@ -353,3 +353,12 @@ Also not handled: standing up under something low. The capsule regrows into it.
 - **Remote players always show the blaster:** the wire has no per-player weapon field, so showing it would be a contract change.
 - **Not seen in a browser:** the noodle prop, the swing feel and the absence of a swing effect. There's no swoosh visual yet, only the anim and the hit marker.
 - **Dev stand-in:** `fakeRemotes` uses health 6, so 3 blaster or 2 noodle hits eliminate.
+
+## 16. Crouch capsule fix, noodle jiggle, one-shot replay (integrated)
+
+- **Crouch:** an earlier agent session's fix is kept as written. It doesn't resize the capsule, which was verified to crash in a browser; it lowers the eye, disables jumping and plays Duck. Section 13 is corrected to match.
+- **Noodle:** that session's procedural jiggle is kept as written. It's a damped spring on the mesh vertices, driven by the tip's motion and capped at 35% of the length; visual only, with no physics bodies or colliders. The noodle is held upright using a fixed hand-space direction vector. Measured on the real model, that's 0–10° from vertical at idle, 6–23° running and 40–57° in the shoot clips (the arm comes up to swing). Left as is: tilting forward on a swing reads as natural.
+- **Crouched remotes and the local fallback follow the unchanged capsule:** `footBelowCentre` returns the standing offset in every state. Before this, a crouched remote floated 0.3 m with a 0.315–1.285 m hitbox. The local player's in-air feet fallback and placeholder capsule stay standing size too.
+- **One-shot replay restored:** `if (prev === next && !plan.once) return`, now in `characterRig.crossfadeTo` and tested on the real rig. A repeated one-shot (hit, jump, death, Duck) restarts from frame 0. A repeated loop carries on.
+  - **Shoot is a loop:** `Idle_Shoot` (or `Run_Shoot`) loops, so rapid blaster fire is one continuous clip, and this line never governed it.
+  - **The crossfade effect only re-runs when its inputs change:** `animState`, `moving` or the rig. So a state that repeats without changing (`hit` → `hit`) doesn't re-trigger at all. A per-event replay would need a counter prop.

@@ -223,7 +223,8 @@ describe("dev fake players (VITE_DEV_REMOTES)", () => {
 
 describe("crouched remote players", () => {
   const standingBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.standing, 0];
-  const crouchedBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.crouched, 0];
+  // Crouch keeps the standing capsule, so a crouched player's centre arrives at standing height.
+  const crouchedBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.standing, 0];
   const span = (b: ReturnType<typeof hitboxFromBody>) => [b.centre[1] - b.halfHeight - b.radius, b.centre[1] + b.halfHeight + b.radius];
 
   it("stand on the floor in both postures, crouched 0.97 m tall", () => {

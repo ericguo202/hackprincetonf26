@@ -13,11 +13,14 @@
 
 import {
   AnimationMixer,
+  LoopOnce,
+  LoopRepeat,
   Box3,
   CylinderGeometry,
   Group,
   Mesh,
   MeshStandardMaterial,
+  Quaternion,
   SkinnedMesh,
   Vector3,
   type AnimationAction,
@@ -29,7 +32,17 @@ import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js
 
 import type { Weapon } from "../../../../contracts/game-state";
 import { CHARACTER } from "./characterAsset";
-import { CLIPS, CLIP_TRIM, MOVING_SHOOT, ONE_SHOT, type PackClip } from "./clips";
+import { CLIPS, CLIP_TRIM, CROSSFADE_S, MOVING_SHOOT, ONE_SHOT, type ClipPlan, type PackClip } from "./clips";
+
+export type NoodleJiggle = {
+  mesh: Mesh;
+  basePositions: Float32Array;
+  height: number;
+  prevTipWorld: Vector3;
+  tipOffset: Vector3;
+  tipVel: Vector3;
+  initialized: boolean;
+};
 
 export type Rig = {
   root: Object3D;
@@ -47,6 +60,7 @@ export type Rig = {
   scale: number;
   /** The kit's blaster prop and the procedural pool noodle; setWeapon shows one. */
   props: Record<Weapon, Object3D | null>;
+  noodleJiggle?: NoodleJiggle | null;
 };
 
 type Measured = { scale: number; baseY: number; lift: Map<string, number> };
@@ -154,14 +168,15 @@ export function buildRig(source: Object3D, rawClips: AnimationClip[]): Rig {
   root.position.y = baseY;
 
   const mixer = new AnimationMixer(root);
-  const noodle = attachNoodle(root);
+  const noodleRes = attachNoodle(root);
   const rig: Rig = {
     root,
     mixer,
     clips: new Map(clips.map((c) => [c.name, c])),
     lift,
     scale,
-    props: { blaster: root.getObjectByName(CHARACTER.keepWeapon) ?? null, noodle },
+    props: { blaster: root.getObjectByName(CHARACTER.keepWeapon) ?? null, noodle: noodleRes?.holder ?? null },
+    noodleJiggle: noodleRes?.jiggle ?? null,
   };
   setWeapon(rig, "blaster");
   return rig;
@@ -178,7 +193,7 @@ export function setWeapon(rig: Rig, weapon: Weapon): void {
  * local +X: the barrel reaches 3.78 forward of the grip, 2.52 behind). Sized
  * in world metres after the rig is scaled. Hidden until selected.
  */
-function attachNoodle(root: Object3D): Object3D | null {
+function attachNoodle(root: Object3D): { holder: Object3D; jiggle: NoodleJiggle } | null {
   const blaster = root.getObjectByName(CHARACTER.keepWeapon);
   const hand = blaster?.parent;
   if (!blaster || !hand) return null;
@@ -192,16 +207,112 @@ function attachNoodle(root: Object3D): Object3D | null {
   root.updateMatrixWorld(true);
   // Local units per metre at this point in the hierarchy.
   const k = 1 / holder.getWorldScale(new Vector3()).x;
+  const height = n.lengthM * k;
+  const radius = n.radiusM * k;
+  const geom = new CylinderGeometry(radius, radius, height, 10, 8);
+  const basePositions = new Float32Array(geom.attributes.position.array);
+
   const mesh = new Mesh(
-    new CylinderGeometry(n.radiusM * k, n.radiusM * k, n.lengthM * k, 10),
+    geom,
     new MeshStandardMaterial({ color: n.color, roughness: 0.9 }),
   );
-  mesh.rotation.z = -Math.PI / 2; // cylinder's +Y onto the blaster's +X
-  mesh.position.x = (n.lengthM / 2 - n.gripBackM) * k;
+  // Held straight up vertically in the hand.
+  // In holder (blaster) space, the world UP vector is [-0.4735, 0.6360, 0.6094].
+  const upDir = new Vector3(-0.4735, 0.636, 0.6094).normalize();
+  mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), upDir);
+  mesh.position.copy(upDir.clone().multiplyScalar((n.lengthM / 2 - n.gripBackM) * k));
   mesh.castShadow = true;
   holder.add(mesh);
   holder.visible = false;
-  return holder;
+
+  const jiggle: NoodleJiggle = {
+    mesh,
+    basePositions,
+    height,
+    prevTipWorld: new Vector3(),
+    tipOffset: new Vector3(),
+    tipVel: new Vector3(),
+    initialized: false,
+  };
+
+  return { holder, jiggle };
+}
+
+const tmpTipWorld = new Vector3();
+const tmpQuat = new Quaternion();
+const tmpDelta = new Vector3();
+
+/**
+ * Procedural floppy foam jiggle physics for the pool noodle (Option A).
+ * Runs each frame on the visible noodle mesh without Rapier rigidbodies.
+ */
+export function updateNoodleJiggle(rig: Rig, dt: number): void {
+  const j = rig.noodleJiggle;
+  if (!j || !rig.props.noodle?.visible) {
+    if (j) j.initialized = false;
+    return;
+  }
+  const mesh = j.mesh;
+  // Local tip is at (0, height / 2, 0) in mesh space
+  mesh.localToWorld(tmpTipWorld.set(0, j.height / 2, 0));
+
+  if (!j.initialized) {
+    j.prevTipWorld.copy(tmpTipWorld);
+    j.tipOffset.set(0, 0, 0);
+    j.tipVel.set(0, 0, 0);
+    j.initialized = true;
+    return;
+  }
+
+  // World displacement of the tip this frame
+  tmpDelta.subVectors(tmpTipWorld, j.prevTipWorld);
+  j.prevTipWorld.copy(tmpTipWorld);
+
+  // Convert world delta into mesh local coordinate space
+  mesh.getWorldQuaternion(tmpQuat).invert();
+  tmpDelta.applyQuaternion(tmpQuat);
+
+  const step = Math.min(dt, 0.05);
+  // Damped spring oscillator (foam noodle)
+  const k = 150; // spring restoring stiffness
+  const c = 10; // damping
+  const accelLimit = 40;
+  const lagX = Math.max(-accelLimit, Math.min(accelLimit, -(tmpDelta.x / step) * 1.6));
+  const lagZ = Math.max(-accelLimit, Math.min(accelLimit, -(tmpDelta.z / step) * 1.6));
+
+  const ax = -k * j.tipOffset.x - c * j.tipVel.x + lagX;
+  const az = -k * j.tipOffset.z - c * j.tipVel.z + lagZ;
+
+  j.tipVel.x += ax * step;
+  j.tipVel.z += az * step;
+  j.tipOffset.x += j.tipVel.x * step;
+  j.tipOffset.z += j.tipVel.z * step;
+
+  // Max bend: up to 35% of noodle length
+  const maxBend = j.height * 0.35;
+  const bendDist = Math.hypot(j.tipOffset.x, j.tipOffset.z);
+  if (bendDist > maxBend && bendDist > 1e-4) {
+    const scale = maxBend / bendDist;
+    j.tipOffset.x *= scale;
+    j.tipOffset.z *= scale;
+  }
+
+  // Deform mesh vertices along the bend curve
+  const pos = mesh.geometry.attributes.position;
+  const count = pos.count;
+  const halfH = j.height / 2;
+  const ox = j.tipOffset.x;
+  const oz = j.tipOffset.z;
+
+  for (let i = 0; i < count; i++) {
+    const origY = j.basePositions[i * 3 + 1];
+    // t: 0 at base (-halfH), 1 at tip (+halfH)
+    const t = Math.max(0, Math.min(1, (origY + halfH) / j.height));
+    const bendFactor = t * t; // quadratic curve
+    pos.setX(i, j.basePositions[i * 3] + ox * bendFactor);
+    pos.setZ(i, j.basePositions[i * 3 + 2] + oz * bendFactor);
+  }
+  pos.needsUpdate = true;
 }
 
 /** A live action for a clip: the mixer's cached one, or a fresh one after an uncache. */
@@ -224,4 +335,25 @@ export function blendedLift(rig: Rig): number {
     weight += w;
   }
   return weight > 0 ? sum / weight : 0;
+}
+
+/**
+ * Start the clip for a plan, crossfading from the current action. Returns the
+ * action now playing. A looping clip that is already current carries on; a
+ * one-shot (Jump, HitReact, Death, Duck) restarts from frame 0 even when it is
+ * already current, so a repeated one-shot state replays.
+ */
+export function crossfadeTo(rig: Rig, prev: AnimationAction | null, plan: ClipPlan): AnimationAction | null {
+  const next = actionFor(rig, plan.clip);
+  if (!next) return prev;
+  if (prev === next && !plan.once) return prev;
+  next.reset();
+  next.setLoop(plan.once ? LoopOnce : LoopRepeat, plan.once ? 1 : Infinity);
+  next.clampWhenFinished = plan.once;
+  next.enabled = true;
+  next.setEffectiveTimeScale(1);
+  next.setEffectiveWeight(1);
+  next.play();
+  if (prev && prev !== next) next.crossFadeFrom(prev, CROSSFADE_S, false);
+  return next;
 }
