@@ -12,5 +12,6 @@ by hand in `agent/prompts.py`: add a new furnishing skill to the concierge's lis
 | `furnish-home-office` | Home office in a spare bedroom |
 | `furnish-dining-room` | Dining room for family dinners |
 | `furnish-kids-room` | Children's bedroom, one child or two |
+| `furnish-open-plan` | Living and dining in one large living room |
 | `home-search` | Home search criteria and the infant profile |
 | `listing-audit` | The auditors' checks |

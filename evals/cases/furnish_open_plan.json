@@ -1,0 +1,19 @@
+{
+  "id": "furnish_open_plan",
+  "description": "furnish-open-plan in 6915, which has no dining room: TV and sofa group plus a dining table in the 32.3 m2 living room (r4)",
+  "zone": "hou_237901269",
+  "turns": [
+    {
+      "prompt": "Furnish the living room for both lounging and family dinners",
+      "expect": {
+        "max_words": 45,
+        "committed": true,
+        "room_label": "living_room",
+        "categories_all": ["dining_table", "tv_stand"],
+        "categories_any": ["sofa", "sectional"],
+        "valid": true,
+        "max_seconds": 180
+      }
+    }
+  ]
+}
