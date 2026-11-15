@@ -3,7 +3,7 @@
 // imperatively; call `step(dt)` once per frame from the owner's useFrame.
 
 import { useMemo, useRef, useState } from "react";
-import { Mesh, Quaternion, Vector3 } from "three";
+import { Mesh, Quaternion, Vector3, type MeshBasicMaterial } from "three";
 
 import type { V3 } from "./armMath";
 import { BLASTER, pointAt } from "./blasterMath";
@@ -131,25 +131,35 @@ export function usePuffPool(size: number) {
 
 /** Lifetime of one foam bit, seconds. */
 export const BURST_S = 0.4;
-/** Bits in a hit splat (10 to 14) and in an elimination burst. */
+/** Bits in a hit splat (10 to 14). */
 export const HIT_BITS = 12;
-export const KILL_BITS = 30;
 /** Downward acceleration on the bits, m/s^2. */
 export const BURST_GRAVITY = 9.8;
-/** Launch speed range, m/s (an elimination burst launches faster). */
+/** Launch speed range, m/s. */
 export const BIT_SPEED_MIN = 1.6;
 export const BIT_SPEED_MAX = 3.4;
-export const KILL_SPEED_SCALE = 1.4;
 /** Edge of a foam bit, metres, at launch. */
 export const BIT_M = 0.04;
 const FOAM_WHITE = "#fff6ea";
+const FOAM_YELLOW = "#fff1a6";
 
-export type Bit = { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number };
+/** life counts down from maxLife; size scales BIT_M. */
+export type Bit = {
+  life: number;
+  maxLife: number;
+  size: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+};
 export type BurstState = { bits: Bit[]; next: number };
 
 export function createBurstState(size: number): BurstState {
   return {
-    bits: Array.from({ length: size }, () => ({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })),
+    bits: Array.from({ length: size }, () => ({ life: 0, maxLife: BURST_S, size: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })),
     next: 0,
   };
 }
@@ -211,6 +221,8 @@ export function spawnBurst(
     hemisphereDir(n, rand(), rand(), tmpLaunch);
     const speed = (BIT_SPEED_MIN + (BIT_SPEED_MAX - BIT_SPEED_MIN) * rand()) * speedScale;
     b.life = BURST_S;
+    b.maxLife = BURST_S;
+    b.size = 1;
     b.x = at[0];
     b.y = at[1];
     b.z = at[2];
@@ -235,11 +247,77 @@ export function stepBurst(state: BurstState, dt: number): void {
 
 /** Size factor of a bit: 1 at launch, 0 when it is gone (the fade). */
 export function bitFade(b: Bit): number {
-  return Math.max(0, b.life / BURST_S);
+  return b.maxLife > 0 ? Math.max(0, b.life / b.maxLife) : 0;
 }
 
-/** A pool of `size` foam bits; spawn(at, shooter, count) starts a burst. spawn and step are stable. */
-export function useFoamBurstPool(size: number) {
+// ---------------------------------------------------------------------------
+// Elimination "foam pop": a big burst of bits mostly up and out from the body
+// centre, plus a foam ring expanding on the floor at the feet.
+// ---------------------------------------------------------------------------
+
+/** Bits in a pop I scored; one I only saw gets POP_OTHER_SHARE of that. */
+export const POP_BITS = 45;
+export const POP_OTHER_SHARE = 0.6;
+/** Pop bits: lifetime (s), launch speed (m/s), size relative to a splat bit. */
+export const POP_S = 0.8;
+export const POP_SPEED_MIN = 3;
+export const POP_SPEED_MAX = 6;
+export const POP_BIT_SIZE = 1.5;
+/** Lowest cos(angle from straight up) a pop bit launches at: mostly upward, some outward. */
+export const POP_MIN_UP = 0.35;
+/** Shockwave ring on the floor: radius from/to (m) over RING_S, fading out. */
+export const RING_FROM_M = 0.3;
+export const RING_TO_M = 2.0;
+export const RING_S = 0.35;
+export const RING_OPACITY = 0.85;
+
+const UP_V3: V3 = [0, 1, 0];
+
+/** Bits in a pop: all of POP_BITS for mine, POP_OTHER_SHARE of it for one I only saw. */
+export function popBitCount(mine: boolean): number {
+  return mine ? POP_BITS : Math.round(POP_BITS * POP_OTHER_SHARE);
+}
+
+/** Launch a foam pop of `count` bits from `centre`: up and outward, POP_S long, POP_BIT_SIZE big. */
+export function spawnPop(state: BurstState, centre: V3, count: number, rand: () => number = Math.random): void {
+  const size = state.bits.length;
+  for (let k = 0; k < Math.min(count, size); k++) {
+    const b = state.bits[state.next];
+    state.next = (state.next + 1) % size;
+    // cos(theta) in [POP_MIN_UP, 1): a cap around straight up.
+    hemisphereDir(UP_V3, POP_MIN_UP + (1 - POP_MIN_UP) * rand(), rand(), tmpLaunch);
+    const speed = POP_SPEED_MIN + (POP_SPEED_MAX - POP_SPEED_MIN) * rand();
+    b.life = POP_S;
+    b.maxLife = POP_S;
+    b.size = POP_BIT_SIZE;
+    b.x = centre[0];
+    b.y = centre[1];
+    b.z = centre[2];
+    b.vx = tmpLaunch[0] * speed;
+    b.vy = tmpLaunch[1] * speed;
+    b.vz = tmpLaunch[2] * speed;
+  }
+}
+
+/** The ring `age` seconds after a pop: radius and opacity, or null once it is done (or before it starts). */
+export function ringAt(age: number): { radius: number; opacity: number } | null {
+  if (!(age >= 0) || age >= RING_S) return null;
+  const f = age / RING_S;
+  const ease = 1 - (1 - f) * (1 - f); // fast out, slowing
+  return { radius: RING_FROM_M + (RING_TO_M - RING_FROM_M) * ease, opacity: RING_OPACITY * (1 - f) };
+}
+
+/** Bit colours by pool slot: hit splats are orange and white; pops add a few pale yellow. */
+function bitColour(i: number, withYellow: boolean): string {
+  if (withYellow && i % 7 === 3) return FOAM_YELLOW;
+  return i % 3 === 0 ? FOAM_WHITE : FOAM;
+}
+
+/**
+ * A pool of `size` foam bits. spawn(at, shooter, count) starts a hit splat,
+ * pop(centre, count) a foam pop; both share the slots. spawn, pop and step are stable.
+ */
+export function useFoamBurstPool(size: number, withYellow = false) {
   const [state] = useState(() => createBurstState(size));
   const meshes = useRef<(Mesh | null)[]>([]);
 
@@ -247,6 +325,9 @@ export function useFoamBurstPool(size: number) {
     () => ({
       spawn(at: V3, shooter: V3, count: number, speedScale = 1) {
         spawnBurst(state, at, shooter, count, speedScale);
+      },
+      pop(centre: V3, count: number) {
+        spawnPop(state, centre, count);
       },
       step(dt: number) {
         stepBurst(state, dt);
@@ -258,7 +339,7 @@ export function useFoamBurstPool(size: number) {
           mesh.visible = f > 0;
           if (f <= 0) continue;
           mesh.position.set(b.x, b.y, b.z);
-          mesh.scale.setScalar(BIT_M * f);
+          mesh.scale.setScalar(BIT_M * b.size * f);
           mesh.rotation.x += dt * 9;
           mesh.rotation.y += dt * 7;
         }
@@ -276,9 +357,43 @@ export function useFoamBurstPool(size: number) {
       }}
     >
       <boxGeometry args={[1, 1, 1]} />
-      <meshBasicMaterial color={i % 3 === 0 ? FOAM_WHITE : FOAM} toneMapped={false} />
+      <meshBasicMaterial color={bitColour(i, withYellow)} toneMapped={false} />
     </mesh>
   ));
 
-  return { spawn: api.spawn, step: api.step, elements };
+  return { spawn: api.spawn, pop: api.pop, step: api.step, elements };
+}
+
+/** The pop's floor ring: one pooled mesh. start(feet) restarts it; step(dt) each frame. Stable. */
+export function useShockRing() {
+  const mesh = useRef<Mesh | null>(null);
+  const mat = useRef<MeshBasicMaterial | null>(null);
+  const age = useRef(Infinity);
+  const api = useMemo(
+    () => ({
+      start(feet: V3) {
+        age.current = 0;
+        mesh.current?.position.set(feet[0], feet[1] + 0.03, feet[2]);
+      },
+      step(dt: number) {
+        if (dt > 0) age.current += dt;
+        const r = ringAt(age.current);
+        const m = mesh.current;
+        if (!m) return;
+        m.visible = r !== null;
+        if (!r) return;
+        m.scale.setScalar(r.radius);
+        if (mat.current) mat.current.opacity = r.opacity;
+      },
+    }),
+    [],
+  );
+  const element = (
+    <mesh ref={mesh} visible={false} rotation-x={-Math.PI / 2} renderOrder={2}>
+      {/* Unit outer radius; scaled to the ring radius. */}
+      <ringGeometry args={[0.82, 1, 48]} />
+      <meshBasicMaterial ref={mat} color={FOAM} transparent opacity={RING_OPACITY} depthWrite={false} toneMapped={false} />
+    </mesh>
+  );
+  return { start: api.start, step: api.step, element };
 }

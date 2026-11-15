@@ -7,8 +7,19 @@ import {
   facing,
   hemisphereDir,
   HIT_BITS,
-  KILL_BITS,
+  POP_BIT_SIZE,
+  POP_BITS,
+  POP_MIN_UP,
+  POP_S,
+  POP_SPEED_MAX,
+  POP_SPEED_MIN,
+  popBitCount,
+  RING_FROM_M,
+  RING_S,
+  RING_TO_M,
+  ringAt,
   spawnBurst,
+  spawnPop,
   stepBurst,
 } from "./shotFx";
 import type { V3 } from "./armMath";
@@ -17,10 +28,9 @@ const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const live = (s: ReturnType<typeof createBurstState>) => s.bits.filter((b) => b.life > 0).length;
 
 describe("foam burst pool", () => {
-  it("hit and elimination sizes are as specified", () => {
+  it("hit splat size is as specified", () => {
     expect(HIT_BITS).toBeGreaterThanOrEqual(10);
     expect(HIT_BITS).toBeLessThanOrEqual(14);
-    expect(KILL_BITS).toBe(30);
   });
 
   it("reuses its slots: never grows, the oldest bits are overwritten", () => {
@@ -98,5 +108,66 @@ describe("foam burst pool", () => {
       expect(dot(out, n)).toBeCloseTo(u1, 9);
     }
     expect(facing([1, 1, 1], [1, 1, 1])).toEqual([0, 1, 0]);
+  });
+});
+
+describe("elimination foam pop", () => {
+  it("has 40 to 50 bits for mine, 60% for others'", () => {
+    expect(popBitCount(true)).toBe(POP_BITS);
+    expect(POP_BITS).toBeGreaterThanOrEqual(40);
+    expect(POP_BITS).toBeLessThanOrEqual(50);
+    expect(popBitCount(false)).toBe(Math.round(POP_BITS * 0.6));
+    expect(popBitCount(false)).toBeLessThan(popBitCount(true));
+  });
+
+  it("stays within its pool, reusing the oldest slots", () => {
+    const s = createBurstState(96);
+    spawnPop(s, [0, 1, 0], popBitCount(true));
+    spawnPop(s, [5, 1, 0], popBitCount(true));
+    expect(live(s)).toBe(90);
+    spawnPop(s, [9, 1, 0], popBitCount(true));
+    expect(s.bits).toHaveLength(96);
+    expect(live(s)).toBe(96);
+    spawnPop(s, [0, 0, 0], 500); // more than the pool: fills it once
+    expect(s.bits).toHaveLength(96);
+  });
+
+  it("launches up and outward at 3 to 6 m/s, 1.5x the splat size, gone after 0.8 s", () => {
+    const s = createBurstState(POP_BITS);
+    let r = 0.31;
+    spawnPop(s, [0, 1, 0], POP_BITS, () => (r = (r * 9301 + 0.49297) % 1));
+    for (const b of s.bits) {
+      const sp = Math.hypot(b.vx, b.vy, b.vz);
+      expect(sp).toBeGreaterThanOrEqual(POP_SPEED_MIN - 1e-9);
+      expect(sp).toBeLessThanOrEqual(POP_SPEED_MAX + 1e-9);
+      expect(b.vy / sp).toBeGreaterThanOrEqual(POP_MIN_UP - 1e-9);
+      expect(b.size).toBe(POP_BIT_SIZE);
+      expect(b.maxLife).toBe(POP_S);
+    }
+    expect(POP_BIT_SIZE).toBe(1.5);
+    expect(POP_S).toBeCloseTo(0.8, 9);
+    stepBurst(s, POP_S / 2);
+    expect(bitFade(s.bits[0])).toBeCloseTo(0.5, 6);
+    stepBurst(s, POP_S / 2 + 1e-6);
+    expect(live(s)).toBe(0);
+  });
+
+  it("the ring grows from 0.3 m to 2.0 m over 0.35 s while fading, then is gone", () => {
+    expect(ringAt(-0.01)).toBeNull();
+    const start = ringAt(0)!;
+    expect(start.radius).toBeCloseTo(RING_FROM_M, 9);
+    let prev = start;
+    for (let t = 0.02; t < RING_S; t += 0.02) {
+      const r = ringAt(t)!;
+      expect(r.radius).toBeGreaterThan(prev.radius);
+      expect(r.opacity).toBeLessThan(prev.opacity);
+      expect(r.radius).toBeLessThanOrEqual(RING_TO_M);
+      prev = r;
+    }
+    expect(ringAt(RING_S - 1e-6)!.radius).toBeCloseTo(RING_TO_M, 4);
+    expect(ringAt(RING_S - 1e-6)!.opacity).toBeCloseTo(0, 4);
+    expect(ringAt(RING_S)).toBeNull();
+    expect(ringAt(Infinity)).toBeNull();
+    expect(ringAt(Number.NaN)).toBeNull();
   });
 });

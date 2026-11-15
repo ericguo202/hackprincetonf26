@@ -40,9 +40,10 @@ import {
   type Ray,
 } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
-import { HIT_BITS, KILL_BITS, KILL_SPEED_SCALE, useFoamBurstPool, usePuffPool, useTracerPool } from "./shotFx";
+import { HIT_BITS, popBitCount, useFoamBurstPool, usePuffPool, useShockRing, useTracerPool } from "./shotFx";
 import { canAttack, noodlePayload, noodleSwing, swingImpactPoint } from "./weapons";
-import { clearHit, hitRecently, markHit } from "../world/hitFlash";
+import { clearHit, eliminationPops, markHit, markPop } from "../world/hitFlash";
+import { FOOT_BELOW_CENTRE_M } from "./characterAsset";
 import { useStore } from "../store";
 import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
@@ -60,8 +61,10 @@ type Props = {
 };
 
 const TRACERS = 12;
-/** Foam bits pooled for hit splats and elimination bursts (about two splats plus one elimination at once). */
-const BURST_BITS = 72;
+/** Foam bits pooled for hit splats (about four at once). */
+const BURST_BITS = 48;
+/** Foam bits pooled for elimination pops (two of mine at once). */
+const POP_POOL_BITS = 96;
 const FLASH_S = 0.05;
 
 const noHitboxes = () => [];
@@ -85,7 +88,10 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
   const tracers = useTracerPool(TRACERS);
   const puffs = usePuffPool(1);
   const bursts = useFoamBurstPool(BURST_BITS);
-  const spawnBurst = bursts.spawn; // stable
+  const pops = useFoamBurstPool(POP_POOL_BITS, true);
+  const ring = useShockRing();
+  const spawnPop = pops.pop; // stable
+  const startRing = ring.start; // stable
   const flashMesh = useRef<Mesh | null>(null);
   const flashLight = useRef<PointLight | null>(null);
   const flashLeft = useRef(0);
@@ -123,21 +129,23 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     };
   }, [canvas, setWeapon]);
 
-  // Elimination burst: a remote I hit within KILL_CREDIT_S goes from alive to
-  // eliminated in store.players. One burst per credited hit, at the body centre.
+  // Elimination foam pop: any remote in my zone going from alive to
+  // eliminated (eliminationPops). Mine (I hit them within KILL_CREDIT_S) get
+  // the full bit count, others' a share. Bits from the body centre, a ring at
+  // the feet, and the model's scale pop (Character reads popScale).
   useEffect(
     () =>
       useStore.subscribe((s, prev) => {
         if (s.players === prev.players) return;
-        for (const p of Object.values(s.players)) {
-          if (p.id === s.me.id || p.alive || prev.players[p.id]?.alive !== true) continue;
-          if (!hitRecently(p.id)) continue;
-          clearHit(p.id);
-          const me = s.me.pos;
-          spawnBurst(p.pos as V3, [me[0], me[1] + ARM.headOffsetY, me[2]], KILL_BITS, KILL_SPEED_SCALE);
+        for (const { id, mine } of eliminationPops(s.players, prev.players, s.me.id, s.me.zone)) {
+          if (mine) clearHit(id);
+          const c = s.players[id].pos as V3;
+          markPop(id);
+          spawnPop(c, popBitCount(mine));
+          startRing([c[0], c[1] - FOOT_BELOW_CENTRE_M, c[2]]);
         }
       }),
-    [spawnBurst],
+    [spawnPop, startRing],
   );
 
   const headOffset = () =>
@@ -248,6 +256,8 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     tracers.step(step);
     puffs.step(step);
     bursts.step(step);
+    pops.step(step);
+    ring.step(step);
 
     flashLeft.current = Math.max(0, flashLeft.current - step);
     if (flashMesh.current) flashMesh.current.visible = flashLeft.current > 0;
@@ -264,6 +274,8 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
       <pointLight ref={flashLight} color="#ffb347" intensity={0} distance={3} />
       {puffs.elements}
       {bursts.elements}
+      {pops.elements}
+      {ring.element}
     </>
   );
 }

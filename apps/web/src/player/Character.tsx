@@ -17,7 +17,7 @@ import { Color, LoopRepeat, Mesh, MeshStandardMaterial, type AnimationAction, ty
 
 import type { AnimState, Weapon } from "../../../../contracts/game-state";
 import { LoadBoundary } from "../world/Glb";
-import { flashLevel } from "../world/hitFlash";
+import { flashLevel, popScale } from "../world/hitFlash";
 import { usePackGLTF } from "../world/gltf";
 import { useMeshState } from "../world/meshProbe";
 import { CHARACTER } from "./characterAsset";
@@ -164,7 +164,11 @@ function CharacterModel({
   useFrame((_, dt) => {
     const step = Math.min(dt, 0.1);
     rig.mixer.update(step);
-    if (liftGroup.current) liftGroup.current.position.y = blendedLift(rig);
+    if (liftGroup.current) {
+      liftGroup.current.position.y = blendedLift(rig);
+      // Elimination pop (remote players): scale up and back, about the feet.
+      if (flashId) liftGroup.current.scale.setScalar(popScale(flashId));
+    }
     updateNoodleJiggle(rig, step);
     const f = flash.current;
     if (f && flashId) {
