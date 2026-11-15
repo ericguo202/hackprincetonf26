@@ -14,7 +14,7 @@
 //       target_id is set only when a hitbox was hit. Default: no-op.
 // Lane C never opens a socket; both are props on <Player>.
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRapier } from "@react-three/rapier";
 import type { EcctrlHandle } from "ecctrl";
@@ -22,12 +22,12 @@ import { Mesh, Object3D, PointLight, Quaternion, Vector3 } from "three";
 
 import { SHOT_QUERY } from "../world/collisionGroups";
 import { SHOT_PRIORITY } from "../world/frameOrder";
+import { CENTRE_ABOVE_FLOOR_M } from "./movement";
 import { ARM, type V3 } from "./armMath";
 import {
   BLASTER,
   aimPoint,
   aimRay,
-  canFire,
   firePayload,
   headFrom,
   muzzleFrom,
@@ -40,6 +40,9 @@ import {
   type Ray,
 } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
+import { canAttack, noodlePayload, noodleSwing } from "./weapons";
+import { foamModeNow, weaponForKey } from "./foamMode";
+import { useWeaponState } from "./weaponState";
 
 type Props = {
   ecctrl: RefObject<EcctrlHandle | null>;
@@ -49,6 +52,7 @@ type Props = {
   onFire?: (p: FirePayload) => void;
   /** Called on every shot fired (clock seconds), for the `shoot` animation state. */
   onShot?: (now: number) => void;
+  crouchedRef?: MutableRefObject<boolean>;
 };
 
 const TRACERS = 12;
@@ -63,12 +67,13 @@ type Tracer = { active: boolean; from: V3; dir: V3; total: number; travelled: nu
 const noHitboxes = () => [];
 const noFire = () => {};
 
-export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFire, onShot }: Props) {
+export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFire, onShot, crouchedRef }: Props) {
   const canvas = useThree((s) => s.gl.domElement);
   const { world, rapier } = useRapier();
   const showMarker = useBlasterHud((s) => s.showMarker);
 
   const triggerHeld = useRef(false);
+  const setWeapon = useWeaponState((s) => s.setWeapon);
   const lastShotAt = useRef<number | null>(null);
 
   // Scratch objects, reused every frame.
@@ -100,17 +105,43 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     const release = () => {
       if (!locked()) triggerHeld.current = false;
     };
+    // Keys 1 and 2 pick the weapon (weapons.ts WEAPON_KEYS).
+    const onKey = (e: KeyboardEvent) => {
+      // Explore mode: keys 1/2 do nothing (foamMode.weaponForKey).
+      const w = weaponForKey(e.code, foamModeNow());
+      const el = document.activeElement;
+      if (!w || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+      setWeapon(w);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("mouseup", onUp);
     document.addEventListener("pointerlockchange", release);
     window.addEventListener("blur", release);
+    window.addEventListener("keydown", onKey);
     return () => {
+      window.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("mouseup", onUp);
       document.removeEventListener("pointerlockchange", release);
       window.removeEventListener("blur", release);
     };
-  }, [canvas]);
+  }, [canvas, setWeapon]);
+
+  const headOffset = () =>
+    ARM.headOffsetY -
+    (crouchedRef?.current ? CENTRE_ABOVE_FLOOR_M.standing - CENTRE_ABOVE_FLOOR_M.crouched : 0);
+
+  /**
+   * Pool noodle swing: an arc query from the head along the aim, players only
+   * (no walls or furniture), then the `fire` message with weapon "noodle".
+   */
+  function swing(camDir: V3, bodyCentre: V3, now: number) {
+    const head = headFrom(bodyCentre, headOffset());
+    const hit = noodleSwing(head, camDir, getHitboxes());
+    onFire(noodlePayload(head, camDir, hit));
+    onShot?.(now); // the swing uses the `shoot` anim state
+    if (hit) showMarker("player");
+  }
 
   /** First zone-or-furniture hit along a ray, between minT and maxT, ignoring my own body. */
   function castWorld(ray: Ray, minT: number, maxT: number, exclude: EcctrlHandle["body"]): number | null {
@@ -125,7 +156,7 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
   }
 
   function fire(camPos: V3, camDir: V3, bodyCentre: V3, handle: EcctrlHandle, now: number) {
-    const head = headFrom(bodyCentre, ARM.headOffsetY);
+    const head = headFrom(bodyCentre, headOffset());
     const boxes = getHitboxes();
 
     // 1. Aim: the camera ray through the crosshair, only past the head.
@@ -178,14 +209,20 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     const step = Math.min(dt, 0.1);
     const handle = ecctrl.current;
 
+    // Explore mode: nothing fires and nothing is sent; read live every frame,
+    // so a mode switch lands within a frame. Darts already in flight finish.
+    if (!foamModeNow()) triggerHeld.current = false;
     if (handle && triggerHeld.current) {
       const now = state.clock.elapsedTime;
-      if (canFire(lastShotAt.current, now)) {
+      const weapon = useWeaponState.getState().weapon;
+      if (canAttack(weapon, lastShotAt.current, now)) {
         lastShotAt.current = now;
         const cam = state.camera;
         cam.getWorldDirection(tmpDir.current);
         const centre = body.current ? body.current.getWorldPosition(tmpBody.current) : handle.currPos;
-        fire(
+        if (weapon === "noodle") {
+          swing([tmpDir.current.x, tmpDir.current.y, tmpDir.current.z], [centre.x, centre.y, centre.z], now);
+        } else fire(
           [cam.position.x, cam.position.y, cam.position.z],
           [tmpDir.current.x, tmpDir.current.y, tmpDir.current.z],
           [centre.x, centre.y, centre.z],

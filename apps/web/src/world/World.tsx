@@ -31,12 +31,13 @@ import {
 } from "./pack";
 import { usePack } from "./usePack";
 import { DevPlan, DevProbe } from "./DevPlan";
+import { DevModeToggle } from "./DevModeToggle";
 import { DevRemotes } from "./DevRemotes";
 import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
 import { RemotePlayers } from "./RemotePlayers";
 import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
-import { DEV_PLAN_ON, START_ROOM } from "./devFlags";
+import { DEV_MODE_TOGGLE_ON, DEV_PLAN_ON, START_ROOM } from "./devFlags";
 import { FIXTURE_RAW } from "./fixtures";
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
@@ -142,6 +143,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       {inHouse ? <HouseScene pack={pack} listingId={zone} /> : <BlockScene pack={pack} />}
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}
+      {DEV_MODE_TOGGLE_ON ? <DevModeToggle /> : null}
       <RemotePlayers zone={zone} />
       {DEV_REMOTES_ON ? <DevRemotes pack={pack} zone={zone} /> : null}
       {/* getHitboxes: remote players as drawn this frame. onFire: Lane D sends `fire`; in dev-remotes mode, the stand-in. */}

@@ -6,11 +6,12 @@
 // dev-remote-1 runs a circle around the room's centre. dev-remote-2 walks a
 // line back and forth, pausing at each end and shooting while paused.
 // devFire() is passed to <Player onFire> in this mode: it logs the payload and
-// plays a stand-in for Lane D's server: 3 hits eliminate, respawn after 3 s.
+// plays a stand-in for Lane D's server: 3 blaster or 2 noodle hits eliminate, respawn after 3 s.
 
 import type { AnimState } from "../../../../contracts/game-state";
 import type { Point2 } from "../contracts.gen";
 import type { FirePayload } from "../player/blasterMath";
+import { WEAPON_RULES } from "../player/weapons";
 
 /**
  * Dev builds only. The env var alone is not enough: a production build
@@ -21,7 +22,9 @@ import type { FirePayload } from "../player/blasterMath";
  */
 export const DEV_REMOTES_ON = import.meta.env.DEV && Boolean(import.meta.env.VITE_DEV_REMOTES);
 export const DEV_REMOTE_IDS = ["dev-remote-1", "dev-remote-2"] as const;
-const HITS_TO_ELIMINATE = 3; // AGENTS.md section 11
+// Stand-in for Lane D's server: health 6, so the blaster's 3 hits and the
+// noodle's 2 (WEAPON_RULES) both divide it evenly.
+const FULL_HP = 6;
 const RESPAWN_S = 3;
 const HIT_S = 0.35;
 const RUN_SPEED = 2.0;
@@ -31,7 +34,7 @@ type Fake = { hp: number; hitUntil: number; deadUntil: number };
 // build (DEV_REMOTES_ON is false there), so the bundler can drop all of it.
 let fakeState: Map<string, Fake> | null = null;
 const fakes = (): Map<string, Fake> =>
-  (fakeState ??= new Map(DEV_REMOTE_IDS.map((id) => [id, { hp: HITS_TO_ELIMINATE, hitUntil: 0, deadUntil: 0 }])));
+  (fakeState ??= new Map(DEV_REMOTE_IDS.map((id) => [id, { hp: FULL_HP, hitUntil: 0, deadUntil: 0 }])));
 
 export type FakePose = { pos2: Point2; yaw: number; moving: boolean; shooting: boolean };
 
@@ -85,10 +88,10 @@ export function devFire(p: FirePayload, t = performance.now() / 1000): void {
   console.info("[dev remotes] fire", JSON.stringify(p));
   const f = p.target_id ? fakes().get(p.target_id) : undefined;
   if (!f || f.deadUntil > t) return;
-  f.hp -= 1;
+  f.hp -= FULL_HP / WEAPON_RULES[p.weapon ?? "blaster"].hitsToEliminate;
   if (f.hp <= 0) {
     f.deadUntil = t + RESPAWN_S;
-    f.hp = HITS_TO_ELIMINATE;
+    f.hp = FULL_HP;
   } else {
     f.hitUntil = t + HIT_S;
   }
@@ -96,5 +99,5 @@ export function devFire(p: FirePayload, t = performance.now() / 1000): void {
 
 /** Tests only. */
 export function resetFakes(): void {
-  for (const f of fakes().values()) Object.assign(f, { hp: HITS_TO_ELIMINATE, hitUntil: 0, deadUntil: 0 });
+  for (const f of fakes().values()) Object.assign(f, { hp: FULL_HP, hitUntil: 0, deadUntil: 0 });
 }

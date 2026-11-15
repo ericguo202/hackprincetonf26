@@ -14,7 +14,7 @@
 // CAMERA_QUERY). Render meshes have no colliders, furniture is in another
 // group, and the local body is excluded, so none of them pull the camera in.
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRapier } from "@react-three/rapier";
 import type { EcctrlHandle } from "ecctrl";
@@ -22,6 +22,7 @@ import { PerspectiveCamera, Vector3, type Object3D } from "three";
 
 import { CAMERA_QUERY } from "../world/collisionGroups";
 import { CAMERA_PRIORITY } from "../world/frameOrder";
+import { CENTRE_ABOVE_FLOOR_M } from "./movement";
 import {
   ARM,
   applyLook,
@@ -54,6 +55,13 @@ type Props = {
   onBodyHidden: (hidden: boolean) => void;
   /** "block" or a listing_id; picks the arm's default on every zone change. */
   zone: string;
+  /**
+   * Live crouch state (ref so it is read per-frame without a React re-render).
+   * When crouched, the capsule stays standing-height but the camera eye drops
+   * to the crouched body centre: the difference between standing and crouched
+   * centres (CENTRE_ABOVE_FLOOR_M).
+   */
+  crouchedRef?: MutableRefObject<boolean>;
 };
 
 /** Rapier's Ray, typed through @react-three/rapier (rapier3d-compat is not a direct dependency). */
@@ -64,7 +72,7 @@ function typing(): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
 }
 
-export function CameraArm({ ecctrl, body, onBodyHidden, zone }: Props) {
+export function CameraArm({ ecctrl, body, onBodyHidden, zone, crouchedRef }: Props) {
   const canvas = useThree((s) => s.gl.domElement);
   const { world, rapier } = useRapier();
 
@@ -123,7 +131,13 @@ export function CameraArm({ ecctrl, body, onBodyHidden, zone }: Props) {
     // Interpolated (drawn) position; raw currPos only before the mesh exists.
     const p = body.current ? body.current.getWorldPosition(bodyPos.current) : h.currPos;
     const hx = p.x;
-    const hy = p.y + ARM.headOffsetY;
+    // When crouched, the capsule stays standing-height but the eye drops.
+    // The drop equals the difference between the standing and crouched body
+    // centres — what used to happen via capsuleHalfHeight shrinking.
+    const crouchDrop = crouchedRef?.current
+      ? CENTRE_ABOVE_FLOOR_M.standing - CENTRE_ABOVE_FLOOR_M.crouched
+      : 0;
+    const hy = p.y + ARM.headOffsetY - crouchDrop;
     const hz = p.z;
     const { yaw, pitch } = look.current;
 

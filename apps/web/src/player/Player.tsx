@@ -29,7 +29,7 @@ import { Blaster } from "./Blaster";
 import type { FirePayload, Hitbox } from "./blasterMath";
 import type { AnimState } from "../../../../contracts/game-state";
 import { CameraArm } from "./CameraArm";
-import { CENTRE_ABOVE_FLOOR_M, CROUCH, MOVEMENT } from "./movement";
+import { CROUCH, MOVEMENT } from "./movement";
 
 /** Hold to crouch (contracts v2.4.0). C rather than Ctrl, which the browser owns (Ctrl+W). */
 export const CROUCH_KEY = "KeyC";
@@ -37,6 +37,8 @@ import { Character } from "./Character";
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
 import { useMeshState } from "../world/meshProbe";
 import { registerPlayer } from "./playerControl";
+import { useWeaponState } from "./weaponState";
+import { heldWeaponProp, useFoamMode } from "./foamMode";
 
 /** Lane D sends `move` at 20 Hz, so there is no point writing faster. */
 const WRITE_HZ = 20;
@@ -110,6 +112,8 @@ export function Player({
   // Crouch changes the capsule, so it is React state (an Ecctrl prop); the ref
   // is for the frame loop.
   const [crouched, setCrouched] = useState(false);
+  // Explore mode: the model holds nothing (foamMode.ts); foam: the selected weapon.
+  const weapon = heldWeaponProp(useFoamMode(), useWeaponState((s) => s.weapon));
   const crouchedRef = useRef(false);
   useEffect(() => {
     crouchedRef.current = crouched;
@@ -215,8 +219,8 @@ export function Player({
     // the float spring settling do not pop.
     if (feet.current && bodyMesh.current) {
       const by = bodyMesh.current.getWorldPosition(bodyWorld.current).y;
-      const nominal = crouchedRef.current ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M;
-      const target = handle.isOnGround ? handle.standPoint.y - by : -nominal;
+      // The capsule keeps its standing size when crouched, so the nominal offset is always the standing one.
+      const target = handle.isOnGround ? handle.standPoint.y - by : -FOOT_BELOW_CENTRE_M;
       const k = 1 - Math.exp(-20 * Math.min(dt, 0.1));
       feet.current.position.y += (target - feet.current.position.y) * k;
     }
@@ -253,6 +257,7 @@ export function Player({
           ecctrl={ecctrl}
           body={bodyMesh}
           zone={zone}
+          crouchedRef={crouchedRef}
           onBodyHidden={(hidden) => {
             if (bodyMesh.current) bodyMesh.current.visible = !hidden;
           }}
@@ -265,6 +270,7 @@ export function Player({
           body={bodyMesh}
           getHitboxes={getHitboxes}
           onFire={onFire}
+          crouchedRef={crouchedRef}
           onShot={(now) => {
             // Don't cut short a hit or elimination with a shoot pose.
             if (action.current === "hit" || action.current === "eliminated") return;
@@ -276,12 +282,20 @@ export function Player({
       <Ecctrl
         ref={ecctrl}
         position={spawn}
-        // Crouch shrinks the capsule (ecctrl rebuilds the collider and re-floats it).
-        capsuleHalfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight}
+        // Crouch does NOT change capsuleHalfHeight: ecctrl rebuilds the collider
+        // when args change, and the autoBalance spring cannot re-stabilise the
+        // new shorter capsule quickly enough, so the body tips over and the game
+        // crashes (GitHub issue: capsule rotation on collider rebuild). Instead
+        // crouch only lowers the camera eye (CameraArm reads crouchedRef) and
+        // caps movement speed; the model plays Duck to visually crouch. The
+        // physics capsule stays standing-height, so a crouched player's hurtbox
+        // is taller than the model — acceptable until ecctrl supports in-place
+        // collider resize or hard rotation locks.
+        capsuleHalfHeight={MOVEMENT.capsuleHalfHeight}
         capsuleRadius={MOVEMENT.capsuleRadius}
         maxWalkVel={crouched ? CROUCH.maxVel : MOVEMENT.maxWalkVel}
         maxRunVel={crouched ? CROUCH.maxVel : MOVEMENT.maxRunVel}
-        jumpVel={MOVEMENT.jumpVel}
+        jumpVel={crouched ? 0 : MOVEMENT.jumpVel}
         floatHeight={MOVEMENT.floatHeight}
         lockForward={followCamera}
       >
@@ -292,16 +306,17 @@ export function Player({
                 <Character
                   animState={look.anim}
                   moving={look.moving}
+                  weapon={weapon}
                   // A file that passes the probe but fails to parse: the capsule, back at the body centre.
                   fallback={
-                    <group position-y={crouched ? CENTRE_ABOVE_FLOOR_M.crouched : FOOT_BELOW_CENTRE_M}>
-                      <PlaceholderCharacter halfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight} />
+                    <group position-y={FOOT_BELOW_CENTRE_M}>
+                      <PlaceholderCharacter />
                     </group>
                   }
                 />
               </group>
             ) : (
-              <PlaceholderCharacter halfHeight={crouched ? CROUCH.halfHeight : MOVEMENT.capsuleHalfHeight} />
+              <PlaceholderCharacter />
             ))}
         </group>
       </Ecctrl>

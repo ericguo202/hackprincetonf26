@@ -25,6 +25,12 @@ export const CHARACTER = {
     "RocketLauncher", "ShortCannon", "Shotgun", "Shovel", "SMG", "Sniper", "Sniper_2",
   ],
   foamColor: "#ff8a1f",
+  /**
+   * The pool noodle (weapon "noodle"). The kit has no noodle prop, so it is a
+   * plain foam cylinder, parented to the same hand bone with the blaster's
+   * placement, so it moves exactly like the blaster. World metres.
+   */
+  noodle: { name: "PoolNoodle", lengthM: 1.2, radiusM: 0.035, color: "#2fb8ff", gripBackM: 0.15 },
   /** Model height after scaling: the capsule's 2 * (halfHeight + radius). */
   heightM: 2 * (MOVEMENT.capsuleHalfHeight + MOVEMENT.capsuleRadius),
 } as const;

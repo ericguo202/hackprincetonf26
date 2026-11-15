@@ -2,11 +2,13 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { Box3, LoopRepeat, Mesh, MeshStandardMaterial, type AnimationClip, type Object3D } from "three";
+import { Box3, LoopRepeat, Mesh, MeshStandardMaterial, Vector3, type AnimationClip, type Object3D } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
-import { actionFor, blendedLift, buildRig, usedClips } from "./characterRig";
+import { actionFor, blendedLift, buildRig, crossfadeTo, setWeapon, usedClips } from "./characterRig";
+import { clipFor } from "./clips";
+import { heldWeaponProp } from "./foamMode";
 import { CROUCH } from "./movement";
 import { LoopOnce } from "three";
 import { MOVEMENT } from "./movement";
@@ -22,9 +24,15 @@ beforeAll(async () => {
   clips = gltf.animations;
 }, 30_000);
 
+/** World bounds of the VISIBLE meshes only (Box3.setFromObject also counts hidden ones, like the noodle). */
 const bounds = (o: Object3D) => {
   o.updateMatrixWorld(true);
-  return new Box3().setFromObject(o, true);
+  const box = new Box3();
+  const shown = (x: Object3D | null): boolean => !x || (x.visible && shown(x.parent));
+  o.traverse((m) => {
+    if (m instanceof Mesh && shown(m)) box.union(new Box3().setFromObject(m, true));
+  });
+  return box;
 };
 
 describe("character rig (real Toon Shooter soldier)", () => {
@@ -126,5 +134,70 @@ describe("crouch pose (the kit's Duck, trimmed to its hold)", () => {
   it("the crouched capsule's top is the crouched model's top", () => {
     expect(MOVEMENT.floatHeight + 2 * (CROUCH.halfHeight + MOVEMENT.capsuleRadius)).toBeCloseTo(CROUCH.topM, 9);
     expect(CROUCH.halfHeight).toBeGreaterThan(0);
+  });
+});
+
+describe("pool noodle prop", () => {
+  it("is on the blaster's hand bone, about 1.2 m long, hidden until selected", () => {
+    const rig = buildRig(scene, clips);
+    const noodle = rig.props.noodle!;
+    expect(noodle).toBeTruthy();
+    expect(noodle.parent).toBe(rig.root.getObjectByName(CHARACTER.keepWeapon)!.parent);
+    expect(noodle.visible).toBe(false);
+    expect(rig.props.blaster!.visible).toBe(true);
+    // Length in the world: the cylinder's two end points, wherever the hand points it.
+    rig.root.updateMatrixWorld(true);
+    const tube = noodle.children[0] as Mesh;
+    tube.geometry.computeBoundingBox();
+    const half = tube.geometry.boundingBox!.max.y;
+    const a = tube.localToWorld(new Vector3(0, half, 0));
+    const b = tube.localToWorld(new Vector3(0, -half, 0));
+    expect(a.distanceTo(b)).toBeCloseTo(CHARACTER.noodle.lengthM, 2);
+  });
+
+  it("explore mode (weapon null) hides both props, and foam brings the selected one back", () => {
+    const rig = buildRig(scene, clips);
+    setWeapon(rig, heldWeaponProp(false, "noodle"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, false]);
+    setWeapon(rig, heldWeaponProp(true, "noodle"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, true]);
+    setWeapon(rig, heldWeaponProp(false, "blaster"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, false]);
+    setWeapon(rig, heldWeaponProp(true, "blaster"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([true, false]);
+  });
+
+  it("setWeapon shows exactly one prop", () => {
+    const rig = buildRig(scene, clips);
+    setWeapon(rig, "noodle");
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, true]);
+    setWeapon(rig, "blaster");
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([true, false]);
+  });
+});
+
+describe("crossfadeTo: repeated states", () => {
+  it("a repeated one-shot state replays from the start", () => {
+    const rig = buildRig(scene, clips);
+    const cur = crossfadeTo(rig, null, clipFor("hit"));
+    rig.mixer.update(0.3); // most of the way through HitReact (0.43 s)
+    expect(cur!.time).toBeGreaterThan(0.2);
+    const again = crossfadeTo(rig, cur, clipFor("hit"));
+    expect(again).toBe(cur); // same action...
+    expect(again!.time).toBe(0); // ...restarted
+    expect(again!.isRunning()).toBe(true);
+  });
+
+  it("a repeated looping state carries on without restarting", () => {
+    const rig = buildRig(scene, clips);
+    const cur = crossfadeTo(rig, null, clipFor("idle"));
+    rig.mixer.update(0.5);
+    const t = cur!.time;
+    expect(crossfadeTo(rig, cur, clipFor("idle"))).toBe(cur);
+    expect(cur!.time).toBeCloseTo(t, 9);
+  });
+
+  it("shoot is a loop (Idle_Shoot), so rapid fire keeps one continuous shoot clip", () => {
+    expect(clipFor("shoot").once).toBe(false);
   });
 });

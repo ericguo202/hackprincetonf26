@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { BLASTER } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
+import { useFoamMode } from "./foamMode";
 
 function usePointerLocked(): boolean {
   const [locked, setLocked] = useState(() => document.pointerLockElement instanceof HTMLCanvasElement);
@@ -22,7 +23,9 @@ const MARKER_MS = BLASTER.hitMarkerS * 1000;
 export function Crosshair() {
   const locked = usePointerLocked();
   const marker = useBlasterHud((s) => s.marker);
-  if (!locked) return null;
+  const foam = useFoamMode();
+  // Explore mode: no crosshair, no hit marker (foamMode.ts).
+  if (!locked || !foam) return null;
 
   return (
     <div style={wrap} aria-hidden>

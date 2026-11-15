@@ -44,6 +44,9 @@ export type ClientState = {
   houses: Record<string, HouseFurniture>;
   focus: Record<string, string>;
   // agent service (SSE, written by net/)
+  agentSessionId: string | null;
+  agentStatus: "connecting" | "live" | "offline";
+  waiting: boolean;
   todos: Todo[];
   subagents: SubagentActivity[];
   tools: ToolLine[];
@@ -58,11 +61,14 @@ export type ClientState = {
 
 export const useStore = create<ClientState>()((set) => ({
   connected: false,
-  blockId: "hou_heights_01",
+  blockId: "hou_navidad_01",
   mode: "explore",
   players: {},
   houses: {},
   focus: {},
+  agentSessionId: null,
+  agentStatus: "connecting",
+  waiting: false,
   todos: [],
   subagents: [],
   tools: [],

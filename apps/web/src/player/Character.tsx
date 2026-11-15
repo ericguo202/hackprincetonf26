@@ -13,40 +13,53 @@
 
 import { Suspense, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
-import { LoopOnce, LoopRepeat, type AnimationAction, type Group } from "three";
+import { LoopRepeat, type AnimationAction, type Group } from "three";
 
-import type { AnimState } from "../../../../contracts/game-state";
+import type { AnimState, Weapon } from "../../../../contracts/game-state";
 import { LoadBoundary } from "../world/Glb";
 import { usePackGLTF } from "../world/gltf";
 import { useMeshState } from "../world/meshProbe";
 import { CHARACTER } from "./characterAsset";
-import { actionFor, blendedLift, buildRig } from "./characterRig";
+import { actionFor, blendedLift, buildRig, crossfadeTo, setWeapon, updateNoodleJiggle } from "./characterRig";
 import { CROSSFADE_S, clipFor } from "./clips";
 
 type Props = {
   animState: AnimState;
   /** Optional: true while the body is moving, so shoot uses the running variant. */
   moving?: boolean;
+  /** Which prop the character holds. Remote players: always the blaster for now (no wire field). */
+  weapon?: Weapon | null;
   url?: string;
   /** Rendered while the model is checked or loading, and if it is missing or broken. */
   fallback?: ReactNode;
 };
 
-export function Character({ animState, moving = false, url = CHARACTER.url, fallback = null }: Props) {
+export function Character({ animState, moving = false, weapon = "blaster", url = CHARACTER.url, fallback = null }: Props) {
   const mesh = useMeshState(url, url);
   if (mesh !== "ok") return <>{fallback}</>;
   return (
     <LoadBoundary url={url} label={url} fallback={fallback}>
       <Suspense fallback={fallback}>
-        <CharacterModel url={url} animState={animState} moving={moving} />
+        <CharacterModel url={url} animState={animState} moving={moving} weapon={weapon} />
       </Suspense>
     </LoadBoundary>
   );
 }
 
-function CharacterModel({ url, animState, moving }: { url: string; animState: AnimState; moving: boolean }) {
+function CharacterModel({
+  url,
+  animState,
+  moving,
+  weapon,
+}: {
+  url: string;
+  animState: AnimState;
+  moving: boolean;
+  weapon: Weapon | null;
+}) {
   const gltf = usePackGLTF(url);
   const rig = useMemo(() => buildRig(gltf.scene, gltf.animations), [gltf]);
+  useEffect(() => setWeapon(rig, weapon), [rig, weapon]);
   const liftGroup = useRef<Group>(null);
   const current = useRef<AnimationAction | null>(null);
 
@@ -69,20 +82,9 @@ function CharacterModel({ url, animState, moving }: { url: string; animState: An
 
   // New state: crossfade to its clip.
   useEffect(() => {
-    const plan = clipFor(animState, moving);
-    const next = actionFor(rig, plan.clip);
-    if (!next) return;
-    const prev = current.current;
-    if (prev === next && !plan.once) return; // already looping this clip
-    next.reset();
-    next.setLoop(plan.once ? LoopOnce : LoopRepeat, plan.once ? 1 : Infinity);
-    next.clampWhenFinished = plan.once;
-    next.enabled = true;
-    next.setEffectiveTimeScale(1);
-    next.setEffectiveWeight(1);
-    next.play();
-    if (prev && prev !== next) next.crossFadeFrom(prev, CROSSFADE_S, false);
-    current.current = next;
+    // crossfadeTo: a looping clip already playing carries on; a one-shot replays
+    // (`if (prev === next && !plan.once) return`).
+    current.current = crossfadeTo(rig, current.current, clipFor(animState, moving));
   }, [rig, animState, moving]);
 
   useEffect(
@@ -96,8 +98,10 @@ function CharacterModel({ url, animState, moving }: { url: string; animState: An
   );
 
   useFrame((_, dt) => {
-    rig.mixer.update(Math.min(dt, 0.1));
+    const step = Math.min(dt, 0.1);
+    rig.mixer.update(step);
     if (liftGroup.current) liftGroup.current.position.y = blendedLift(rig);
+    updateNoodleJiggle(rig, step);
   });
 
   return (

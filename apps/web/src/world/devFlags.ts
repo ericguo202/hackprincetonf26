@@ -13,3 +13,9 @@ export const DEV_PLAN_ON: boolean = import.meta.env.DEV && Boolean(import.meta.e
 export const START_ROOM: string | undefined = import.meta.env.DEV
   ? (import.meta.env.VITE_START_ROOM as string | undefined)
   : undefined;
+
+/**
+ * Dev build with VITE_SOLO=1 (no server, so store.mode never changes): F
+ * toggles a local explore/foam override (DevModeToggle.tsx, player/foamMode.ts).
+ */
+export const DEV_MODE_TOGGLE_ON: boolean = import.meta.env.DEV && import.meta.env.VITE_SOLO === "1";

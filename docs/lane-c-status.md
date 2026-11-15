@@ -2,7 +2,7 @@
 
 Lane C is the game client's world and player: `apps/web/src/world/` and
 `apps/web/src/player/` (AGENTS.md section 6). Written 2026-11-14 at main
-`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), for the capsule radius (section 12), for crouch and contracts v2.4.0 (section 13), and for the production pack path (section 14). Read AGENTS.md first. Rules that matter most here: stay inside
+`1d8b011`; updated at the end of the second session the same day (section 9), again for remote players (section 11), for the capsule radius (section 12), for crouch and contracts v2.4.0 (section 13), for the production pack path (section 14), and for the block walk-in and the pool noodle (section 15). Read AGENTS.md first. Rules that matter most here: stay inside
 those two folders (plus `apps/web/public/characters/`). Never edit
 `apps/web/src/store.ts` (Lane D) or anything in `contracts/` (all four lanes
 agree first). Cross-lane needs go in `HANDOFF.md`.
@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 200 tests in 13 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 251 tests in 18 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -105,11 +105,11 @@ Re-furnish check: `colliders()` then press P, then `colliders()` again. The furn
 - **No block pack:** Lane A hasn't published one. No `block/render.glb` or `collision.glb`, and `spawns` is `[]`, so the block is always placeholder geometry.
 - **No listings index:** `listings/index.json` doesn't exist yet (Lane A's `costar.py` is a stub). No listing has a door point, so you can't walk into a house from the block. Use `VITE_START_ROOM`.
 - **Furniture renders as boxes** until real meshes are published. The labelled box is also the deliberate fallback if they never are. With Lane A's `publish --local`, the library lands in `public/packs/furniture/v1/`, so real meshes should start loading; that path isn't verified.
-- **Interior looks washed out:** Lane A's HANDOFF suggests `material.toneMapped = false` on `interior.glb` meshes, since its textures are finished photos. Not done.
+- **Interior looks washed out: fixed (section 17, not checked in a browser).** `interior.glb` meshes now have `material.toneMapped = false`, since their textures are finished photos (Lane A's HANDOFF suggestion). It applies only to the interior.
 - **Blocky walls up close:** walls look blocky within about 30 cm. The camera arm pulls in 0.15 m from walls, so this can show indoors.
 - **Character and collider don't line up:** the model is 1.3 m with feet on the floor, but ecctrl floats the 1.3 m capsule 0.3 m up, so the collider spans 0.3–1.6 m. Shot hitboxes for remote players should match the model, not the capsule: centre at feet + 0.65 m, which is 0.30 m below the body centre (`FOOT_BELOW_CENTRE_M` − 0.65).
 - **7014's doors are unchecked:** the radius is now 0.25 m, so per Lane A's widths every bathroom door in both houses should fit, and 6915 is confirmed headless (section 12). 7014 hasn't been run: its pack isn't on this machine or any branch. Run `apps/web/scripts/door-check.ts` on it once Lane A's publish lands.
-- **Jump apex vs ceiling:** the 1.6 m eye sits exactly at the capsule top. A normal jump (4 m/s) peaks at about 2.40 m, which puts the first-person eye within the 0.1 m near plane of a 2.43 m ceiling, so the roof can clip at the top of a jump. Fixes: a lower `jumpVel` (3 m/s gives about a 0.46 m apex), or an eye a little below the capsule top. Not done.
+- **Jump apex vs ceiling: fixed (section 17, not checked in a browser).** `jumpVel` is now 3.0 m/s (about a 0.46 m apex), down from 4.0 (about 0.8 m). The 1.6 m first-person eye no longer reaches the 2.43 m ceilings at the top of a jump. Crouch still sets it to 0.
 - **No respawn yet:** `indoorSpawns` computes indoor spawns, but nothing uses them yet. That's the foam-fight round loop, Lane D server and C client.
 - **Weapon choice:** the character holds the kit's `RocketLauncher`, tinted foam orange. Despite the name it's a chunky cartoon tube, the only prop in the kit that reads as a toy; the pistols and rifles are realistic. Changing it is one constant: `CHARACTER.keepWeapon`.
 
@@ -189,7 +189,7 @@ Merged to main this session:
 | Spawn drop height | 1.0 m | `FOOT_BELOW_CENTRE_M` + 0.1 | `World.tsx` |
 | Remote hitbox | centre 0.30 m below body centre, radius 0.25, half-height 0.40 | centre 0.15 m below body centre, radius 0.25, half-height 0.625 | section 5, HANDOFF to Lane D |
 | Spawn clearance, door trigger | 0.6 / 0.9 / 1.2 m | unchanged (radius-based) | — |
-| `jumpVel` | 4.0 (about 0.8 m apex) | about 3.0, or the head goes through 2.43 m ceilings | `movement.ts` |
+| `jumpVel` | 3.0 (about 0.46 m apex; section 17) | 3.0 is fine: the eye rises to about 2.1 m | `movement.ts` |
 
 **Tests that need new expectations:**
 1. `characterRig.test`: "1.3 m tall" becomes 1.75, and the `heightM` formula check gains `+ floatHeight`.
@@ -269,21 +269,21 @@ Lane A decided (HANDOFF 16:35) that bathrooms must be reachable in both houses, 
 
 **Crouch, client side:**
 - **Input:** hold **C**. Not Ctrl, which the browser owns (Ctrl+W).
-- **Capsule:** half-height 0.40 → 0.085 m, so its top drops to 0.97 m, the crouched model's top. That's done by passing ecctrl a different `capsuleHalfHeight` prop.
-- **Camera:** the eye is the body centre + 0.65, so it drops with the capsule, from 1.6 m to about 1.285 m.
-- **Movement:** walk only at 1.3 m/s; no run, no jump.
+- **Capsule: unchanged.** Crouch does NOT resize the capsule. An earlier version shrank it through ecctrl's `capsuleHalfHeight` prop, but ecctrl rebuilds the collider when that changes, and its balance spring can't re-stabilise the shorter capsule. In a browser the body tipped over and the game crashed. So the local player's physics capsule stays at standing height (0.3–1.6 m) while crouched.
+- **Camera:** only the eye drops. `CameraArm` and `Blaster` read a `crouchedRef` and lower the head by the difference between the standing and crouched body centres (0.315 m), from 1.6 m to about 1.285 m. Shots fire from that lowered head.
+- **Movement:** walk only at 1.3 m/s; no run. **Jumping is disabled while crouched** (`jumpVel` 0).
 - **Anim priority:** eliminated > hit > crouch > shoot > locomotion. A player firing from crouch stays `crouch` on the wire, so remotes see and hit the lower body that's actually there.
 - **Clip:** the Quaternius kit has no crouch clip and no crouch-walk. `crouch` plays the kit's `Duck` dodge trimmed to its first 0.5 s, down into its held 0.97 m pose, then clamped there. Nothing is faked or retargeted. Moving while crouched slides that pose, because no crouch-walk exists.
-- **Remote players:** a crouched remote's hitbox spans 0–0.97 m. Their feet ease between postures, because the anim flips at once while the body glides down.
+- **Remote players:** a crouched remote's hitbox spans 0–0.97 m and their model stands on the floor. Crouch keeps the standing capsule, so their body centre arrives at standing height, and the feet are always `FOOT_BELOW_CENTRE_M` below it (`remoteInterp.footBelowCentre`). Only the model and hitbox are lower. This was fixed in section 16: until then, the client still offset crouched remotes by the old crouched centre, which made them float 0.3 m and moved the hitbox to 0.315–1.285 m.
 - **Blaster:** `fire` always sends `weapon: "blaster"`.
 
-**Never seen in a browser.** All of the following is inferred from code and unit and headless tests only:
-- ecctrl rebuilding the collider when `capsuleHalfHeight` changes, and the body settling to the crouched height;
-- the camera dropping smoothly with it;
-- the Duck hold actually showing on the local and remote models;
-- the whole crouch feel: speed, the transition, and the sliding pose while moving.
+**Verified in a browser:** the capsule rebuild failing, which is why crouch no longer resizes it.
 
-Also not handled: standing up under something low. The capsule regrows into it.
+**Never seen in a browser** (inferred from code and unit tests): the eye drop, the Duck hold on the local and remote models, and the crouch feel (speed, transition, and the sliding pose while moving).
+
+**Collider vs hitbox:**
+- **Local player:** the collider stays at standing height while crouched, so it's taller than the crouched model. That can block a crouched player under something low that the model would fit under. With no capsule change, standing up under something low is no longer an issue.
+- **Remote crouched players:** hitboxes span 0–0.97 m (model-sized, from `anim === "crouch"`). That's what other players' shots test, so the cover finding below holds. It's what remotes see, not the local physics.
 
 **Cover finding** (headless, against 6915's real `collision.glb` and dev plan B, with the same numbers pinned in `apps/web/src/world/cover.test.ts`):
 - **Setup:** plan B's 0.85 m sectional (2.8 × 1.9 m) stands in the middle of the living room. The target is 0.45 m behind it. Five standing shooters with 1.6 m eyes each fire at a 25 × 5 grid of aim points on the target's standing body.
@@ -326,3 +326,98 @@ Also not handled: standing up under something low. The capsule regrows into it.
 - set none of the dev switches;
 - `buildFilter` already covers Lane A's committed publish;
 - a static deploy doesn't restart the game service.
+
+## 15. Block-to-house walk-in, and the pool noodle
+
+**Walk-in, verified headless.** This is the only way into a house on the production build, which now starts players on the block.
+- **Setup:** 6915 stands in as the hero, since it's the only house whose collision is on this machine (`~/Downloads/packs`); 7014 needs Lane A's publish. The run uses the client's own `loadPack` (with the hero spawn), `blockLayout`, `stepZone` and `roomIdAt`, the real `collision.glb`, the yard and ceilings, and a player-sized capsule at walking speed.
+- **Found and fixed:** with one placeholder box over all rooms, the walk stopped 1.21 m from the door, outside the 0.9 m trigger. 6915's front door is on the living room's west wall, about a metre in from the bedrooms, and the box covered it. With that, nobody could get into the house on the production build. The block now draws and collides one box per room (`placeholder.houseBoxesLocal`), and a unit test with a recessed entry guards it.
+- **After the fix:**
+  1. From the derived spawn (2.20, −95.14) the capsule walks east along the street and switches zone at 5.3 s.
+  2. It lands at (−1.99, −0.13), house-local coordinates (the block door was at (16.70, −95.19)), in `r4`, the living room, with the door disarmed.
+  3. Walking in to (0.6, −1.2) keeps it in `r4` and re-arms the door.
+  4. Walking back to the door switches to the block, landing at (15.50, −95.19), 1.2 m from the door.
+  5. It doesn't bounce while standing there for 2 s.
+  6. It re-enters after walking 2.5 m away and back.
+- **Not covered:** this is a plain capsule, not ecctrl's floating one, and nothing was rendered.
+
+**Pool noodle** (contracts 2.4.0 `weapon: "noodle"`):
+- **Defaults:** every number is a named constant in `player/weapons.ts` (`NOODLE`, `WEAPON_RULES`), and Lane D may overrule any of them (HANDOFF).
+  - **Swing:** melee, measured from the head. Reach is 2.0 m to the target's body surface in 3D. The arc is 60° wide, horizontal, centred on the aim, and grazing a body's side counts.
+  - **Cooldown:** 0.8 s; the blaster stays at 4 shots/s.
+  - **To eliminate:** 2 noodle hits, against 3 from the blaster.
+- **What it hits:** players only. The swing ignores walls and furniture, and doesn't stop darts. That also means it can hit through a thin wall within 2 m; a server line-of-sight check would close that.
+- **The `fire` payload:** `{origin: head, dir: aim, weapon: "noodle", target_id?}`. The swing plays the `shoot` anim; there's no new state.
+- **Switching:** keys 1 and 2 (`weaponState`). The held weapon picks the prop in `Character`/`characterRig`.
+- **The prop:** the kit has no noodle, so it's a 1.2 m foam cylinder on the blaster's hand bone, placed like the blaster.
+- **Remote players always show the blaster:** the wire has no per-player weapon field, so showing it would be a contract change.
+- **Not seen in a browser:** the noodle prop, the swing feel and the absence of a swing effect. There's no swoosh visual yet, only the anim and the hit marker.
+- **Dev stand-in:** `fakeRemotes` uses health 6, so 3 blaster or 2 noodle hits eliminate.
+
+## 16. Crouch capsule fix, noodle jiggle, one-shot replay (integrated)
+
+- **Crouch:** an earlier agent session's fix is kept as written. It doesn't resize the capsule, which was verified to crash in a browser; it lowers the eye, disables jumping and plays Duck. Section 13 is corrected to match.
+- **Noodle:** that session's procedural jiggle is kept as written. It's a damped spring on the mesh vertices, driven by the tip's motion and capped at 35% of the length; visual only, with no physics bodies or colliders. The noodle is held upright using a fixed hand-space direction vector. Measured on the real model, that's 0–10° from vertical at idle, 6–23° running and 40–57° in the shoot clips (the arm comes up to swing). Left as is: tilting forward on a swing reads as natural.
+- **Crouched remotes and the local fallback follow the unchanged capsule:** `footBelowCentre` returns the standing offset in every state. Before this, a crouched remote floated 0.3 m with a 0.315–1.285 m hitbox. The local player's in-air feet fallback and placeholder capsule stay standing size too.
+- **One-shot replay restored:** `if (prev === next && !plan.once) return`, now in `characterRig.crossfadeTo` and tested on the real rig. A repeated one-shot (hit, jump, death, Duck) restarts from frame 0. A repeated loop carries on.
+  - **Shoot is a loop:** `Idle_Shoot` (or `Run_Shoot`) loops, so rapid blaster fire is one continuous clip, and this line never governed it.
+  - **The crossfade effect only re-runs when its inputs change:** `animState`, `moving` or the rig. So a state that repeats without changing (`hit` → `hit`) doesn't re-trigger at all. A per-event replay would need a counter prop.
+
+## 17. Interior tone mapping off; jumpVel 3
+
+Neither fix has been checked in a browser. Both rest on code and unit tests only.
+
+- **Interior colours:** `world/interiorMaterials.ts` `disableToneMapping(root)` sets `toneMapped = false` (and `needsUpdate`) on every mesh material under the loaded `interior.glb` scene. The materials are `KHR_materials_unlit`, so `MeshBasicMaterial`, with finished photo textures. It runs once per loaded scene, before the first paint, through a new optional `prepare` prop on `GlbOrPlaceholder`. Only `HouseScene`'s interior passes it, so furniture, characters, effects and the block keep tone mapping. `alphaTest` / alpha mask is untouched, so doorways stay cut out. Tests: interior meshes (multi-material and nested included) are switched off, other scenes are unchanged, `alphaTest` is kept, and a second pass is a no-op.
+- **Jump height:** `MOVEMENT.jumpVel` is 3.0 (was 4.0), so the jump peaks at about 0.46 m and the first-person eye at about 2.1 m, under 2.43 m ceilings. Crouch still sets `jumpVel` to 0. No test pinned the old value.
+- **Checks:** typecheck, lint and 227 tests pass. A production build with `VITE_DEV_PLAN`, `VITE_START_ROOM` and `VITE_DEV_REMOTES` set contains none of `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM` or `__laneC`.
+
+## 18. Furniture keyed on content, not array identity
+
+**The bug:** `net/game.ts` (Lane D) writes `houses: j.houses` from Colyseus `toJSON()` on every state patch. So `store.houses[zone].objects` is a new array about 20 times a second per connected player, even when the furniture hasn't changed (Lane B's 18:12 HANDOFF line to Lane D). FurnitureLayer memoized `objects` and `rects` on array identity, and its layout effect ran on `[planId, zone, rects]`. So footprints, `houseSpawns` + `setSpawns`, and the local player's push-out/teleport all re-ran on every patch. In multiplayer that would teleport a player standing next to furniture in small jumps, and churn indoor spawns.
+
+**Fixed on the Lane C side**, so it holds whatever Lane D does:
+- **`world/furnitureKey.ts`:** `furnitureKey(house)` builds a content key from `plan_id` plus each object, sorted by `instance_id`, as `instance_id|asset_id|x|y|z|rot_deg`. Positions are rounded to 1 mm and rotation to 0.1°, so float noise isn't a change.
+- **`world/useFurniturePlan.ts`:**
+  - `useStableFurniture(house)` keeps the objects array from the first render with a given key, and only replaces it when the key changes.
+  - `useFurnitureLayout` is FurnitureLayer's former layout effect (spawns, then push-out moving the real body), now keyed on the content key, zone, rooms and footprints (`rects`, so a catalog change re-runs it too).
+- **FurnitureLayer:** uses both hooks. It remounts its furniture group on the content key instead of `plan_id`, so any change tears down the old RigidBodies with no ghost colliders, including a re-furnish that reuses a `plan_id`. An identical patch never remounts.
+- **Constraint:** the effect also depends on `rooms` by identity. `HouseScene` memoizes `rooms` per house, so that holds today; passing a fresh array there would bring the per-patch re-runs back.
+
+**Tests:**
+- `furnitureKey.test.ts`: same content in a new array, reordered, or below-noise float changes give the same key. A moved, rotated, swapped, added or removed object, or the same `plan_id` with different objects, gives a different key.
+- `useFurniturePlan.test.tsx`: renders the hooks with react-dom, with a fake local player inside the fixture sofa.
+  - **50 identical-content new arrays:** push-out and `setSpawns` run once, the player is pushed out once, and the objects array keeps one identity.
+  - **A real change (the sofa moved, same `plan_id`):** they run exactly once more, and the remount key changes.
+- The existing re-furnish and push-out tests still pass.
+
+**Not seen in a browser with two players.** It's verified by unit tests only; the ~20 Hz patch stream from a real game server was simulated, not observed.
+
+## 19. Weapons only in foam mode
+
+**Not seen in a browser.** It's checked by unit tests and the production-build grep only.
+
+**The problem:** the game has two modes, `store.mode = "explore" | "foam"`. The server writes it and it's `"explore"` by default. Lane C never read it, so the blaster and the pool noodle worked even while touring the house.
+
+**What changed:**
+- **`player/foamMode.ts`, the one place that decides:**
+  - pure rules: `effectiveMode`, `weaponsEnabled`, `heldWeaponProp` and `weaponForKey`;
+  - `useFoamMode()` for components;
+  - `foamModeNow()` for frame loops and event handlers.
+- **Explore mode:**
+  - **Blaster and noodle:** don't fire and send no `onFire`. The trigger is dropped every frame while not in foam, so there's no tracer, muzzle flash, impact or `shoot` state from local input. Darts already in flight when the mode flips finish their flight.
+  - **HUD:** the crosshair and hit marker are hidden.
+  - **Keys 1/2:** ignored.
+  - **The model:** holds no weapon. `Character`'s `weapon` prop is `null`, which hides both the blaster and the noodle, for the local player and for remote players alike.
+  - **Animations:** unchanged otherwise.
+- **Foam mode:** exactly the previous behaviour.
+- **Switching mid-session:** takes effect within one frame. The hooks re-render on the store change, and the blaster reads `foamModeNow()` every frame. Nothing remounts: props are toggled in place, and `Player` (with its ecctrl body) stays mounted.
+- **Dev only:** with `VITE_SOLO=1` there's no server, so the mode never changes. In a dev build with `VITE_SOLO=1`, **F** toggles a local override between explore and foam (`world/DevModeToggle.tsx`). It's gated by `DEV_MODE_TOGGLE_ON` in `world/devFlags.ts`, the same way as the other dev switches. A production build with `VITE_DEV_PLAN`, `VITE_START_ROOM`, `VITE_DEV_REMOTES` and `VITE_SOLO` all set contains none of `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM`, `__laneC`, `dev mode toggle`, `DEV_MODE_TOGGLE` or `DevModeToggle`.
+
+**Unit tests (10 new):**
+- **`foamMode.test.ts`:**
+  - weapons off in explore and on in foam;
+  - `foamModeNow()` following `store.mode` live;
+  - the dev override taking priority, and being ignored when the toggle is off;
+  - keys 1/2 picking weapons in foam and ignored in explore;
+  - the held prop being `null` in explore and the selected weapon in foam.
+- **`characterRig.test.ts`:** on the real model, explore hides both props and foam shows the selected one.

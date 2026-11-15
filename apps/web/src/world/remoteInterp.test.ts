@@ -193,6 +193,16 @@ describe("dev fake players (VITE_DEV_REMOTES)", () => {
     expect([...states].sort()).toEqual(["idle", "run", "shoot"]);
   });
 
+  it("two noodle hits eliminate (the blaster takes three)", () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const id = DEV_REMOTE_IDS[1];
+    const pose = fakePose(id, 0, [0, 0], 1);
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id, weapon: "noodle" }, 20);
+    expect(fakeAnim(id, 20.1, pose)).toBe("hit");
+    devFire({ origin: [0, 1.6, 0], dir: [0, 0, -1], target_id: id, weapon: "noodle" }, 21);
+    expect(fakeAnim(id, 21.1, pose)).toBe("eliminated");
+  });
+
   it("three hits eliminate, then respawn after 3 s; misses and other ids do nothing", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const id = DEV_REMOTE_IDS[0];
@@ -213,7 +223,8 @@ describe("dev fake players (VITE_DEV_REMOTES)", () => {
 
 describe("crouched remote players", () => {
   const standingBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.standing, 0];
-  const crouchedBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.crouched, 0];
+  // Crouch keeps the standing capsule, so a crouched player's centre arrives at standing height.
+  const crouchedBody: Vec3 = [0, CENTRE_ABOVE_FLOOR_M.standing, 0];
   const span = (b: ReturnType<typeof hitboxFromBody>) => [b.centre[1] - b.halfHeight - b.radius, b.centre[1] + b.halfHeight + b.radius];
 
   it("stand on the floor in both postures, crouched 0.97 m tall", () => {
