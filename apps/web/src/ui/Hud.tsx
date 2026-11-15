@@ -4,7 +4,7 @@ import { setMode } from "../net/game";
 import { useStore } from "../store";
 import { Broadcasts } from "./Broadcasts";
 import { useBuild } from "../world/buildState";
-import { useTour } from "./tourSdk";
+import { TOUR_AVAILABLE, useTour } from "./tourSdk";
 
 export function Hud() {
   const mode = useStore((s) => s.mode);
@@ -50,7 +50,7 @@ export function Hud() {
             {building ? "Furnishing" : "Furnish by hand"}
           </button>
         ) : null}
-        {inHouse ? (
+        {inHouse && TOUR_AVAILABLE ? (
           <button
             type="button"
             title="See this house's furniture inside the real Matterport tour"
