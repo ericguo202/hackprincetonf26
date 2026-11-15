@@ -178,6 +178,8 @@ validate_layout only costs time. After any switch, retry, edit or conflict, vali
 conflicts by moving or removing pieces: at most 3 rounds of validate and fix. If conflicts remain,
 remove the lowest-priority piece involved and say so in dropped. Never commit with conflicts. When
 validate_layout says validated, commit_placement.
+Nothing reaches the players until commit_placement has returned: never write your report before calling
+it, and say committed only when its result says so.
 Return the plan id, room id, whether it was committed, the placed pieces, dropped pieces with reasons, and
 one sentence of notes (for a regenerate: what changed, e.g. "TV moved to the west wall").
 """
