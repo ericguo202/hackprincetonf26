@@ -19,7 +19,7 @@ People who have played GTA V know Los Santos well, and through it the real Los A
 Built World Sandbox is a game that also works as a house tour:
 
 1. **Explore.** Spawn on a real Houston block rebuilt from Vexcel aerial data, and walk into a real home rebuilt from its Matterport scan.
-2. **Furnish.** Tell the agent what you want ("furnish the living room for a family that watches movies together"). It plans, picks real 3D products and places them to fit the room's actual shape.
+2. **Furnish.** Tell the agent what you want ("furnish the living room for a family that watches movies together"). It plans, picks real 3D products and places them to fit the room's actual shape. Or do it yourself: open the catalog, drop in a couch, drag the agent's TV to the other wall.
 3. **Move in.** Invite your family in. Switch to foam mode and have a nerf war in your future living room, where the new couch works as cover.
 4. **Repeat.** Say "make it a playroom instead" and the layout changes mid-match, and the fight changes with it.
 
@@ -27,8 +27,10 @@ Built World Sandbox is a game that also works as a house tour:
 
 - **Real houses, real block.** Matterport scans become walkable interiors with straight walls, real doorways and room data. Vexcel imagery and elevation data become the neighborhood around them. Both are in one world, and you never hit a loading screen when you step through the front door.
 - **An agent that does the work.** A LangChain Deep Agents concierge plans with a todo list and hands the work to subagents. They pick a room, choose furniture sized to fit it and lay it out. The layout is checked against the real floor plan (overlaps, blocked doors, 0.75 m walkways) and fixed until no conflicts remain.
+- **Furnish by hand.** Press **G** inside a house to open a catalog of every piece, with search, room tabs and sizes in feet. A see-through ghost of the real model follows your cursor, green where it fits and red where it doesn't. It snaps to walls, stacks on tables and stands, stays inside the rooms and keeps doorways clear. Click any placed piece, the agent's included, to pick it up and move it; **R** or the mouse wheel rotates and **X** removes. Every player in the house sees each edit live, and hand-placed pieces are cover in the foam fight just like the agent's.
+- **Eleven furnishing and search skills.** Beyond the living room, the agent can set up a bedroom, nursery, kids' room, home office, dining room, open-plan living and dining room, game room, or a playroom built for a nerf war. "Clear the living room" or "remove all the furniture" empties a room or the whole house in about two seconds.
 - **Home search that catches contradictions.** "We're new parents, find us a home under 450k" searches every CoStar listing. Auditors then check the top candidates in parallel against the scanned rooms and floor plan. The agent ranks them, points a beacon at the best one in the world, and flags any mismatch between the listing and the scan.
-- **Multiplayer foam fights.** Up to 16 players per block. Hits are checked on the server, and agent-placed furniture is real cover. The map rebuilds every time the agent furnishes a room.
+- **Multiplayer foam fights.** Up to 16 players per block. Pick a foam blaster or a floppy pool noodle; hits are checked on the server, with a Tab scoreboard and respawns. All furniture is real cover, and the map rebuilds every time the agent or a player furnishes a room. Interior and front doors open with **E**, and procedural sound effects fade with distance.
 - **Real products.** About 150 pieces of furniture from Amazon Berkeley Objects (real Amazon products), each rescaled and checked against its listed dimensions.
 
 ## How it works
@@ -77,7 +79,8 @@ Building the world and playing in it are separate programs. `worldgen/` runs off
 | `layout-planner` | Proposes poses, validates, fixes (up to 3 rounds), commits | `propose_poses`, `validate_layout`, `commit_placement` |
 
 - **The model decides, code computes.** Areas, distances, poses, overlaps and contradiction checks all come from Python tools (`shapely`, `networkx`), never from the model. `commit_placement` refuses any plan that still has conflicts.
-- **Skills** (`apps/agent/skills/`): `furnish-living-room`, `furnish-for-play`, `furnish-bedroom`, `furnish-nursery`, `home-search`, `listing-audit`. Each one holds the required pieces, clearances and arrangement rules (the couch faces the TV, the crib isn't under a window, both teams get cover).
+- **Skills** (`apps/agent/skills/`): `furnish-living-room`, `furnish-for-play`, `furnish-bedroom`, `furnish-nursery`, `furnish-kids-room`, `furnish-home-office`, `furnish-dining-room`, `furnish-open-plan`, `furnish-game-room`, `home-search`, `listing-audit`. Each one holds the required pieces with priorities, clearances and arrangement rules (the couch faces the TV, chairs pull up to their table, the crib isn't under a window, kids' rooms skip tall pieces that could tip, both teams get cover). The room scout matches each goal to a room, such as an office or kids' room going in the largest free spare bedroom.
+- **Agent and players share one map.** Agent plans and hand edits write to the same per-room furniture on the game server. A new agent plan for a room replaces that room, hand-placed pieces included, and `clear_furniture` empties a room or the whole house through the game's internal API.
 - **Shared filesystem.** Subagents pass briefs, rooms and plans to each other through the Deep Agents virtual filesystem, with one thread and checkpointer per player session.
 - **Streaming.** Todos, subagent tasks, tool calls and text are streamed to the browser over SSE, so players watch the plan happen live. Every run is traced in LangSmith, and the trace link appears in the UI.
 
