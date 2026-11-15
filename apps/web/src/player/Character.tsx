@@ -20,7 +20,7 @@ import { LoadBoundary } from "../world/Glb";
 import { usePackGLTF } from "../world/gltf";
 import { useMeshState } from "../world/meshProbe";
 import { CHARACTER } from "./characterAsset";
-import { actionFor, blendedLift, buildRig, setWeapon } from "./characterRig";
+import { actionFor, blendedLift, buildRig, setWeapon, updateNoodleJiggle } from "./characterRig";
 import { CROSSFADE_S, clipFor } from "./clips";
 
 type Props = {
@@ -86,7 +86,7 @@ function CharacterModel({
     const next = actionFor(rig, plan.clip);
     if (!next) return;
     const prev = current.current;
-    if (prev === next && !plan.once) return; // already looping this clip
+    if (prev === next) return;
     next.reset();
     next.setLoop(plan.once ? LoopOnce : LoopRepeat, plan.once ? 1 : Infinity);
     next.clampWhenFinished = plan.once;
@@ -109,8 +109,10 @@ function CharacterModel({
   );
 
   useFrame((_, dt) => {
-    rig.mixer.update(Math.min(dt, 0.1));
+    const step = Math.min(dt, 0.1);
+    rig.mixer.update(step);
     if (liftGroup.current) liftGroup.current.position.y = blendedLift(rig);
+    updateNoodleJiggle(rig, step);
   });
 
   return (

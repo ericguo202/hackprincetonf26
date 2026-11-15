@@ -14,7 +14,7 @@
 //       target_id is set only when a hitbox was hit. Default: no-op.
 // Lane C never opens a socket; both are props on <Player>.
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRapier } from "@react-three/rapier";
 import type { EcctrlHandle } from "ecctrl";
@@ -22,6 +22,7 @@ import { Mesh, Object3D, PointLight, Quaternion, Vector3 } from "three";
 
 import { SHOT_QUERY } from "../world/collisionGroups";
 import { SHOT_PRIORITY } from "../world/frameOrder";
+import { CENTRE_ABOVE_FLOOR_M } from "./movement";
 import { ARM, type V3 } from "./armMath";
 import {
   BLASTER,
@@ -50,6 +51,7 @@ type Props = {
   onFire?: (p: FirePayload) => void;
   /** Called on every shot fired (clock seconds), for the `shoot` animation state. */
   onShot?: (now: number) => void;
+  crouchedRef?: MutableRefObject<boolean>;
 };
 
 const TRACERS = 12;
@@ -64,7 +66,7 @@ type Tracer = { active: boolean; from: V3; dir: V3; total: number; travelled: nu
 const noHitboxes = () => [];
 const noFire = () => {};
 
-export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFire, onShot }: Props) {
+export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFire, onShot, crouchedRef }: Props) {
   const canvas = useThree((s) => s.gl.domElement);
   const { world, rapier } = useRapier();
   const showMarker = useBlasterHud((s) => s.showMarker);
@@ -123,12 +125,16 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     };
   }, [canvas, setWeapon]);
 
+  const headOffset = () =>
+    ARM.headOffsetY -
+    (crouchedRef?.current ? CENTRE_ABOVE_FLOOR_M.standing - CENTRE_ABOVE_FLOOR_M.crouched : 0);
+
   /**
    * Pool noodle swing: an arc query from the head along the aim, players only
    * (no walls or furniture), then the `fire` message with weapon "noodle".
    */
   function swing(camDir: V3, bodyCentre: V3, now: number) {
-    const head = headFrom(bodyCentre, ARM.headOffsetY);
+    const head = headFrom(bodyCentre, headOffset());
     const hit = noodleSwing(head, camDir, getHitboxes());
     onFire(noodlePayload(head, camDir, hit));
     onShot?.(now); // the swing uses the `shoot` anim state
@@ -148,7 +154,7 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
   }
 
   function fire(camPos: V3, camDir: V3, bodyCentre: V3, handle: EcctrlHandle, now: number) {
-    const head = headFrom(bodyCentre, ARM.headOffsetY);
+    const head = headFrom(bodyCentre, headOffset());
     const boxes = getHitboxes();
 
     // 1. Aim: the camera ray through the crosshair, only past the head.
