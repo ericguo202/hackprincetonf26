@@ -8,6 +8,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
 import { actionFor, blendedLift, buildRig, crossfadeTo, setWeapon, usedClips } from "./characterRig";
 import { clipFor } from "./clips";
+import { heldWeaponProp } from "./foamMode";
 import { CROUCH } from "./movement";
 import { LoopOnce } from "three";
 import { MOVEMENT } from "./movement";
@@ -152,6 +153,18 @@ describe("pool noodle prop", () => {
     const a = tube.localToWorld(new Vector3(0, half, 0));
     const b = tube.localToWorld(new Vector3(0, -half, 0));
     expect(a.distanceTo(b)).toBeCloseTo(CHARACTER.noodle.lengthM, 2);
+  });
+
+  it("explore mode (weapon null) hides both props, and foam brings the selected one back", () => {
+    const rig = buildRig(scene, clips);
+    setWeapon(rig, heldWeaponProp(false, "noodle"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, false]);
+    setWeapon(rig, heldWeaponProp(true, "noodle"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, true]);
+    setWeapon(rig, heldWeaponProp(false, "blaster"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([false, false]);
+    setWeapon(rig, heldWeaponProp(true, "blaster"));
+    expect([rig.props.blaster!.visible, rig.props.noodle!.visible]).toEqual([true, false]);
   });
 
   it("setWeapon shows exactly one prop", () => {

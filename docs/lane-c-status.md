@@ -28,7 +28,7 @@ Everything below is on `main`. Branch: `lane-c/player`.
 | Character | `player/Character.tsx`, `characterRig.ts`, `clips.ts`, `characterAsset.ts` | Quaternius Toon Shooter soldier, 1.3 m tall. `<Character animState moving? />` reads only its props. 0.2 s crossfades. Origin at the feet. See section 6. |
 | Dev only | `world/DevPlan.tsx`, `devFurniture.ts` | `VITE_DEV_PLAN` and the `window.__laneC` probe (sections 3 and 4). |
 
-Tests: `pnpm test` runs 243 tests in 17 files. Two files also run under plain Node:
+Tests: `pnpm test` runs 251 tests in 18 files. Two files also run under plain Node:
 `node --experimental-strip-types apps/web/src/world/geometry.test.ts` (21 tests) and
 `node --experimental-strip-types apps/web/src/player/animState.test.ts` (7 tests).
 `tsconfig.app.json` has `allowImportingTsExtensions` so those `.ts` imports work.
@@ -391,3 +391,33 @@ Neither fix has been checked in a browser. Both rest on code and unit tests only
 - The existing re-furnish and push-out tests still pass.
 
 **Not seen in a browser with two players.** It's verified by unit tests only; the ~20 Hz patch stream from a real game server was simulated, not observed.
+
+## 19. Weapons only in foam mode
+
+**Not seen in a browser.** It's checked by unit tests and the production-build grep only.
+
+**The problem:** the game has two modes, `store.mode = "explore" | "foam"`. The server writes it and it's `"explore"` by default. Lane C never read it, so the blaster and the pool noodle worked even while touring the house.
+
+**What changed:**
+- **`player/foamMode.ts`, the one place that decides:**
+  - pure rules: `effectiveMode`, `weaponsEnabled`, `heldWeaponProp` and `weaponForKey`;
+  - `useFoamMode()` for components;
+  - `foamModeNow()` for frame loops and event handlers.
+- **Explore mode:**
+  - **Blaster and noodle:** don't fire and send no `onFire`. The trigger is dropped every frame while not in foam, so there's no tracer, muzzle flash, impact or `shoot` state from local input. Darts already in flight when the mode flips finish their flight.
+  - **HUD:** the crosshair and hit marker are hidden.
+  - **Keys 1/2:** ignored.
+  - **The model:** holds no weapon. `Character`'s `weapon` prop is `null`, which hides both the blaster and the noodle, for the local player and for remote players alike.
+  - **Animations:** unchanged otherwise.
+- **Foam mode:** exactly the previous behaviour.
+- **Switching mid-session:** takes effect within one frame. The hooks re-render on the store change, and the blaster reads `foamModeNow()` every frame. Nothing remounts: props are toggled in place, and `Player` (with its ecctrl body) stays mounted.
+- **Dev only:** with `VITE_SOLO=1` there's no server, so the mode never changes. In a dev build with `VITE_SOLO=1`, **F** toggles a local override between explore and foam (`world/DevModeToggle.tsx`). It's gated by `DEV_MODE_TOGGLE_ON` in `world/devFlags.ts`, the same way as the other dev switches. A production build with `VITE_DEV_PLAN`, `VITE_START_ROOM`, `VITE_DEV_REMOTES` and `VITE_SOLO` all set contains none of `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM`, `__laneC`, `dev mode toggle`, `DEV_MODE_TOGGLE` or `DevModeToggle`.
+
+**Unit tests (10 new):**
+- **`foamMode.test.ts`:**
+  - weapons off in explore and on in foam;
+  - `foamModeNow()` following `store.mode` live;
+  - the dev override taking priority, and being ignored when the toggle is off;
+  - keys 1/2 picking weapons in foam and ignored in explore;
+  - the held prop being `null` in explore and the selected weapon in foam.
+- **`characterRig.test.ts`:** on the real model, explore hides both props and foam shows the selected one.

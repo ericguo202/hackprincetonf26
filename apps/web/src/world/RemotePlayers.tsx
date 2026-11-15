@@ -14,6 +14,7 @@ import type { Group } from "three";
 import type { AnimState } from "../../../../contracts/game-state";
 import { useStore } from "../store";
 import { Character } from "../player/Character";
+import { heldWeaponProp, useFoamMode } from "../player/foamMode";
 import { FOOT_BELOW_CENTRE_M } from "../player/characterAsset";
 import { MOVEMENT } from "../player/movement";
 import { REMOTE_PRIORITY } from "./frameOrder";
@@ -89,6 +90,8 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
   const group = useRef<Group>(null);
   const [look, setLook] = useState<{ anim: AnimState; moving: boolean }>({ anim: "idle", moving: false });
   const lookRef = useRef(look);
+  // Remote players show the blaster in foam (the wire has no per-player weapon), nothing in explore.
+  const weapon = heldWeaponProp(useFoamMode(), "blaster");
   const footBelow = useRef(footBelowCentre("idle"));
 
   useFrame((_, dt) => {
@@ -111,7 +114,7 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
 
   return (
     <group ref={group} visible={false}>
-      <Character animState={look.anim} moving={look.moving} fallback={<RemoteCapsule />} />
+      <Character animState={look.anim} moving={look.moving} weapon={weapon} fallback={<RemoteCapsule />} />
     </group>
   );
 }

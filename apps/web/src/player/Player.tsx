@@ -38,6 +38,7 @@ import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
 import { useMeshState } from "../world/meshProbe";
 import { registerPlayer } from "./playerControl";
 import { useWeaponState } from "./weaponState";
+import { heldWeaponProp, useFoamMode } from "./foamMode";
 
 /** Lane D sends `move` at 20 Hz, so there is no point writing faster. */
 const WRITE_HZ = 20;
@@ -111,7 +112,8 @@ export function Player({
   // Crouch changes the capsule, so it is React state (an Ecctrl prop); the ref
   // is for the frame loop.
   const [crouched, setCrouched] = useState(false);
-  const weapon = useWeaponState((s) => s.weapon);
+  // Explore mode: the model holds nothing (foamMode.ts); foam: the selected weapon.
+  const weapon = heldWeaponProp(useFoamMode(), useWeaponState((s) => s.weapon));
   const crouchedRef = useRef(false);
   useEffect(() => {
     crouchedRef.current = crouched;
