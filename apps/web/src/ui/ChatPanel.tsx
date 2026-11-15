@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { sendAgentMessage } from "../net/agent";
 import { useStore } from "../store";
-import { ListingCard } from "./ListingCard";
 import { startLooking, stopLooking, useLooking } from "./pointerLock";
 
 const SUGGESTIONS = [
@@ -27,8 +26,6 @@ export function ChatPanel() {
   const agentStatus = useStore((s) => s.agentStatus);
   const waiting = useStore((s) => s.waiting);
   const messages = useStore((s) => s.messages);
-  const listings = useStore((s) => s.listings);
-  const audits = useStore((s) => s.audits);
   const looking = useLooking();
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState("");
@@ -41,7 +38,7 @@ export function ChatPanel() {
 
   useEffect(() => {
     log.current?.scrollTo(0, log.current.scrollHeight);
-  }, [messages, listings, expanded]);
+  }, [messages, expanded]);
 
   function enterTalk() {
     stopLooking();
@@ -189,10 +186,6 @@ export function ChatPanel() {
           ) : null,
         )}
         {waiting ? <p className="hint thinking">Thinking…</p> : null}
-
-        {listings.map((m, i) => (
-          <ListingCard key={m.listing_id} match={m} rank={i + 1} audit={audits[m.listing_id]} />
-        ))}
       </div>
 
       {suggestions}

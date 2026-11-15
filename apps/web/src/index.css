@@ -33,6 +33,25 @@ body { background: #10141a; color: #e8eaed; font-family: system-ui, sans-serif; 
 .hint { color: #9aa3b2; max-width: none !important; padding: 0 !important; background: none !important; }
 .hint.thinking { font-style: italic; }
 
+.listings-panel {
+  position: absolute; top: 72px; left: 16px; width: 340px; max-height: calc(100% - 136px);
+  display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;
+  padding: 12px 14px; background: rgba(16, 20, 26, 0.94); border-radius: 10px;
+  z-index: 2; pointer-events: auto; font-size: 13px; line-height: 1.4;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.listings-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.listings-count { margin-left: 6px; font-weight: 400; font-size: 12px; color: #9aa3b2; }
+.listings-list { overflow: auto; display: flex; flex-direction: column; min-height: 0; }
+.listings-list .listing-card:first-child { margin-top: 0; }
+.listings-pill {
+  position: absolute; top: 72px; left: 16px; z-index: 2;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px 8px 8px; border: 0; border-radius: 14px; cursor: pointer;
+  background: rgba(16, 20, 26, 0.9); color: #e8eaed; font: inherit; font-size: 13px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+}
+
 .listing-card {
   margin: 8px 0; padding: 8px; background: rgba(255,255,255,0.04); border-radius: 6px;
 }

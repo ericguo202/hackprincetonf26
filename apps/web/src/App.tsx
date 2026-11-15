@@ -1,6 +1,7 @@
 import { World } from "./world/World";
 import { ChatPanel } from "./ui/ChatPanel";
 import { Hud } from "./ui/Hud";
+import { ListingsPanel } from "./ui/ListingsPanel";
 import { SessionBoot } from "./ui/SessionBoot";
 
 export default function App() {
@@ -9,6 +10,7 @@ export default function App() {
       <SessionBoot />
       <World />
       <Hud />
+      <ListingsPanel />
       <ChatPanel />
     </div>
   );

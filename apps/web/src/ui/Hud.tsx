@@ -8,6 +8,7 @@ export function Hud() {
   const mode = useStore((s) => s.mode);
   const me = useStore((s) => s.me);
   const players = useStore((s) => s.players);
+  const hasHomes = useStore((s) => s.listings.length > 0);
   const [board, setBoard] = useState(false);
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export function Hud() {
         <span>
           {mine ? `${mine.score} pts · ${mine.hp} hp` : me.zone === "block" ? "On the block" : me.zone}
         </span>
-        <span className="hud-keys">T concierge · Esc play · Tab scores</span>
+        <span className="hud-keys">T concierge · Esc play · Tab scores{hasHomes ? " · H homes" : ""}</span>
       </div>
       {board ? (
         <div className="scoreboard">
