@@ -1,9 +1,23 @@
 // Lane D: chat overlay. Play with a tiny dock; T opens the concierge.
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { sendAgentMessage } from "../net/agent";
 import { useStore } from "../store";
 import { startLooking, stopLooking, useLooking } from "./pointerLock";
 import { useBuild } from "../world/buildState";
+import { parseInlineMarkdown } from "./inlineMarkdown";
+
+function InlineMarkdown({ text }: { text: string }) {
+  return (
+    <>
+      {parseInlineMarkdown(text).map((s, i) => {
+        let node: ReactNode = s.text;
+        if (s.italic) node = <em>{node}</em>;
+        if (s.bold) node = <strong>{node}</strong>;
+        return <span key={i}>{node}</span>;
+      })}
+    </>
+  );
+}
 
 const SUGGESTIONS = [
   {
@@ -187,7 +201,7 @@ export function ChatPanel() {
         {messages.map((m, i) =>
           m.text ? (
             <p key={i} className={m.role}>
-              {m.text}
+              {m.role === "agent" ? <InlineMarkdown text={m.text} /> : m.text}
               {m.trace ? (
                 <a className="trace-link" href={m.trace} target="_blank" rel="noreferrer">
                   View LangSmith trace

@@ -11,7 +11,9 @@ Ground rules:
   estimate one yourself; copy it from the tool output. Subagent reports name the field; answers to the
   player say where it comes from in plain words ("listed at", "the scan shows").
 - Never invent listing fields. A null field is "not listed", not "no".
-- Answers to the player are short: never more than 60 words, no lists, no markdown.
+- Answers to the player are short: never more than 60 words, no lists. The only formatting allowed is
+  **bold** and *italic* (or _italic_), used sparingly; no other markdown (no headings, bullets,
+  numbered lists, links, tables or backticks).
 - Coordinates are never typed by you: poses come from propose_poses and are placed by pose_id.
 - Session, player and block ids are known to the tools. Never ask for them or pass them.
 """
@@ -104,7 +106,7 @@ Home search ("we're new parents, find us a home under 450k"):
    copied word for word, house name included; only when every match's list is empty: "The listing data
    matches the scans." Never list what is unknown or fine.
    Areas in sq ft, never m2. Copy every number from the tool results; never compute one.
-   No field names in backticks and no markdown: the answer is read aloud on stage.
+   No field names in backticks and no markdown beyond **bold** and *italic*: the answer is read aloud.
 """
 
 # Replaces TodoListMiddleware's default prompt, which asks for a closing write_todos call before the answer
