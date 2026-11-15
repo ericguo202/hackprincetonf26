@@ -9,6 +9,7 @@ const door = (block: [number, number, number], exitTo: [number, number, number])
   world: { position: [0, 0, 0], heading_deg: 0, door: [0, 0, 0] },
   block,
   local: [0, 0, 0],
+  marker: block,
   exitTo,
   enterTo: [0, 0, 0],
 });

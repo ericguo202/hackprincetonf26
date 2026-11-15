@@ -46,7 +46,7 @@ const off = (p: Vec3, d: number, dir: [number, number] = [1, 0]): Vec3 => [p[0] 
 
 describe("E at 7014's front door (real v3 data)", () => {
   it("on the block, E within 2 m enters at enterTo, in the living room r3", () => {
-    const pos = off(door7014.block, 1.5);
+    const pos = off(door7014.marker, 1.5);
     // The walk-in trigger alone would not fire here (0.9 m).
     expect(stepZone({ zone: "block", armed: true }, pos, doors).change).toBeNull();
     const { state, change } = pressFrontDoor({ zone: "block", armed: true }, pos, doors);
@@ -56,8 +56,8 @@ describe("E at 7014's front door (real v3 data)", () => {
   });
 
   it("E gives exactly the walk-in trigger's result", () => {
-    const walk = stepZone({ zone: "block", armed: true }, door7014.block, doors);
-    const key = pressFrontDoor({ zone: "block", armed: true }, door7014.block, doors);
+    const walk = stepZone({ zone: "block", armed: true }, door7014.marker, doors);
+    const key = pressFrontDoor({ zone: "block", armed: true }, door7014.marker, doors);
     expect(key).toEqual(walk);
     const walkOut = stepZone({ zone: H7014, armed: true }, door7014.local, doors);
     const keyOut = pressFrontDoor({ zone: H7014, armed: true }, door7014.local, doors);
@@ -72,7 +72,7 @@ describe("E at 7014's front door (real v3 data)", () => {
   });
 
   it("at 2.1 m nothing happens, on the block or inside", () => {
-    const outside = pressFrontDoor({ zone: "block", armed: true }, off(door7014.block, 2.1), doors);
+    const outside = pressFrontDoor({ zone: "block", armed: true }, off(door7014.marker, 2.1), doors);
     expect(outside.change).toBeNull();
     expect(outside.state).toEqual({ zone: "block", armed: true });
     const inside = pressFrontDoor({ zone: H7014, armed: true }, off(door7014.local, 2.1), doors);
@@ -80,7 +80,7 @@ describe("E at 7014's front door (real v3 data)", () => {
   });
 
   it("can't bounce: after E in, the walk-in trigger stays disarmed at the landing and re-arms only when clear", () => {
-    const { state, change } = pressFrontDoor({ zone: "block", armed: true }, off(door7014.block, 1.5), doors);
+    const { state, change } = pressFrontDoor({ zone: "block", armed: true }, off(door7014.marker, 1.5), doors);
     let s = state;
     for (let i = 0; i < 40; i++) {
       const step = stepZone(s, change!.spawn, doors); // standing still at enterTo
@@ -172,9 +172,31 @@ describe("interior door vs front door precedence", () => {
     });
 
     it("on the block, interior doors never count", () => {
-      const t = doorTargetAt("block", off(door7014.block, 1), interior, doors);
+      const t = doorTargetAt("block", off(door7014.marker, 1), interior, doors);
       expect(t?.kind).toBe("front");
       expect(t?.kind === "front" && t.door.listing_id).toBe(H7014);
     });
+  });
+});
+
+describe("block door marker in front of the real facade (pack v3)", () => {
+  const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
+  it.each([
+    ["7014", door7014],
+    ["6915", door6915],
+  ])("%s: marker 2.5 m out, exitTo >= 3.0 m out, trigger and E measured from the marker", (_, d) => {
+    expect(dist(d.marker, d.block)).toBeCloseTo(2.5, 6);
+    expect(dist(d.exitTo, d.block)).toBeGreaterThanOrEqual(3.0 - 1e-9);
+    // The old door point is now out of walk-in range, the marker is in it.
+    expect(stepZone({ zone: "block", armed: true }, d.block, doors).change).toBeNull();
+    expect(stepZone({ zone: "block", armed: true }, off(d.marker, DOOR_RADIUS_M - 0.05), doors).change).toEqual({
+      zone: d.listing_id,
+      spawn: d.enterTo,
+    });
+    expect(pressFrontDoor({ zone: "block", armed: true }, off(d.marker, FRONT_DOOR_KEY_M - 0.05), doors).change?.zone).toBe(d.listing_id);
+    // Leaving lands disarmed; you re-arm once DOOR_REARM_M clear of the marker.
+    const out = pressFrontDoor({ zone: d.listing_id, armed: true }, d.local, doors);
+    expect(out.change?.spawn).toEqual(d.exitTo);
+    expect(stepZone(out.state, out.change!.spawn, doors).state.armed).toBe(false);
   });
 });

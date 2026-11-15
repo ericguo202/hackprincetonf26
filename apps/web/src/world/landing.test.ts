@@ -63,8 +63,8 @@ describe.each(CASES)("pack v2 door heights: %s", (id, ground, doorY, floorY) => 
   });
 
   it("the block door trigger fires for a player standing on the raised ground", () => {
-    // me.pos is the body centre: ground + offset above the door point.
-    const standing: Vec3 = [door.block[0] + 0.5, door.block[1] + FOOT_BELOW_CENTRE_M, door.block[2]];
+    // me.pos is the body centre: ground + offset above the marker point.
+    const standing: Vec3 = [door.marker[0] + 0.5, door.marker[1] + FOOT_BELOW_CENTRE_M, door.marker[2]];
     const r = stepZone({ zone: "block", armed: true }, standing, [door]);
     expect(0.5).toBeLessThan(DOOR_RADIUS_M);
     expect(r.change).toEqual({ zone: id, spawn: door.enterTo });

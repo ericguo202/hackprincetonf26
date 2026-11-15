@@ -277,8 +277,17 @@ export const DOOR_STEP_M = 1.2;
 export const DOOR_RADIUS_M = 0.9;
 /** After a zone change the door re-arms once you are this far from it. */
 export const DOOR_REARM_M = 1.8;
-/** Press E within this of a front door point (XZ) to go through it. */
+/** Press E within this of a front door's marker (block) or door point (house), XZ. */
 export const FRONT_DOOR_KEY_M = 2.0;
+/**
+ * On the block the door marker (ring, lit panel, label) and the walk-in / E
+ * range sit this far out from the door point: pack v3's real house meshes
+ * (hero_hou_<id> in block/render.glb) have their facade further out than
+ * listing.world.door, so a marker at the door point was hidden inside the house.
+ */
+export const DOOR_MARKER_M = 2.5;
+/** Leaving a house, you land at least this far out from the door point, clear of the house mesh. */
+export const DOOR_EXIT_M = 3.0;
 
 export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 
@@ -338,6 +347,8 @@ export type Door = {
   block: Vec3;
   /** Door point in the house-local frame. */
   local: Vec3;
+  /** Block-side marker and trigger point: DOOR_MARKER_M out from the door (block frame). */
+  marker: Vec3;
   /** Where you land in the block when leaving (block frame, floor height). */
   exitTo: Vec3;
   /** Where you land in the house when entering (house-local, floor height). */
@@ -363,13 +374,14 @@ export function makeDoor(listing: Listing, rooms: Room[]): Door | null {
   const insideRoom = roomAt(inside, rooms);
   const floorY = insideRoom ? insideRoom.floor_y : local[1];
 
-  const outsideLocal: Vec3 = [local[0] + ox * DOOR_STEP_M, local[1], local[2] + oz * DOOR_STEP_M];
+  const out = (m: number): Vec3 => [local[0] + ox * m, local[1], local[2] + oz * m];
   return {
     listing_id: listing.id,
     world,
     block: houseToBlock(world, local),
     local,
-    exitTo: houseToBlock(world, outsideLocal),
+    marker: houseToBlock(world, out(DOOR_MARKER_M)),
+    exitTo: houseToBlock(world, out(Math.max(DOOR_STEP_M, DOOR_EXIT_M))),
     enterTo: [inside[0], floorY, inside[1]],
   };
 }
@@ -429,7 +441,7 @@ export function stepZone(
   doors: Door[],
 ): { state: ZoneState; change: ZoneChange | null } {
   if (state.zone === "block") {
-    const near = nearestDoor(pos, doors, (d) => d.block);
+    const near = nearestDoor(pos, doors, (d) => d.marker);
     if (!state.armed) {
       const armed = !near || near.dist > DOOR_REARM_M;
       return { state: { zone: "block", armed }, change: null };
@@ -471,7 +483,7 @@ export function crossDoor(state: ZoneState, door: Door): { state: ZoneState; cha
 }
 
 /**
- * The front door E would use: on the block, the nearest door point within
+ * The front door E would use: on the block, the nearest door marker within
  * `max` (XZ); in a house, that house's own door within `max` of door.local.
  */
 export function frontDoorInRange(
@@ -481,7 +493,7 @@ export function frontDoorInRange(
   max = FRONT_DOOR_KEY_M,
 ): { door: Door; dist: number } | null {
   if (zone === "block") {
-    const near = nearestDoor(pos, doors, (d) => d.block);
+    const near = nearestDoor(pos, doors, (d) => d.marker);
     return near && near.dist <= max ? near : null;
   }
   const door = doors.find((d) => d.listing_id === zone);

@@ -188,7 +188,8 @@ describe("doors", () => {
     close(d.block, [12, 0, -31.7]);
     close(d.enterTo, [1.2, 0, 1.2]);
     expect(roomIdAt(d.enterTo, [room])).toBe(`${ID}.r1`);
-    close(d.exitTo, [10.8, 0, -31.7]);
+    close(d.exitTo, [9.0, 0, -31.7]); // DOOR_EXIT_M out
+    close(d.marker, [9.5, 0, -31.7]); // DOOR_MARKER_M out
   });
 
   it("falls back to the nearest room's centre when one step lands outside every room", () => {
@@ -219,7 +220,7 @@ describe("stepZone", () => {
   });
 
   it("enters the house at its door, landing inside in the house frame", () => {
-    const at = away(door.block, DOOR_RADIUS_M - 0.05, 0, 1);
+    const at = away(door.marker, DOOR_RADIUS_M - 0.05, 0, 1);
     const r = stepZone(block(), at, doors);
     expect(r.change).toEqual({ zone: ID, spawn: door.enterTo });
     expect(r.state).toEqual({ zone: ID, armed: false });
@@ -248,7 +249,7 @@ describe("stepZone", () => {
 
   it("on the block, a disarmed door re-arms past the rearm distance", () => {
     expect(stepZone(block(false), door.exitTo, doors).state.armed).toBe(false);
-    expect(stepZone(block(false), away(door.block, DOOR_REARM_M + 0.1, -1), doors).state.armed).toBe(true);
+    expect(stepZone(block(false), away(door.marker, DOOR_REARM_M + 0.1, -1), doors).state.armed).toBe(true);
   });
 });
 
