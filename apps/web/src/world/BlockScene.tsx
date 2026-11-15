@@ -16,7 +16,6 @@ import { ZONE_COLLIDER } from "./collisionGroups";
 import { rotationY } from "./geometry";
 import {
   DOOR_MARKER_M,
-  DOOR_RADIUS_M,
   STREET_WIDTH_M,
   blockLayout,
   doorOutward,
@@ -213,7 +212,7 @@ function PlaceholderBlockCollision({ pack, layout }: { pack: LoadedPack; layout:
   );
 }
 
-/** Lit door on the house face, a ring showing the trigger, and a label. Visual only. */
+/** The house's address label above the block door marker point. Visual only. */
 function DoorMarker({
   door,
   listing,
@@ -224,9 +223,9 @@ function DoorMarker({
   outward: [number, number];
 }) {
   const [ox, oz] = outward;
-  const facing = Math.atan2(ox, oz); // rotation-y that turns +Z onto the outward normal
-  // Drawn at the marker point, DOOR_MARKER_M out from the door, in front of the
-  // real house facade (pack v3); stepZone and E measure from the same point.
+  // The marker point, DOOR_MARKER_M out from the door, in front of the real
+  // house facade (pack v3); stepZone and E measure from it. Only the address
+  // label is drawn: no ring or lit panel on the block (the real house shows the door).
   const local: [number, number, number] = [
     door.local[0] + ox * DOOR_MARKER_M,
     door.local[1],
@@ -234,16 +233,6 @@ function DoorMarker({
   ];
   return (
     <group position={door.world.position} rotation-y={rotationY(door.world.heading_deg)}>
-      <mesh position={[local[0] + ox * 0.02, local[1] + 1.05, local[2] + oz * 0.02]} rotation-y={facing}>
-        <planeGeometry args={[1.0, 2.1]} />
-        <meshStandardMaterial color={PALETTE.door} emissive={PALETTE.door} emissiveIntensity={0.6} />
-      </mesh>
-      {/* Centred on the marker point: this is exactly the radius stepZone tests. */}
-      {/* The group sits at world.position, whose y is the block ground at the door (pack v2), so local[1] is ~0. */}
-      <mesh rotation-x={-Math.PI / 2} position={[local[0], local[1] + 0.02, local[2]]}>
-        <ringGeometry args={[DOOR_RADIUS_M - 0.08, DOOR_RADIUS_M, 40]} />
-        <meshBasicMaterial color={PALETTE.door} transparent opacity={0.8} />
-      </mesh>
       {/* Door labels are wayfinding on the block, so they stay up much further out. */}
       <WorldLabel
         position={[local[0] + ox * 0.6, local[1] + 2.7, local[2] + oz * 0.6]}
