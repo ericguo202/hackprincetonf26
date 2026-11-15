@@ -644,3 +644,20 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - Visibility: first person vs third person, explore mode, eliminated.
   - The kick and sweep curves, and `fpPose` (kick only for the blaster, sweep only for the noodle, no allocation).
   - For each look: the barrel aims down -Z, the noodle is still 1.2 m long, and depth test is off.
+
+## 30. Shadow box snapped to its texel grid
+
+**Not seen in a browser.** Checked by unit tests and the production-build grep.
+
+- **Problem:** the 60 m × 60 m shadow box (`SUN_SHADOW_HALF_M` 30, `SUN_SHADOW_MAP` 2048) followed the player continuously, so shadow edges shimmered while walking.
+- **Fix (`world/SunLight.tsx`, `world/sun.ts`):**
+  - `lightBasis(dir)` builds the shadow camera's axes once per direction: z along the sun, x = normalize(up × z), y = z × x, up +Y. A test checks it against a real three.js camera aimed with `lookAt` from the light to its target.
+  - Each frame, `snapToTexel(body, basis, SUN_TEXEL_M, out)` rounds the body's light-space x and y to whole texels (60 m / 2048 ≈ 2.9 cm) and keeps its depth along the sun. Both `light.target` and `light.position` (target + dir × 60 m) are placed from that snapped point.
+  - Indoors it's the same, with the house-frame sun direction (`sunDirInHouse`).
+  - Still `SUN_PRIORITY` (-5), and allocation-free per frame: a scratch `out`, and the light position written in place instead of `sunPosition`.
+- **Tests (`sun.test.ts`, +6):**
+  - The texel size; the basis is orthonormal and matches three.js's `lookAt` camera.
+  - Moving under half a texel along light x or y, or both, on the block and indoors, leaves the snap unchanged.
+  - Moving 1.5 texels moves it by exactly one texel, along that axis.
+  - Moving along the sun direction doesn't change the light-space x/y cell.
+  - It writes into `out`.
