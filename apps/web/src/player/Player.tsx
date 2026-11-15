@@ -196,8 +196,21 @@ export function Player({
     const handle = ecctrl.current;
     if (!handle) return;
 
+    // Lane D: eliminated in the foam fight (server state) = no input until the respawn,
+    // and the `eliminated` pose holds (RespawnWatcher moves us when we are back).
+    const st = useStore.getState();
+    const out = st.me.id !== null && st.players[st.me.id]?.alive === false;
+    if (out) {
+      action.current = "eliminated";
+      actionUntil.current = Infinity;
+    } else if (action.current === "eliminated") {
+      action.current = null;
+      actionUntil.current = 0;
+    }
+
     // Crouched: walk only, no run, no jump (CROUCH.maxVel caps the speed too).
-    handle.setMovement(crouchedRef.current ? { ...keys.current, run: false, jump: false } : { ...keys.current });
+    if (out) handle.setMovement({ ...KEYS });
+    else handle.setMovement(crouchedRef.current ? { ...keys.current, run: false, jump: false } : { ...keys.current });
 
     // Expire a one-shot action (shoot, hit). `eliminated` holds until respawn.
     if (action.current && state.clock.elapsedTime >= actionUntil.current) {

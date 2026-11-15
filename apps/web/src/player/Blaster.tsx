@@ -41,7 +41,7 @@ import {
 } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
 import { canAttack, noodlePayload, noodleSwing } from "./weapons";
-import { foamModeNow, weaponForKey } from "./foamMode";
+import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
 
 type Props = {
@@ -209,9 +209,11 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     const step = Math.min(dt, 0.1);
     const handle = ecctrl.current;
 
-    // Explore mode: nothing fires and nothing is sent; read live every frame,
-    // so a mode switch lands within a frame. Darts already in flight finish.
-    if (!foamModeNow()) triggerHeld.current = false;
+    // Explore mode or eliminated: nothing fires and nothing is sent; read
+    // live every frame, so a mode switch or a death lands within a frame.
+    // Darts already in flight finish. Holding the trigger through a respawn
+    // does not auto-fire: it must be pressed again.
+    if (!canAttackNow(foamModeNow(), meAliveNow())) triggerHeld.current = false;
     if (handle && triggerHeld.current) {
       const now = state.clock.elapsedTime;
       const weapon = useWeaponState.getState().weapon;

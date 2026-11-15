@@ -54,3 +54,35 @@ export function useFoamMode(): boolean {
   const override = useModeOverride((s) => s.override);
   return weaponsEnabled(effectiveMode(server, DEV_MODE_TOGGLE_ON ? override : null));
 }
+
+// Eliminated: the server sets my Player.alive false for the 3 s before
+// respawn (world/RespawnWatcher.tsx, Player.tsx handle the respawn itself).
+// While dead nothing fires and the crosshair is hidden; keys 1/2 still pick
+// the weapon, so you come back holding what you chose. Unknown counts as
+// alive (no id yet in SOLO or before join, or my entry not in state yet), so
+// a missing server never locks the trigger.
+
+type AliveLike = { alive: boolean };
+
+/** Alive per the server, or unknown (no id, no entry): both count as alive. */
+export function isAlive(meId: string | null, players: Record<string, AliveLike>): boolean {
+  if (meId === null) return true;
+  const p = players[meId];
+  return p ? p.alive : true;
+}
+
+/** The trigger works only in foam mode and while alive. */
+export function canAttackNow(foam: boolean, alive: boolean): boolean {
+  return foam && alive;
+}
+
+/** Am I alive right now? For frame loops (no re-render needed). */
+export function meAliveNow(): boolean {
+  const s = useStore.getState();
+  return isAlive(s.me.id, s.players);
+}
+
+/** Am I alive? For components: re-renders when I'm eliminated or respawn. */
+export function useMeAlive(): boolean {
+  return useStore((s) => isAlive(s.me.id, s.players));
+}

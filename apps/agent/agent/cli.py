@@ -27,7 +27,7 @@ def fake_game(zone: str, offline: bool) -> None:
     game_api.get_player = get_player
     if offline:
 
-        async def post_plan(block_id, player_id, plan):
+        async def post_plan(block_id, player_id, plan, room_label=None):
             return {"placed": len(plan["objects"])}
 
         async def post_focus(block_id, player_id, listing_id):

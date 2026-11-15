@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { useStore } from "../store";
 import { DEV_MODE_TOGGLE_ON } from "../world/devFlags";
+import type { NetPlayer } from "../store";
 import {
+  canAttackNow,
   effectiveMode,
+  isAlive,
+  meAliveNow,
   foamModeNow,
   heldWeaponProp,
   useModeOverride,
@@ -12,7 +16,8 @@ import {
 } from "./foamMode";
 
 afterEach(() => {
-  useStore.getState().set({ mode: "explore" });
+  useStore.getState().set({ mode: "explore", players: {} });
+  useStore.getState().setMe({ id: null });
   useModeOverride.getState().set(null);
 });
 
@@ -70,5 +75,70 @@ describe("held weapon prop per mode", () => {
   it("foam holds the selected weapon", () => {
     expect(heldWeaponProp(true, "blaster")).toBe("blaster");
     expect(heldWeaponProp(true, "noodle")).toBe("noodle");
+  });
+});
+
+const netPlayer = (id: string, alive: boolean): NetPlayer => ({
+  id,
+  name: id,
+  zone: "block",
+  pos: [0, 0, 0],
+  yaw: 0,
+  anim: alive ? "idle" : "eliminated",
+  hp: alive ? 3 : 0,
+  score: 0,
+  alive,
+});
+
+describe("alive (no firing while eliminated)", () => {
+  it("no id yet (SOLO, before join) counts as alive", () => {
+    expect(isAlive(null, {})).toBe(true);
+    useStore.getState().setMe({ id: null });
+    expect(meAliveNow()).toBe(true);
+  });
+
+  it("my entry not in state yet counts as alive", () => {
+    expect(isAlive("me", { other: netPlayer("other", false) })).toBe(true);
+    useStore.getState().setMe({ id: "me" });
+    useStore.getState().set({ players: { other: netPlayer("other", false) } });
+    expect(meAliveNow()).toBe(true);
+  });
+
+  it("alive entry is alive", () => {
+    useStore.getState().setMe({ id: "me" });
+    useStore.getState().set({ players: { me: netPlayer("me", true) } });
+    expect(meAliveNow()).toBe(true);
+  });
+
+  it("dead entry is dead, and respawn reads alive again within the same tick", () => {
+    useStore.getState().setMe({ id: "me" });
+    useStore.getState().set({ players: { me: netPlayer("me", false) } });
+    expect(meAliveNow()).toBe(false);
+    useStore.getState().set({ players: { me: netPlayer("me", true) } });
+    expect(meAliveNow()).toBe(true);
+  });
+
+  it("another player's death does not affect me", () => {
+    useStore.getState().setMe({ id: "me" });
+    useStore.getState().set({ players: { me: netPlayer("me", true), other: netPlayer("other", false) } });
+    expect(meAliveNow()).toBe(true);
+  });
+});
+
+describe("trigger gate: foam and alive", () => {
+  it.each([
+    [false, false, false],
+    [false, true, false],
+    [true, false, false],
+    [true, true, true],
+  ])("foam %s, alive %s -> fires %s", (foam, alive, fires) => {
+    expect(canAttackNow(foam, alive)).toBe(fires);
+  });
+
+  it("keys 1/2 still switch weapons while dead (they read only the mode)", () => {
+    useStore.getState().setMe({ id: "me" });
+    useStore.getState().set({ mode: "foam", players: { me: netPlayer("me", false) } });
+    expect(meAliveNow()).toBe(false);
+    expect(weaponForKey("Digit2", foamModeNow())).toBe("noodle");
   });
 });
