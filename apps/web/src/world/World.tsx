@@ -37,16 +37,18 @@ import { SUN_DIR_BLOCK, sunPosition } from "./sun";
 import { SunLight } from "./SunLight";
 import { DevPlan, DevProbe } from "./DevPlan";
 import { DevModeToggle } from "./DevModeToggle";
+import { DevFocusToggle } from "./DevFocusToggle";
 import { DevRemotes } from "./DevRemotes";
 import { DEV_REMOTES_ON, devFire } from "./fakeRemotes";
 import { RemotePlayers } from "./RemotePlayers";
+import { FocusBeacon } from "./FocusBeacon";
 import { RemoteShots } from "./RemoteShots";
 import { RespawnWatcher } from "./RespawnWatcher";
 import { type FocusState, focusArrival, stepFocus } from "./focusTeleport";
 import { sendFire } from "../net/game";
 import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
-import { DEV_MODE_TOGGLE_ON, DEV_PLAN_ON, START_ROOM } from "./devFlags";
+import { DEV_FOCUS_TOGGLE_ON, DEV_MODE_TOGGLE_ON, DEV_PLAN_ON, START_ROOM } from "./devFlags";
 import { FIXTURE_RAW } from "./fixtures";
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
@@ -189,7 +191,9 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
       {DEV_PLAN_ON ? <DevPlan pack={pack} zone={zone} /> : null}
       {import.meta.env.DEV ? <DevProbe /> : null}
       {DEV_MODE_TOGGLE_ON ? <DevModeToggle /> : null}
+      {DEV_FOCUS_TOGGLE_ON ? <DevFocusToggle /> : null}
       <RemotePlayers zone={zone} />
+      <FocusBeacon pack={pack} />
       <RemoteShots />
       <RespawnWatcher zone={zone} blockSpawn={blockSpawn} />
       {DEV_REMOTES_ON ? <DevRemotes pack={pack} zone={zone} /> : null}

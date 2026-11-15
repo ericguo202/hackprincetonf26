@@ -512,3 +512,29 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
 - **Tests (`remoteFx.test.ts`, 14):** in my zone, another zone, no remotes, 1.4 m vs 1.6 m, 3D distance, several remotes. Once per id: mount marks all seen, new ids once in order, the same events in a new array aren't replayed, an 8-entry rolling cap over 30 events plays each exactly once with the set bounded, a burst between frames. Dir normalization and the swoosh yaw.
 - **Known env-dependent test (already on main):** `foamMode.test.ts` "the override is ignored unless the dev toggle is on" fails when `/.env.local` sets `VITE_SOLO=1`, because Vitest loads it. All 327 tests pass with that file moved aside.
 - **Not seen in a browser:** the remote tracer and puff, the swoosh's orientation and look, and the match tolerance on a running shooter. The body is drawn 100 ms behind, and the head is 0.65 m above the body centre, so a shooter at 6 m/s is about 0.9 m off, still inside 1.5 m.
+
+## 25. Focus beacon and door approach
+
+**Not seen in a browser.** Checked by unit tests and the production-build grep.
+
+- **Why:** When the agent concierge focuses a house (`focus_listing`, setting `store.focus[me.id]`), the focused house needs a visible beacon on the block, and the teleport landing needs to place the player 1.5 m outside the front door facing it.
+- **Door approach (`world/doorApproach.ts`, pure):**
+  - `doorApproach(door, rooms)`: calculates the teleport target point in the block frame.
+  - Takes `door.block` and steps outward along `doorOutwardBlock(door, rooms)` by 1.5 m (`APPROACH_DIST_M`).
+  - Height: body centre y from `bodyCentreAt(door.block[1])` (`world/landing.ts`).
+  - Yaw: faces back toward `door.block` (`yawToward(dx, dz) = Math.atan2(-dx, -dz)`), matching Three.js Euler "YXZ" / `me.yaw` convention (0 faces -Z).
+  - Tested (`doorApproach.test.ts`, 8 tests): for real 7014 (`hou_236595179`) and 6915 (`hou_237901269`) using pack v3. Distance is 1.5 m, point is outside every room polygon converted to the block frame, yaw points at the door to within 1°, y matches `bodyCentreAt`.
+- **Focus beacon (`world/FocusBeacon.tsx`, `focusBeaconLogic.ts`):**
+  - Mounted next to `RemotePlayers` in `world/World.tsx`.
+  - Reads `store.focus[store.me.id]` (read-only). If it names a house in `pack.doors` and I'm on the block (`me.zone === "block"`):
+    - Translucent column of light at `door.exitTo`: radius 0.8 m, 30 m tall, additive blending (`AdditiveBlending`), `depthWrite: false`, DoubleSide, gently pulsing opacity in `useFrame` with priority 0 (`0.35 + 0.15 * Math.sin(t * 2.5)`).
+    - `WorldLabel` with "Your match".
+  - Draws nothing when focus is unset or when inside a house.
+  - No colliders or collision groups.
+  - Tested (`FocusBeacon.test.ts`, 8 tests): constants, effectiveFocus resolution, useDevFocusOverride toggle, door matching.
+- **Dev only (B-toggle):**
+  - Pressing `B` flips a local focus override to `"hou_236595179"` (`world/DevFocusToggle.tsx`, `world/devFocus.ts`).
+  - Gated by `DEV_FOCUS_TOGGLE_ON = import.meta.env.DEV && import.meta.env.VITE_SOLO === "1"` (`world/devFlags.ts`), wired like `DevModeToggle.tsx`.
+  - Production build tree-shaking verified: `DevFocusToggle`, `DevModeToggle`, `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM`, and `__laneC` are all 0 occurrences in `/tmp/x/assets/*.js`.
+- **Not seen in a browser:** The visual appearance of the 30 m column of light, the opacity pulse feel, and the "Your match" label placement on the real block.
+
