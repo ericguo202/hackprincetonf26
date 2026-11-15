@@ -1,0 +1,130 @@
+{
+ "nodes": [
+  {
+   "id": "hou_237901269.r1",
+   "label": "closet",
+   "area_m2": 1.5,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_237901269.r2",
+   "label": "closet",
+   "area_m2": 2.0,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_237901269.r3",
+   "label": "kitchen",
+   "area_m2": 16.5,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_237901269.r4",
+   "label": "living_room",
+   "area_m2": 32.3,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_237901269.r5",
+   "label": "primary_bedroom",
+   "area_m2": 16.0,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_237901269.r6",
+   "label": "bedroom",
+   "area_m2": 11.2,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_237901269.r7",
+   "label": "bedroom",
+   "area_m2": 10.5,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_237901269.r8",
+   "label": "hallway",
+   "area_m2": 4.6,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_237901269.r9",
+   "label": "bathroom",
+   "area_m2": 5.2,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_237901269.r10",
+   "label": "bathroom",
+   "area_m2": 4.1,
+   "floor": 0,
+   "has_window": true
+  }
+ ],
+ "edges": [
+  {
+   "a": "hou_237901269.r1",
+   "b": "hou_237901269.r7",
+   "kind": "door",
+   "width_m": 0.72
+  },
+  {
+   "a": "hou_237901269.r10",
+   "b": "hou_237901269.r8",
+   "kind": "door",
+   "width_m": 0.57
+  },
+  {
+   "a": "hou_237901269.r2",
+   "b": "hou_237901269.r8",
+   "kind": "door",
+   "width_m": 0.75
+  },
+  {
+   "a": "hou_237901269.r3",
+   "b": "hou_237901269.r4",
+   "kind": "open",
+   "width_m": 2.66
+  },
+  {
+   "a": "hou_237901269.r4",
+   "b": "hou_237901269.r8",
+   "kind": "door",
+   "width_m": 0.79
+  },
+  {
+   "a": "hou_237901269.r5",
+   "b": "hou_237901269.r8",
+   "kind": "door",
+   "width_m": 0.71
+  },
+  {
+   "a": "hou_237901269.r5",
+   "b": "hou_237901269.r9",
+   "kind": "door",
+   "width_m": 0.59
+  },
+  {
+   "a": "hou_237901269.r6",
+   "b": "hou_237901269.r8",
+   "kind": "door",
+   "width_m": 0.75
+  },
+  {
+   "a": "hou_237901269.r7",
+   "b": "hou_237901269.r8",
+   "kind": "door",
+   "width_m": 0.72
+  }
+ ]
+}

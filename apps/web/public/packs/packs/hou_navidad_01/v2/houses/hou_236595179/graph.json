@@ -1,0 +1,180 @@
+{
+ "nodes": [
+  {
+   "id": "hou_236595179.r1",
+   "label": "closet",
+   "area_m2": 0.4,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_236595179.r2",
+   "label": "closet",
+   "area_m2": 1.4,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_236595179.r3",
+   "label": "living_room",
+   "area_m2": 28.2,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_236595179.r4",
+   "label": "kitchen",
+   "area_m2": 10.2,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_236595179.r5",
+   "label": "dining_room",
+   "area_m2": 8.1,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_236595179.r6",
+   "label": "garage",
+   "area_m2": 36.9,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_236595179.r7",
+   "label": "primary_bedroom",
+   "area_m2": 13.8,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_236595179.r8",
+   "label": "bedroom",
+   "area_m2": 11.5,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_236595179.r9",
+   "label": "bedroom",
+   "area_m2": 9.8,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_236595179.r10",
+   "label": "bathroom",
+   "area_m2": 3.9,
+   "floor": 0,
+   "has_window": false
+  },
+  {
+   "id": "hou_236595179.r11",
+   "label": "bathroom",
+   "area_m2": 3.9,
+   "floor": 0,
+   "has_window": true
+  },
+  {
+   "id": "hou_236595179.r12",
+   "label": "hallway",
+   "area_m2": 1.7,
+   "floor": 0,
+   "has_window": false
+  }
+ ],
+ "edges": [
+  {
+   "a": "hou_236595179.r1",
+   "b": "hou_236595179.r6",
+   "kind": "door",
+   "width_m": 0.8
+  },
+  {
+   "a": "hou_236595179.r10",
+   "b": "hou_236595179.r12",
+   "kind": "door",
+   "width_m": 0.61
+  },
+  {
+   "a": "hou_236595179.r11",
+   "b": "hou_236595179.r7",
+   "kind": "door",
+   "width_m": 0.57
+  },
+  {
+   "a": "hou_236595179.r12",
+   "b": "hou_236595179.r3",
+   "kind": "door",
+   "width_m": 0.71
+  },
+  {
+   "a": "hou_236595179.r12",
+   "b": "hou_236595179.r8",
+   "kind": "door",
+   "width_m": 0.73
+  },
+  {
+   "a": "hou_236595179.r12",
+   "b": "hou_236595179.r9",
+   "kind": "door",
+   "width_m": 0.76
+  },
+  {
+   "a": "hou_236595179.r2",
+   "b": "hou_236595179.r3",
+   "kind": "door",
+   "width_m": 0.66
+  },
+  {
+   "a": "hou_236595179.r2",
+   "b": "hou_236595179.r9",
+   "kind": "door",
+   "width_m": 0.79
+  },
+  {
+   "a": "hou_236595179.r3",
+   "b": "hou_236595179.r4",
+   "kind": "open",
+   "width_m": 2.7
+  },
+  {
+   "a": "hou_236595179.r3",
+   "b": "hou_236595179.r5",
+   "kind": "open",
+   "width_m": 1.17
+  },
+  {
+   "a": "hou_236595179.r3",
+   "b": "hou_236595179.r6",
+   "kind": "door",
+   "width_m": 0.69
+  },
+  {
+   "a": "hou_236595179.r3",
+   "b": "hou_236595179.r7",
+   "kind": "door",
+   "width_m": 0.69
+  },
+  {
+   "a": "hou_236595179.r3",
+   "b": "hou_236595179.r9",
+   "kind": "door",
+   "width_m": 0.75
+  },
+  {
+   "a": "hou_236595179.r4",
+   "b": "hou_236595179.r5",
+   "kind": "open",
+   "width_m": 3.41
+  },
+  {
+   "a": "hou_236595179.r7",
+   "b": "hou_236595179.r9",
+   "kind": "door",
+   "width_m": 1.23
+  }
+ ]
+}
