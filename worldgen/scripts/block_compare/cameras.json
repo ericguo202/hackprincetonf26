@@ -1,0 +1,200 @@
+{
+  "frame": "block frame of hou_navidad_01: origin 29.70113,-95.670841 at ground, +X east, +Y up, +Z south, meters",
+  "houses": {
+    "hou_236595179": {
+      "address": "7014 Navidad Rd (hero)",
+      "lat": 29.700279,
+      "lon": -95.671051,
+      "approx_xz": [
+        -20.3,
+        94.1
+      ]
+    },
+    "hou_237901269": {
+      "address": "6915 Navidad Rd",
+      "lat": 29.701982,
+      "lon": -95.670631,
+      "approx_xz": [
+        20.3,
+        -94.2
+      ]
+    }
+  },
+  "note": "Street cameras assume Navidad Rd runs roughly north-south near x = 0. Do not move cameras per approach; if one lands inside geometry, report it so both approaches get the same fix.",
+  "fov_deg": 70,
+  "size_px": [
+    1600,
+    900
+  ],
+  "cameras": [
+    {
+      "id": "01_aerial_oblique",
+      "pos": [
+        0,
+        160,
+        220
+      ],
+      "look_at": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "02_aerial_top",
+      "pos": [
+        0,
+        320,
+        0.01
+      ],
+      "look_at": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "03_street_long_north",
+      "pos": [
+        0,
+        1.6,
+        110
+      ],
+      "look_at": [
+        0,
+        1.6,
+        -60
+      ]
+    },
+    {
+      "id": "04_street_long_south",
+      "pos": [
+        0,
+        1.6,
+        -110
+      ],
+      "look_at": [
+        0,
+        1.6,
+        60
+      ]
+    },
+    {
+      "id": "05_street_front_7014",
+      "pos": [
+        -2,
+        1.6,
+        94
+      ],
+      "look_at": [
+        -20.3,
+        2.5,
+        94.1
+      ]
+    },
+    {
+      "id": "06_street_front_6915",
+      "pos": [
+        2,
+        1.6,
+        -94
+      ],
+      "look_at": [
+        20.3,
+        2.5,
+        -94.2
+      ]
+    },
+    {
+      "id": "07_neighbors_7014_quarter",
+      "pos": [
+        6,
+        1.6,
+        120
+      ],
+      "look_at": [
+        -25,
+        3,
+        85
+      ]
+    },
+    {
+      "id": "08_drone_7014",
+      "pos": [
+        10,
+        30,
+        125
+      ],
+      "look_at": [
+        -20.3,
+        0,
+        94.1
+      ]
+    },
+    {
+      "id": "09_side_street_level",
+      "pos": [
+        -40,
+        1.6,
+        0
+      ],
+      "look_at": [
+        40,
+        2,
+        0
+      ]
+    },
+    {
+      "id": "10_curb_closeup",
+      "pos": [
+        -9.8,
+        1.6,
+        -72
+      ],
+      "look_at": [
+        -8.6,
+        0.0,
+        -56
+      ]
+    },
+    {
+      "id": "11_sidewalk_run",
+      "pos": [
+        -11.2,
+        1.6,
+        -38
+      ],
+      "look_at": [
+        -11.4,
+        1.0,
+        -78
+      ]
+    },
+    {
+      "id": "12_driveway_walk_6915",
+      "pos": [
+        1.0,
+        1.6,
+        -106.0
+      ],
+      "look_at": [
+        14.0,
+        0.4,
+        -95.0
+      ]
+    },
+    {
+      "id": "13_drone_shared_walk",
+      "pos": [
+        -24.0,
+        24.0,
+        -87.0
+      ],
+      "look_at": [
+        12.0,
+        0.0,
+        -88.0
+      ]
+    }
+  ]
+}

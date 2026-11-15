@@ -4,6 +4,7 @@
   "description": "Node CLIs used by worldgen: gltf-transform for Draco/meshopt compression (npx gltf-transform ...)",
   "devDependencies": {
     "@gltf-transform/cli": "4.5.1",
+    "playwright": "1.52.0",
     "three": "^0.169.0"
   }
 }
