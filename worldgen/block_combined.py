@@ -540,11 +540,16 @@ def build(args) -> dict:
 
         gc = GroundClasses(ortho_g, road, built, crown_fn=crown_fn)
         cp = gc.polygons()
+        log("  sidewalks")
+        walks = gc.sidewalks(road, mask)
+        log(f"  sidewalks {walks.area:.0f} m2")
+        summary["sidewalk_m2"] = round(walks.area)
+        cp["concrete"] = areal(cp["concrete"].union(walks))
         rest = near_land
         areas = {}
         for name in ("concrete", "beds", "photo"):
-            reg = cp[name].intersection(rest).buffer(0)
-            rest = rest.difference(reg).buffer(0)
+            reg = areal(cp[name].intersection(rest))
+            rest = areal(rest.difference(reg))
             cp[name] = reg
         cp["lawn"] = rest
         for name in GROUND_CLASSES:
@@ -554,24 +559,29 @@ def build(args) -> dict:
             if name == "photo":
                 gridded(cb, reg, ground, HALF, 2.0, 0.0, bpr.uv_ortho, 2.0)
             else:
-                gridded(
-                    cb,
-                    reg,
-                    ground,
-                    HALF,
-                    args.ground_step,
-                    0.0,
-                    tiled_uv(GROUND_TEX[name][1]),
-                    2.0,
-                    colorf=class_tint(gc, name),
-                )
+                # finer tint vertices where people walk (near zone), coarser behind the lots
+                for sub, step in (
+                    (areal(reg.intersection(mask)), args.near_step),
+                    (areal(reg.difference(mask)), args.ground_step),
+                ):
+                    gridded(
+                        cb,
+                        sub,
+                        ground,
+                        HALF,
+                        step,
+                        0.0,
+                        tiled_uv(GROUND_TEX[name][1]),
+                        2.0,
+                        colorf=class_tint(gc, name),
+                    )
             class_bufs[name] = cb
         gridded(
             road_buf,
             road,
             ground,
             HALF,
-            args.ground_step,
+            args.near_step,
             -CURB,
             tiled_uv(GROUND_TEX["road"][1]),
             1.8,
@@ -701,7 +711,8 @@ def build(args) -> dict:
     else:
         raw.replace(OUT / "render.glb")
     size = (OUT / "render.glb").stat().st_size
-    ctris = write_collision(buildings, ground, P, plain)
+    trunks = [t for t in tree_info.pop("trunks_for_collision", []) if P.contains(Point(t[0], t[1]))]
+    ctris = write_collision(buildings, ground, P, plain, trunks)
     summary.update(
         {
             "render_glb_mb": round(size / 1e6, 2),
@@ -907,9 +918,11 @@ def place_trees(crowns, variants, P, road, buildings, hero_lots, ortho, ground, 
             continue
         tx, tz = pt.x, pt.y
         ratio = r / h
-        v = min(
-            range(len(variants)), key=lambda i: abs(math.log(variants[i]["crown_radius"] / max(ratio, 0.1)))
-        )
+        # the variant whose crown shape fits best is the likeliest, but not the only one (variety;
+        # the non-uniform scale absorbs the rest)
+        d = np.array([math.log(var_["crown_radius"] / max(ratio, 0.1)) for var_ in variants])
+        w = np.exp(-(d**2) / 0.35)
+        v = int(rng.choice(len(variants), p=w / w.sum()))
         var = variants[v]
         sy = h * rng.uniform(0.97, 1.05)
         sxz = float(np.clip(r / var["crown_radius"], 0.6 * sy, 1.7 * sy))
@@ -951,7 +964,17 @@ def place_trees(crowns, variants, P, road, buildings, hero_lots, ortho, ground, 
             )
         )
         hero_count += int(in_lot)
+    trunk_r = {}
+    for v, var in enumerate(variants):
+        bpos = var["bark"][0]
+        m = (bpos[:, 1] > 0.03) & (bpos[:, 1] < 0.12)
+        trunk_r[v] = 0.7 * float(np.hypot(bpos[m, 0], bpos[m, 2]).max()) if m.any() else 0.04
+    trunks = [
+        (x, z, trunk_r[v] * sxz, variants[v]["crown_base"] * sy, float(ground(x, z)[0]))
+        for v, _tc, x, z, sy, sxz, *_ in placed
+    ]
     info = {
+        "trunks_for_collision": trunks,
         "count": len(placed),
         "in_hero_lots": hero_count,
         "variants": {variants[v]["name"]: sum(1 for p in placed if p[0] == v) for v in range(len(variants))},
@@ -1059,7 +1082,7 @@ def estimate_sun(ortho: Ortho, buildings: list[Building], ground) -> dict:
     }
 
 
-def write_collision(buildings, ground, P, fence_lines_) -> int:
+def write_collision(buildings, ground, P, fence_lines_, trunks=()) -> int:
     """Near zone only: terrain (coarse grid over the procedural region) + one prism per procedural
     building + thin fence boxes. Under 20k triangles."""
     import trimesh
@@ -1102,6 +1125,13 @@ def write_collision(buildings, ground, P, fence_lines_) -> int:
             parts.append(
                 trimesh.Trimesh(np.c_[v[:, 0], v[:, 2] + y - 0.05, v[:, 1]], m.faces[:, ::-1], process=False)
             )
+    for x, z, r, h, gy in trunks:  # tree trunks up to the crown: cover in a foam fight
+        ring = Point(x, z).buffer(max(r, 0.12), quad_segs=2)
+        m = trimesh.creation.extrude_polygon(ring, h + 0.3)
+        v = m.vertices.copy()
+        parts.append(
+            trimesh.Trimesh(np.c_[v[:, 0], v[:, 2] + gy - 0.3, v[:, 1]], m.faces[:, ::-1], process=False)
+        )
     mesh = trimesh.util.concatenate(parts)
     mesh.export(OUT / "collision.glb")
     log(f"collision: {len(mesh.faces)} triangles")
@@ -1117,6 +1147,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--ground-step", type=float, default=1.0, help="ground mesh cell (m): vertex tint spacing"
     )
+    ap.add_argument("--near-step", type=float, default=1.0, help="ground cell inside the near zone (m)")
     ap.add_argument(
         "--hero-exterior",
         action="append",
@@ -1254,6 +1285,31 @@ def raster_polys(lab: np.ndarray, k: int, half: float, res: float):
     return shapely.union_all(boxes)
 
 
+def areal(g):
+    """Only the polygonal part of a geometry, as one valid (Multi)Polygon: overlays return
+    GeometryCollections with stray points and lines, which make every later predicate slow."""
+    parts = []
+    stack = [g]
+    while stack:
+        h = stack.pop()
+        if h.is_empty:
+            continue
+        if h.geom_type == "Polygon":
+            parts.append(h)
+        elif hasattr(h, "geoms"):
+            stack.extend(h.geoms)
+    return shapely.make_valid(shapely.MultiPolygon(parts)).buffer(0) if parts else Polygon()
+
+
+def pd_fill(a: np.ndarray) -> np.ndarray:
+    """Fill NaNs in a 1D array with the nearest valid value."""
+    ok = np.isfinite(a)
+    if not ok.any():
+        return np.zeros_like(a)
+    idx = ndimage.distance_transform_edt(~ok, return_distances=False, return_indices=True)[0]
+    return a[idx]
+
+
 def chaikin(xy: np.ndarray, iters: int = 3) -> np.ndarray:
     """Corner cutting on a closed ring: removes the raster staircase, keeps the shape."""
     pts = xy[:-1] if np.allclose(xy[0], xy[-1]) else xy
@@ -1323,9 +1379,13 @@ class GroundClasses:
         hidden = (lum < 38) if crown_fn is None else (crown_fn(Xc, Zc) | (lum < 38))
         crown = np.zeros_like(hidden) if crown_fn is None else crown_fn(Xc, Zc)
         src = (lab >= 0) & ~hidden
-        _, (ii, jj) = ndimage.distance_transform_edt(~src, return_indices=True)
+        self.lab_visible = np.where(hidden & (lab >= 0), -2, lab)
+        dist, (ii, jj) = ndimage.distance_transform_edt(~src, return_indices=True)
         fix = hidden & (lab >= 0)
         lab[fix] = lab[ii[fix], jj[fix]]
+        # far inside a crown's shade, assume lawn (trees stand in yards); sidewalks are added back
+        # geometrically (sidewalks())
+        lab[fix & (dist * GRES > 1.2) & (lab == 1)] = 0
         self.lab = lab
         self.rgb = rgb
         self.fields = {}
@@ -1355,6 +1415,72 @@ class GroundClasses:
             tol, it = (0.35, 2) if name == "concrete" else (0.15, 3)
             out[name] = smooth_polys(p.simplify(tol), iters=it)
         return out
+
+    def sidewalks(self, road, zone, max_off: float = 5.0):
+        """Straight sidewalk strips along the curb: per 1 m station, a concrete band 0.9-1.8 m wide
+        within 5 m of the curb with lawn behind it, voted over +-10 m along the street (visible
+        pixels only, so the walk continues under crowns and across driveways). Inside `zone`."""
+        offs = np.arange(0.1, max_off + 1.2, 0.2)
+        out = []
+        for poly in polys_of(road.intersection(zone.buffer(5.0))):
+            for ring in [poly.exterior, *poly.interiors]:
+                ln = LineString(ring.coords)
+                n = int(ln.length // 1.0)
+                if n < 20:
+                    continue
+                P = np.array([ln.interpolate(i * 1.0).coords[0] for i in range(n + 1)])
+                T = np.gradient(P, axis=0)
+                T /= np.maximum(np.linalg.norm(T, axis=1, keepdims=True), 1e-9)
+                N = np.c_[T[:, 1], -T[:, 0]]
+                probe = P + 0.5 * N
+                flip = contains_xy(road, probe[:, 0], probe[:, 1])
+                N[flip] *= -1  # outward: away from the road
+                Q = P[:, None, :] + offs[None, :, None] * N[:, None, :]
+                c = np.clip(((Q[..., 0] + self.half) / GRES).astype(int), 0, self.lab.shape[1] - 1)
+                r = np.clip(((Q[..., 1] + self.half) / GRES).astype(int), 0, self.lab.shape[0] - 1)
+                L = self.lab_visible[r, c]
+                vis = (L >= 0).astype(float)
+                conc = (L == 1).astype(float)
+                k = np.ones(21)
+                cs = ndimage.convolve1d(conc, k, axis=0, mode="nearest")
+                vs = ndimage.convolve1d(vis, k, axis=0, mode="nearest")
+                frac = np.where(vs > 3, cs / np.maximum(vs, 1e-6), np.nan)
+                best = np.full((len(P), 3), np.nan)  # score, o1, o2
+                for w in (5, 6, 7, 8):  # band widths in 0.2 m steps: 1.0 .. 1.6 m
+                    for i0 in range(0, len(offs) - w - 4):
+                        band = np.nanmean(frac[:, i0 : i0 + w], axis=1)
+                        behind = np.nanmean(frac[:, i0 + w + 1 : i0 + w + 4], axis=1)
+                        front = (
+                            np.nanmean(frac[:, max(0, i0 - 3) : i0], axis=1) if i0 >= 3 else np.zeros(len(P))
+                        )
+                        sc = band - behind - 0.5 * np.clip(front - 0.5, 0, None)
+                        ok = (band > 0.55) & (behind < 0.45) & ~(sc <= np.nan_to_num(best[:, 0], nan=-9))
+                        best[ok] = np.c_[
+                            sc[ok], np.full(ok.sum(), offs[i0] - 0.1), np.full(ok.sum(), offs[i0 + w] - 0.1)
+                        ]
+                has = np.isfinite(best[:, 0])
+                if has.sum() < 10:
+                    continue
+                # smooth offsets along the street, keep runs of at least 6 m
+                o1 = ndimage.median_filter(np.where(has, best[:, 1], np.nan), 15, mode="nearest")
+                o2 = ndimage.median_filter(np.where(has, best[:, 2], np.nan), 15, mode="nearest")
+                has = ndimage.binary_closing(has, np.ones(9)) & ndimage.binary_opening(has, np.ones(3))
+                o1 = pd_fill(o1)
+                o2 = pd_fill(o2)
+                lab_, nr = ndimage.label(has)
+                for k_ in range(1, nr + 1):
+                    idx = np.flatnonzero(lab_ == k_)
+                    if len(idx) < 6:
+                        continue
+                    a = P[idx] + o1[idx, None] * N[idx]
+                    b = P[idx] + o2[idx, None] * N[idx]
+                    strip = Polygon(np.r_[a, b[::-1]]).buffer(0)
+                    if not strip.is_empty:
+                        out.append(strip)
+        if not out:
+            return Polygon()
+        w = unary_union(out).difference(road).intersection(zone)
+        return w.simplify(0.1).buffer(0)
 
     def colour(self, name: str, x, z) -> np.ndarray:
         """Low-frequency sRGB 0..255 colour of class `name` at (x, z)."""
