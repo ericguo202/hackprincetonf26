@@ -179,3 +179,87 @@ body { background: #10141a; color: #e8eaed; font-family: system-ui, sans-serif; 
   animation: damage-flash 0.45s ease-out forwards;
 }
 @keyframes damage-flash { from { opacity: 1; } to { opacity: 0; } }
+
+/* Manual furnishing (ui/FurnishPanel.tsx): catalog drawer between the HUD column and the chat panel. */
+.furnish-panel {
+  position: absolute; left: 16px; right: 412px; bottom: 16px; max-height: min(40vh, 420px); min-width: 0;
+  display: flex; flex-direction: column; gap: 10px; box-sizing: border-box;
+  padding: 12px 14px; background: rgba(16, 20, 26, 0.95); border-radius: 10px;
+  z-index: 3; pointer-events: auto; font-size: 13px; line-height: 1.35;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+@media (max-width: 1000px) { .furnish-panel { right: 16px; } }
+.furnish-actions { display: flex; gap: 8px; align-items: center; }
+.furnish-hide {
+  font: inherit; font-size: 12px; color: #c9d1dc; background: transparent; border: 1px solid #2f3a4b;
+  border-radius: 16px; padding: 5px 10px; cursor: pointer; white-space: nowrap;
+}
+.furnish-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.furnish-head strong { font-size: 15px; }
+.furnish-sub { display: block; margin-top: 2px; font-size: 12px; color: #9aa3b2; }
+.furnish-done {
+  font: inherit; font-weight: 600; color: #10141a; background: #8fd19e; border: 0; border-radius: 16px;
+  padding: 6px 12px; cursor: pointer; white-space: nowrap;
+}
+.furnish-done kbd { background: rgba(16,20,26,0.18); color: #10141a; }
+.furnish-tools { display: flex; flex-direction: column; gap: 8px; }
+.furnish-tools input {
+  font: inherit; color: #e8eaed; background: #1d2430; border: 1px solid #2f3a4b; border-radius: 8px;
+  padding: 7px 10px; outline: none;
+}
+.furnish-tools input:focus { border-color: #8ab4f8; }
+.furnish-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.furnish-tabs button {
+  font: inherit; font-size: 12px; color: #c9d1dc; background: #1d2430; border: 1px solid #2f3a4b;
+  border-radius: 14px; padding: 4px 10px; cursor: pointer;
+}
+.furnish-tabs button.on { color: #10141a; background: #c5d4f0; border-color: #c5d4f0; }
+.furnish-grid {
+  flex: 1; min-height: 0; overflow: auto; display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); align-content: start; padding: 2px;
+}
+.furnish-empty { grid-column: 1 / -1; color: #9aa3b2; margin: 8px 0; }
+.furnish-tile {
+  font: inherit; color: inherit; text-align: left; display: flex; flex-direction: column; gap: 2px;
+  padding: 6px; background: #1a212c; border: 2px solid transparent; border-radius: 10px; cursor: pointer;
+}
+.furnish-tile:hover { border-color: #3d4a5e; background: #202937; }
+.furnish-tile.on { border-color: #8fd19e; }
+.furnish-thumb {
+  position: relative; display: block; aspect-ratio: 1; border-radius: 7px; overflow: hidden;
+  background: radial-gradient(circle at 50% 35%, #ecebe7 0%, #cfccc5 100%); margin-bottom: 4px;
+}
+.furnish-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.furnish-thumb-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 6px;
+  color: #6b6458; font-size: 11px; text-transform: capitalize; text-align: center;
+}
+.furnish-thumb-empty[data-loading] { animation: furnish-pulse 1.2s ease-in-out infinite; }
+@keyframes furnish-pulse { 50% { opacity: 0.45; } }
+.furnish-cover {
+  position: absolute; left: 4px; bottom: 4px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 1px 5px; border-radius: 4px; color: #10141a; background: rgba(255,255,255,0.8);
+}
+.furnish-cover.full { background: #f2c48d; }
+.furnish-name { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.furnish-meta { font-size: 11px; color: #9aa3b2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.furnish-foot { font-size: 11px; color: #8b93a1; }
+.furnish-panel kbd, .build-hint kbd {
+  display: inline-block; font: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 3px 5px; border-radius: 4px; background: #2a3342; color: #e8eaed;
+}
+
+/* Build mode: top centre under the HUD row, clear of the catalog (bottom). */
+.build-hint {
+  position: absolute; left: 50%; top: 76px; transform: translateX(-50%); z-index: 3; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: calc(100% - 32px);
+  padding: 8px 14px; background: rgba(16, 20, 26, 0.85); border-radius: 10px; font-size: 13px;
+}
+.build-hint-main { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; justify-content: center; }
+.build-hint .ok { color: #8fd19e; }
+.build-hint .bad { color: #f2a0a0; }
+.build-hint-keys { font-size: 12px; color: #9aa3b2; text-align: center; }
+.build-hint-btn {
+  pointer-events: auto; font: inherit; font-size: 12px; font-weight: 600; color: #10141a; background: #c5d4f0;
+  border: 0; border-radius: 14px; padding: 3px 10px; cursor: pointer;
+}

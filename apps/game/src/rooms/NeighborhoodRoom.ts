@@ -34,6 +34,33 @@ export const roomsByBlock = new Map<string, NeighborhoodRoom>();
 type JoinOptions = { block_id?: string; name?: string };
 type MovePayload = { x: number; y: number; z: number; yaw: number; anim: string };
 type FirePayload = { origin?: unknown; dir?: unknown; target_id?: unknown; weapon?: unknown };
+type FurniturePayload = {
+  listing_id?: unknown;
+  room_id?: unknown;
+  instance_id?: unknown;
+  asset_id?: unknown;
+  x?: unknown;
+  y?: unknown;
+  z?: unknown;
+  rot_deg?: unknown;
+};
+
+/** Manual furnishing limits (contracts/messages.md v2.6.0). */
+export const FURNITURE_EDIT_INTERVAL_MS = 100;
+export const MAX_PIECES_PER_HOUSE = 150;
+export const MAX_HORIZONTAL_M = 200;
+export const MIN_Y_M = -20;
+export const MAX_Y_M = 50;
+const ASSET_ID = /^[A-Za-z0-9_.-]{1,96}$/;
+
+/** A pose from a furniture message, or null if any field is missing, non-finite or out of range. */
+export function parsePose(m: FurniturePayload): { x: number; y: number; z: number; rot_deg: number } | null {
+  const { x, y, z, rot_deg } = m;
+  if (![x, y, z, rot_deg].every((v) => typeof v === "number" && Number.isFinite(v))) return null;
+  const [px, py, pz, r] = [x, y, z, rot_deg] as number[];
+  if (Math.abs(px) > MAX_HORIZONTAL_M || Math.abs(pz) > MAX_HORIZONTAL_M || py < MIN_Y_M || py > MAX_Y_M) return null;
+  return { x: px, y: py, z: pz, rot_deg: ((r % 360) + 360) % 360 };
+}
 
 /**
  * Agents number pieces o1, o2... per plan, so ids collide across rooms of one house.
@@ -64,6 +91,10 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
   private roomPlans = new Map<string, Map<string, (PlanObject & { by_player: string })[]>>();
   /** sessionId -> pending respawn timer. Server-only. */
   private respawns = new Map<string, Delayed>();
+  /** sessionId -> Date.now() of the last accepted furniture edit. Server-only. */
+  private lastEdit = new Map<string, number>();
+  /** Next number for a hand-placed piece's instance_id ("<room_id>/m<n>"), unique per room instance. */
+  private manualSeq = 0;
 
   messages = {
     move: (client: Client, m: MovePayload) => {
@@ -105,6 +136,9 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
       this.broadcast("toast", { text: `${p?.name ?? "?"}: ${String(m.text).slice(0, 200)}` });
     },
     fire: (client: Client, m: FirePayload) => this.fire(client, m ?? {}),
+    furniture_place: (client: Client, m: FurniturePayload) => this.furnitureEdit(client, "place", m ?? {}),
+    furniture_move: (client: Client, m: FurniturePayload) => this.furnitureEdit(client, "move", m ?? {}),
+    furniture_remove: (client: Client, m: FurniturePayload) => this.furnitureEdit(client, "remove", m ?? {}),
   };
 
   onCreate(options: JoinOptions) {
@@ -126,6 +160,7 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
     this.state.focus.delete(client.sessionId);
     this.graceUntil.delete(client.sessionId);
     this.lastFire.delete(client.sessionId);
+    this.lastEdit.delete(client.sessionId);
     this.respawns.get(client.sessionId)?.clear();
     this.respawns.delete(client.sessionId);
   }
@@ -210,17 +245,81 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
    * Same room again = last write wins ("make it a playroom instead"); empty objects clear it.
    */
   applyPlan(listingId: string, roomId: string, planId: string, objects: PlanObject[], byPlayer: string) {
-    let rooms = this.roomPlans.get(listingId);
-    if (!rooms) this.roomPlans.set(listingId, (rooms = new Map()));
     // Map.set on an existing key keeps its position, so House.objects order is stable.
-    rooms.set(
+    this.roomsOf(listingId).set(
       roomId,
       objects.map((o) => ({ ...o, instance_id: roomInstanceId(roomId, o.instance_id), by_player: byPlayer })),
     );
+    this.rebuildHouse(listingId, planId);
+  }
 
+  /**
+   * Manual furnishing (messages.md v2.6.0): one piece added, moved or removed by
+   * a player standing in the house. Geometry is the client's job (the game has
+   * no room polygons); this checks the message's shape, the zone and the limits.
+   */
+  private furnitureEdit(client: Client, kind: "place" | "move" | "remove", m: FurniturePayload) {
+    const id = client.sessionId;
+    const p = this.state.players.get(id);
+    const reject = (why: string) => client.send("toast", { text: `Could not ${kind} that piece: ${why}` });
+    const listingId = m.listing_id;
+    if (!p || typeof listingId !== "string" || p.zone !== listingId) return reject("you are not in that house");
+    const now = Date.now();
+    if (now - (this.lastEdit.get(id) ?? Number.NEGATIVE_INFINITY) < FURNITURE_EDIT_INTERVAL_MS) return;
+    this.lastEdit.set(id, now);
+
+    const rooms = this.roomsOf(listingId);
+    const found = typeof m.instance_id === "string" ? findPiece(rooms, m.instance_id) : null;
+    if (kind !== "place" && !found) return reject("it is no longer there");
+
+    if (kind === "remove") {
+      found!.list.splice(found!.index, 1);
+      return this.rebuildHouse(listingId);
+    }
+
+    const roomId = m.room_id;
+    if (typeof roomId !== "string" || !roomId.startsWith(`${listingId}.`)) return reject("not a room of this house");
+    const pose = parsePose(m);
+    if (!pose) return reject("bad position");
+
+    if (kind === "place") {
+      if (typeof m.asset_id !== "string" || !ASSET_ID.test(m.asset_id)) return reject("unknown asset");
+      let count = 0;
+      for (const list of rooms.values()) count += list.length;
+      if (count >= MAX_PIECES_PER_HOUSE) return reject(`a house holds at most ${MAX_PIECES_PER_HOUSE} pieces`);
+      const list = rooms.get(roomId) ?? [];
+      rooms.set(roomId, list);
+      list.push({ instance_id: `${roomId}/m${++this.manualSeq}`, asset_id: m.asset_id, ...pose, reason: "", by_player: id });
+      return this.rebuildHouse(listingId);
+    }
+
+    // move: same room keeps the id; another room re-files it under that room.
+    const piece = found!.list[found!.index];
+    const moved = { ...piece, ...pose, reason: "", by_player: id };
+    if (found!.roomId === roomId) {
+      found!.list[found!.index] = moved;
+    } else {
+      found!.list.splice(found!.index, 1);
+      const list = rooms.get(roomId) ?? [];
+      rooms.set(roomId, list);
+      list.push({ ...moved, instance_id: `${roomId}/m${++this.manualSeq}` });
+    }
+    this.rebuildHouse(listingId);
+  }
+
+  private roomsOf(listingId: string) {
+    let rooms = this.roomPlans.get(listingId);
+    if (!rooms) this.roomPlans.set(listingId, (rooms = new Map()));
+    return rooms;
+  }
+
+  /** House.objects from every room of the house, rooms in first-furnished order. */
+  private rebuildHouse(listingId: string, planId?: string) {
+    const rooms = this.roomsOf(listingId);
     const house = new House();
     house.listing_id = listingId;
-    house.plan_id = planId; // latest plan for this house
+    // Latest plan for this house; manual edits keep it ("manual" if there never was one).
+    house.plan_id = planId ?? this.state.houses.get(listingId)?.plan_id ?? "manual";
     for (const roomObjects of rooms.values()) {
       for (const o of roomObjects) {
         const placed = new Placed();
@@ -237,5 +336,14 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
     }
     this.state.houses.set(listingId, house);
   }
+}
 
+type RoomPieces = Map<string, (PlanObject & { by_player: string })[]>;
+
+function findPiece(rooms: RoomPieces, instanceId: string) {
+  for (const [roomId, list] of rooms) {
+    const index = list.findIndex((o) => o.instance_id === instanceId);
+    if (index >= 0) return { roomId, list, index };
+  }
+  return null;
 }

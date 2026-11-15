@@ -48,6 +48,7 @@ import { useStore } from "../store";
 import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
 import { markAttack } from "./attackClock";
+import { buildActiveNow } from "../world/buildState";
 
 type Props = {
   ecctrl: RefObject<EcctrlHandle | null>;
@@ -230,7 +231,8 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     // live every frame, so a mode switch or a death lands within a frame.
     // Darts already in flight finish. Holding the trigger through a respawn
     // does not auto-fire: it must be pressed again.
-    if (!canAttackNow(foamModeNow(), meAliveNow())) triggerHeld.current = false;
+    // Build mode (manual furnishing): the left click places furniture instead.
+    if (!canAttackNow(foamModeNow(), meAliveNow()) || buildActiveNow()) triggerHeld.current = false;
     if (handle && triggerHeld.current) {
       const now = state.clock.elapsedTime;
       const weapon = useWeaponState.getState().weapon;

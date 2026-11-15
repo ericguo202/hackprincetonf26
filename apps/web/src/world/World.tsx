@@ -18,6 +18,7 @@ import { useStore } from "../store";
 import { Crosshair } from "../player/Crosshair";
 import { DoorPrompt } from "../player/DoorPrompt";
 import { WeaponBar } from "../player/WeaponBar";
+import { FurnishPanel } from "../ui/FurnishPanel";
 import { Player } from "../player/Player";
 import { BlockScene } from "./BlockScene";
 import { PHYSICS_PRIORITY } from "./frameOrder";
@@ -28,6 +29,7 @@ import {
   pressFrontDoor,
   roomIdAt,
   stepZone,
+  publishedRoot,
   type LoadedPack,
   type Vec3,
   type ZoneState,
@@ -86,6 +88,12 @@ export function World() {
       <Crosshair />
       <DoorPrompt />
       <WeaponBar />
+      {pack.status === "ready" ? (
+        <FurnishPanel
+          catalog={pack.pack.catalog}
+          packBaseUrl={pack.pack.base ? publishedRoot(pack.pack.base) : null}
+        />
+      ) : null}
       <PackBadge status={pack} />
     </>
   );

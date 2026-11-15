@@ -30,13 +30,14 @@ function fixed(v: number, decimals: number): string {
   return (r === 0 ? 0 : r).toFixed(decimals);
 }
 
+/** One piece at one pose: instance_id|asset_id|x|y|z|rot_deg. A moved or swapped piece gets a new key. */
+export function pieceKey(o: FurnitureLike): string {
+  return [o.instance_id, o.asset_id, fixed(o.x, 3), fixed(o.y, 3), fixed(o.z, 3), fixed(o.rot_deg, 1)].join("|");
+}
+
 /** Same furniture in any array, in any order, gives the same key. No house is "none". */
 export function furnitureKey(house: HouseLike | undefined | null): string {
   if (!house) return "none";
-  const parts = house.objects
-    .map((o) =>
-      [o.instance_id, o.asset_id, fixed(o.x, 3), fixed(o.y, 3), fixed(o.z, 3), fixed(o.rot_deg, 1)].join("|"),
-    )
-    .sort();
+  const parts = house.objects.map(pieceKey).sort();
   return `${house.plan_id}#${parts.join(";")}`;
 }

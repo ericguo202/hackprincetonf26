@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as Reac
 import { sendAgentMessage } from "../net/agent";
 import { useStore } from "../store";
 import { startLooking, stopLooking, useLooking } from "./pointerLock";
+import { useBuild } from "../world/buildState";
 
 const SUGGESTIONS = [
   {
@@ -35,6 +36,16 @@ export function ChatPanel() {
   const canSend = Boolean(sessionId) && !waiting;
   const started = messages.length > 0;
   const expanded = open && !looking;
+
+  // Build mode frees the cursor, which would expand this panel over the scene:
+  // fold it to the dock when building starts (T opens it again).
+  useEffect(
+    () =>
+      useBuild.subscribe((s, prev) => {
+        if (s.active && !prev.active) setOpen(false);
+      }),
+    [],
+  );
 
   useEffect(() => {
     log.current?.scrollTo(0, log.current.scrollHeight);

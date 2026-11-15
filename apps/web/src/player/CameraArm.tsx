@@ -3,6 +3,8 @@
 // the raycast and moving the three.js camera.
 //
 // Click the canvas to lock the pointer for mouse look (Esc releases it).
+// In build mode (manual furnishing) the pointer stays free and dragging on
+// the canvas looks around instead.
 // Scroll changes how far back the arm reaches. V pins the arm to zero for
 // explicit first person; scrolling out or pressing V again lets it back out.
 // Each zone starts with its own default (armDefaults): first person indoors,
@@ -21,6 +23,7 @@ import type { EcctrlHandle } from "ecctrl";
 import { PerspectiveCamera, Vector3, type Object3D } from "three";
 
 import { CAMERA_QUERY } from "../world/collisionGroups";
+import { DRAG_PX, buildActiveNow, buildHoldingNow } from "../world/buildState";
 import { CAMERA_PRIORITY } from "../world/frameOrder";
 import { CENTRE_ABOVE_FLOOR_M } from "./movement";
 import {
@@ -89,7 +92,8 @@ export function CameraArm({ ecctrl, body, onBodyHidden, zone, crouchedRef, initi
   useEffect(() => {
     const locked = () => document.pointerLockElement === canvas;
     const onClick = () => {
-      if (locked()) return;
+      // Build mode keeps the cursor free: clicks place furniture, drags look (below).
+      if (locked() || buildActiveNow()) return;
       // Promise in current browsers, undefined in older Safari; a rejection
       // (clicked again too soon after Esc) is harmless.
       const p = canvas.requestPointerLock() as Promise<void> | undefined;
@@ -99,8 +103,26 @@ export function CameraArm({ ecctrl, body, onBodyHidden, zone, crouchedRef, initi
       if (!locked()) return;
       look.current = applyLook(look.current.yaw, look.current.pitch, e.movementX, e.movementY);
     };
+    // Build mode: drag on the scene (either button) to look around, no pointer lock.
+    // Under DRAG_PX it is a click, which BuildController handles.
+    let drag: { x: number; y: number; dragging: boolean } | null = null;
+    const onDragStart = (e: PointerEvent) => {
+      if (locked() || !buildActiveNow() || (e.button !== 0 && e.button !== 2)) return;
+      drag = { x: e.clientX, y: e.clientY, dragging: false };
+    };
+    const onDragMove = (e: PointerEvent) => {
+      if (!drag) return;
+      if (!drag.dragging && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_PX) return;
+      drag.dragging = true;
+      look.current = applyLook(look.current.yaw, look.current.pitch, e.movementX, e.movementY);
+    };
+    const onDragEnd = () => {
+      drag = null;
+    };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      // Build mode: the wheel turns the held piece (BuildController), not the arm.
+      if (buildHoldingNow()) return;
       arm.current = scrollArm(arm.current, e.deltaY);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -108,11 +130,19 @@ export function CameraArm({ ecctrl, body, onBodyHidden, zone, crouchedRef, initi
       arm.current = toggleFirstPerson(arm.current);
     };
     canvas.addEventListener("click", onClick);
+    canvas.addEventListener("pointerdown", onDragStart);
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", onDragEnd);
+    window.addEventListener("blur", onDragEnd);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     document.addEventListener("mousemove", onMove);
     window.addEventListener("keydown", onKey);
     return () => {
       canvas.removeEventListener("click", onClick);
+      canvas.removeEventListener("pointerdown", onDragStart);
+      window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", onDragEnd);
+      window.removeEventListener("blur", onDragEnd);
       canvas.removeEventListener("wheel", onWheel);
       document.removeEventListener("mousemove", onMove);
       window.removeEventListener("keydown", onKey);

@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { BLASTER } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
 import { canAttackNow, useFoamMode, useMeAlive } from "./foamMode";
+import { useBuild } from "../world/buildState";
 
 function usePointerLocked(): boolean {
   const [locked, setLocked] = useState(() => document.pointerLockElement instanceof HTMLCanvasElement);
@@ -25,8 +26,12 @@ export function Crosshair() {
   const marker = useBlasterHud((s) => s.marker);
   const foam = useFoamMode();
   const alive = useMeAlive();
+  const building = useBuild((s) => s.active);
+  if (!locked) return null;
+  // Build mode aims furniture: the dot only, in the ghost's colour (no hit markers).
+  if (building) return <BuildDot />;
   // Explore mode or eliminated: no crosshair, no hit marker (foamMode.ts).
-  if (!locked || !canAttackNow(foam, alive)) return null;
+  if (!canAttackNow(foam, alive)) return null;
 
   return (
     <div style={wrap} aria-hidden>
@@ -43,6 +48,16 @@ export function Crosshair() {
           {marker.kind === "player" ? <X color="#ff4d4d" size={26} /> : <X color="#ffffff" size={16} />}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function BuildDot() {
+  const status = useBuild((s) => s.status);
+  const color = status ? (status.valid ? "#4ade80" : "#f87171") : "#ffffff";
+  return (
+    <div style={wrap} aria-hidden>
+      <div style={{ ...dot, background: color }} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { boot, type ColyseusTestServer } from "@colyseus/testing";
 import appConfig from "../src/app.config.ts";
 import {
+  FURNITURE_EDIT_INTERVAL_MS,
   FULL_HP,
   MAX_RANGE_M,
   MIN_FIRE_INTERVAL_MS,
@@ -204,6 +205,106 @@ describe("NeighborhoodRoom", () => {
       assert.strictEqual(await furnish("hou_999.r1", [obj("o1", "sofa")]), 400);
       assert.strictEqual(await furnish("", [obj("o1", "sofa")]), 400);
       assert.deepStrictEqual(ids(), []);
+    });
+  });
+
+  describe("manual furnishing", () => {
+    const HOUSE = "hou_236595179";
+    const R1 = `${HOUSE}.r1`;
+    const R2 = `${HOUSE}.r2`;
+    const GAP = FURNITURE_EDIT_INTERVAL_MS + 30;
+    const place = (over: Record<string, unknown> = {}) => ({
+      listing_id: HOUSE,
+      room_id: R1,
+      asset_id: "sofa_abo_B072C8Q9RF",
+      x: 1,
+      y: 0,
+      z: 2,
+      rot_deg: 90,
+      ...over,
+    });
+
+    /** One player inside HOUSE (zone set), and helpers over that house's pieces. */
+    async function inside() {
+      const room = await colyseus.createRoom("neighborhood", { block_id: BLOCK });
+      const client = await colyseus.connectTo(room, { name: "ana" });
+      client.send("enter_zone", { zone: HOUSE });
+      await room.waitForNextPatch();
+      const objects = () => room.state.houses.get(HOUSE)?.objects.map((o) => ({ ...o.toJSON() })) ?? [];
+      const toasts: string[] = [];
+      client.onMessage("toast", (m: { text: string }) => toasts.push(m.text));
+      const send = async (type: "furniture_place" | "furniture_move" | "furniture_remove", payload: Record<string, unknown>) => {
+        client.send(type, payload);
+        await room.waitForNextPatch();
+        await sleep(GAP);
+      };
+      return { room, client, objects, toasts, send };
+    }
+
+    it("places a piece with a game-made id in the room, by the sender", async () => {
+      const { client, objects, send, room } = await inside();
+      await send("furniture_place", place({ rot_deg: -90 }));
+      const [o] = objects();
+      assert.match(o.instance_id, new RegExp(`^${R1.replace(".", "\\.")}/m\\d+$`));
+      assert.strictEqual(o.asset_id, "sofa_abo_B072C8Q9RF");
+      assert.strictEqual(o.rot_deg, 270);
+      assert.strictEqual(o.by_player, client.sessionId);
+      assert.strictEqual(o.reason, "");
+      assert.strictEqual(room.state.houses.get(HOUSE)?.plan_id, "manual");
+    });
+
+    it("moves and rotates an agent-placed piece in place, clearing its reason", async () => {
+      const { objects, send, room } = await inside();
+      room.applyPlan(HOUSE, R1, "p_agent", [{ instance_id: "o1", asset_id: "tv", x: 0, y: 0, z: 0, rot_deg: 0, reason: "faces couch" }], "agent");
+      await send("furniture_move", { listing_id: HOUSE, instance_id: `${R1}/o1`, room_id: R1, x: 2, y: 0, z: 3, rot_deg: 45 });
+      const [o] = objects();
+      assert.deepStrictEqual([o.instance_id, o.x, o.z, o.rot_deg, o.reason], [`${R1}/o1`, 2, 3, 45, ""]);
+      assert.strictEqual(room.state.houses.get(HOUSE)?.plan_id, "p_agent");
+    });
+
+    it("re-files a piece moved into another room under that room", async () => {
+      const { objects, send } = await inside();
+      await send("furniture_place", place());
+      const id = objects()[0].instance_id;
+      await send("furniture_move", { listing_id: HOUSE, instance_id: id, room_id: R2, x: 5, y: 0, z: 5, rot_deg: 0 });
+      const all = objects();
+      assert.strictEqual(all.length, 1);
+      assert.ok(all[0].instance_id.startsWith(`${R2}/m`));
+    });
+
+    it("removes a piece; an agent re-furnish of the room replaces hand-placed pieces", async () => {
+      const { objects, send, room } = await inside();
+      await send("furniture_place", place());
+      await send("furniture_place", place({ room_id: R2 }));
+      await send("furniture_remove", { listing_id: HOUSE, instance_id: objects()[1].instance_id });
+      assert.strictEqual(objects().length, 1);
+      room.applyPlan(HOUSE, R1, "p_play", [{ instance_id: "o1", asset_id: "beanbag", x: 0, y: 0, z: 0, rot_deg: 0, reason: "" }], "agent");
+      assert.deepStrictEqual(objects().map((o) => o.instance_id), [`${R1}/o1`]);
+    });
+
+    it("rejects edits from outside the house, bad rooms, bad poses and bad asset ids, with a toast", async () => {
+      const { objects, client, send, toasts, room } = await inside();
+      await send("furniture_place", place({ listing_id: "hou_237901269", room_id: "hou_237901269.r1" }));
+      await send("furniture_place", place({ room_id: "hou_999.r1" }));
+      await send("furniture_place", place({ x: Number.NaN }));
+      await send("furniture_place", place({ x: 500 }));
+      await send("furniture_place", place({ asset_id: "../../etc" }));
+      await send("furniture_move", { listing_id: HOUSE, instance_id: "nope", room_id: R1, x: 0, y: 0, z: 0, rot_deg: 0 });
+      assert.deepStrictEqual(objects(), []);
+      assert.strictEqual(toasts.length, 6);
+      client.send("enter_zone", { zone: "block" });
+      await room.waitForNextPatch();
+      await send("furniture_place", place());
+      assert.deepStrictEqual(objects(), []);
+    });
+
+    it("rate-limits edits to one per FURNITURE_EDIT_INTERVAL_MS", async () => {
+      const { objects, client, room } = await inside();
+      client.send("furniture_place", place());
+      client.send("furniture_place", place({ x: 3 }));
+      await room.waitForNextPatch();
+      await sleep(50);
+      assert.strictEqual(objects().length, 1);
     });
   });
 

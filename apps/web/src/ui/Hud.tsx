@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { setMode } from "../net/game";
 import { useStore } from "../store";
 import { Broadcasts } from "./Broadcasts";
+import { useBuild } from "../world/buildState";
 
 export function Hud() {
   const mode = useStore((s) => s.mode);
@@ -10,6 +11,8 @@ export function Hud() {
   const players = useStore((s) => s.players);
   const hasHomes = useStore((s) => s.listings.length > 0);
   const [board, setBoard] = useState(false);
+  const building = useBuild((s) => s.active);
+  const inHouse = me.zone !== "block";
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -36,10 +39,23 @@ export function Hud() {
         >
           {mode === "foam" ? "Foam on" : "Foam fight"}
         </button>
+        {inHouse ? (
+          <button
+            type="button"
+            className={building ? "on" : ""}
+            title="Furnish this house yourself: pick pieces from the library and place them (G)"
+            onClick={() => useBuild.getState().toggle()}
+          >
+            {building ? "Furnishing" : "Furnish by hand"}
+          </button>
+        ) : null}
         <span>
           {mine ? `${mine.score} pts · ${mine.hp} hp` : me.zone === "block" ? "On the block" : me.zone}
         </span>
-        <span className="hud-keys">T concierge · Esc play · Tab scores{hasHomes ? " · H homes" : ""}</span>
+        <span className="hud-keys">
+          T concierge · Esc play · Tab scores{inHouse ? " · G furnish" : ""}
+          {hasHomes ? " · H homes" : ""}
+        </span>
       </div>
       {board ? (
         <div className="scoreboard">

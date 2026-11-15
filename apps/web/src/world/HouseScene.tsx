@@ -10,6 +10,7 @@ import { Shape, type Object3D } from "three";
 
 import type { Point2, Room } from "../contracts.gen";
 import { FurnitureLayer } from "./FurnitureLayer";
+import { BuildController } from "./BuildController";
 import { disableToneMapping } from "./interiorMaterials";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { extractWallBoxes, splitClosedDoors } from "./doorSplit";
@@ -119,6 +120,8 @@ export function HouseScene({ pack, listingId }: Props) {
           <FurnitureLayer catalog={pack.catalog} rooms={rooms} packBaseUrl={base ? publishedRoot(base) : null} />
         </Suspense>
       </LoadBoundary>
+      {/* Manual furnishing (build mode): ghost, picking, place/move/remove. */}
+      <BuildController listingId={listingId} rooms={rooms} catalog={pack.catalog} packBaseUrl={base ? publishedRoot(base) : null} />
     </>
   );
 }

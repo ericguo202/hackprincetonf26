@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { buildActiveNow } from "../world/buildState";
 
 /** True while the game canvas owns mouse look (clicks do not hit the overlay). */
 export function looking(): boolean {
@@ -22,7 +23,8 @@ export function stopLooking(): void {
 /** Resume mouse look. Call from a user gesture (click, key) so the browser allows it. */
 export function startLooking(): void {
   const canvas = document.querySelector("canvas");
-  if (!canvas || looking()) return;
+  // Build mode keeps the cursor free (world/buildState.ts).
+  if (!canvas || looking() || buildActiveNow()) return;
   const p = canvas.requestPointerLock() as Promise<void> | undefined;
   p?.catch(() => {});
 }

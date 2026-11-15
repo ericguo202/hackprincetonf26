@@ -1,4 +1,4 @@
-# Game service messages (contracts v2.4.5)
+# Game service messages (contracts v2.6.0)
 
 Colyseus 0.18, one room type `NeighborhoodRoom` keyed by `block_id`, up to 16 players.
 Shared state schema: `game-state.ts`. Positions are in the player's current zone frame
@@ -13,6 +13,9 @@ Shared state schema: `game-state.ts`. Positions are in the player's current zone
 | `fire`       | `{origin: [x,y,z], dir: [x,y,z], target_id?, weapon?}` | Foam mode only. Hit counts only if both alive, same zone, under the weapon's fire rate, in range, origin within 1.5 m of last position (rules below) |
 | `set_mode`   | `{mode: "explore" or "foam"}`                  | Host toggle                                                   |
 | `chat`       | `{text}`                                       | Relayed to the room                                           |
+| `furniture_place`  | `{listing_id, room_id, asset_id, x, y, z, rot_deg}` | Manual furnishing (v2.6.0, rules below): add one piece to that room |
+| `furniture_move`   | `{listing_id, instance_id, room_id, x, y, z, rot_deg}` | Manual furnishing: move or rotate one existing piece (agent-placed or hand-placed) |
+| `furniture_remove` | `{listing_id, instance_id}`                    | Manual furnishing: remove one existing piece                  |
 
 Teleport window (v2.4.1): for 1.5 s (`TELEPORT_GRACE_MS` in `apps/game`) after
 a join, a reconnect, an `enter_zone` that changes the zone, or an agent `focus`
@@ -41,6 +44,37 @@ Every accepted `fire` counts toward the rate limit, misses included, and is
 sent to the other players (not the shooter) as `fx {kind: weapon, origin, dir}`.
 A rejected hit does no damage but the accepted shot still sends `fx`. Line of
 sight through walls and furniture is not checked on the server (stretch).
+
+Manual furnishing (v2.6.0). A player furnishes the house they are standing in
+by hand: pick a catalog asset, place it, move, rotate or remove any piece,
+whoever placed it. The edit goes into the same per-room furniture the agent's
+plans use (below), so every player in the house sees it and its collider. The
+client checks the geometry before sending (footprint inside the house's rooms,
+no overlap with other pieces); the game does not load packs, so it checks only
+the shape of the message:
+
+- the sender's `zone` equals `listing_id`, and `room_id` is a room of that
+  listing (`<listing_id>.<n>`); a piece belongs to the room holding its centre
+- `asset_id` is 1 to 96 characters of `[A-Za-z0-9_.-]` (a catalog id; the game
+  does not read the catalog)
+- `x, y, z, rot_deg` are finite; `|x|` and `|z|` at most 200 m, `y` between -20
+  and 50 m; `rot_deg` is stored normalized to `[0, 360)`. `y` is the floor
+  height of the room, plus `mount_y_m` for wall-mounted assets, or the top of
+  the piece below for an `on_surface` asset
+- at most 10 furniture edits per second per player, and at most 150 pieces per
+  house
+- any mode (`explore` or `foam`): changing the map mid-match is the point
+
+A failed check drops the edit and sends `toast {text}` to the sender only.
+`furniture_place` gets a game-made `instance_id` (`"<room_id>/m<n>"`),
+`reason` empty and `by_player` the sender. `furniture_move` keeps the
+`instance_id` when the piece stays in its room; a move into another room
+re-files it under that room with a new id. A move clears `reason` (the agent's
+reason no longer holds) and sets `by_player` to the mover. An unknown
+`instance_id` is dropped. A later agent plan for a room replaces that room's
+pieces, hand-placed ones included (last write wins, as for plans).
+`House.plan_id` is not changed by manual edits (`"manual"` for a house
+furnished only by hand).
 
 ## Game -> client broadcasts (besides state patches)
 

@@ -16,8 +16,16 @@
 // On every plan change: the old pieces unmount (no ghost colliders), the
 // local player is pushed out of anything that landed on them (the physics
 // body itself, via playerControl), and indoor spawns are recomputed.
+//
+// Pieces are keyed one by one on their pose (furnitureKey.pieceKey), so a
+// manual edit (messages.md v2.6.0) remounts only the piece that moved: it
+// gets a fresh RigidBody at the new pose and the rest of the room stays put.
+// Only pieces new to this render drop in, staggered among themselves; a
+// hand-placed or hand-moved piece (empty reason) settles from a short height.
+// While this player carries a piece in build mode (buildState), that piece
+// is hidden here, collider included; everyone else still sees it.
 
-import { Suspense, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group } from "three";
@@ -31,6 +39,8 @@ import { LoadBoundary } from "./Glb";
 import { useMeshState } from "./meshProbe";
 import { WorldLabel } from "./WorldLabel";
 import { footprints } from "./furniturePlan";
+import { pieceKey } from "./furnitureKey";
+import { hiddenLocally, useBuild } from "./buildState";
 import { useFurnitureLayout, useStableFurniture } from "./useFurniturePlan";
 import { useIndoorSpawns } from "./indoorSpawns";
 import { warnOnce } from "./pack";
@@ -53,6 +63,8 @@ type Props = {
 
 const DROP_S = 0.45;
 const DROP_FROM_M = 1.2;
+/** A hand-placed piece settles from just above the ghost, not from the ceiling. */
+const SHORT_DROP_M = 0.15;
 const STAGGER_S = 0.12;
 /** Thinner than this (a rug) gets no collider: nothing to stop. */
 const MIN_COLLIDER_H = 0.05;
@@ -72,6 +84,14 @@ const BOX_COLORS: Record<string, string> = {
   plant: "#6f9a5e",
   beanbag: "#d97b4a",
 };
+
+/**
+ * zone -> pose keys of the pieces drawn there last, written after each commit.
+ * Module-level (one local player, one FurnitureLayer): a piece is "new", and
+ * drops in, only if its key was not drawn before. Re-entering a house redraws
+ * from scratch, so the drop-in plays again there.
+ */
+const drawnKeys = new Map<string, Set<string>>();
 
 function FallbackBox({ asset }: { asset: Asset }) {
   const { w, d, h } = asset.size_m;
@@ -115,15 +135,18 @@ function FurniturePiece({
   url,
   index,
   showLabel,
+  dropFrom,
 }: {
   obj: PlacedObject;
   asset: Asset;
   url: string | null;
+  /** Position among the pieces that arrived in the same render (stagger), or -1: no drop at all. */
   index: number;
   showLabel: boolean;
+  dropFrom: number;
 }) {
   const group = useRef<Group>(null);
-  const elapsed = useRef(-index * STAGGER_S);
+  const elapsed = useRef(index < 0 ? DROP_S + 1 : -index * STAGGER_S);
   const { w, d, h } = asset.size_m;
   const box = <FallbackBox asset={asset} />;
   // Probe before loading: a missing .glb never reaches the loader (meshProbe.ts).
@@ -134,7 +157,7 @@ function FurniturePiece({
     elapsed.current += Math.min(dt, 0.1);
     const t = Math.min(1, Math.max(0, elapsed.current / DROP_S));
     const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
-    group.current.position.y = (1 - e) * DROP_FROM_M;
+    group.current.position.y = (1 - e) * dropFrom;
     group.current.scale.setScalar(0.92 + 0.08 * e);
   });
 
@@ -153,7 +176,7 @@ function FurniturePiece({
         />
       ) : null}
       {/* Starts up in the air; useFrame drops it in. The collider above does not move. */}
-      <group ref={group} position-y={DROP_FROM_M}>
+      <group ref={group} position-y={index < 0 ? 0 : dropFrom}>
         {url && mesh === "ok" ? (
           <LoadBoundary url={url} label={asset.file} fallback={box}>
             <Suspense fallback={box}>
@@ -193,30 +216,46 @@ export function FurnitureLayer({ catalog, rooms, packBaseUrl, showLabels = true 
     onPushedInto: (roomId) => setMe({ roomId }),
   });
 
+  // Pose keys already drawn in this zone: only pieces new to a render drop in.
+  const keys = useMemo(() => objects.map(pieceKey), [objects]);
+  const drawn = drawnKeys.get(zone);
+  useEffect(() => {
+    drawnKeys.set(zone, new Set(keys));
+  }, [zone, keys]);
+  useEffect(() => () => void drawnKeys.delete(zone), [zone]);
+
+  // Build mode: the piece I carry, or just moved, is hidden here until its new pose arrives.
+  const held = useBuild((s) => s.held);
+  const active = useBuild((s) => s.active);
+  const pending = useBuild((s) => s.pending);
+
   if (zone === "block" || objects.length === 0) return null;
   if (packBaseUrl === null) {
     warnOnce("furniture-nomesh", "[furniture] no pack base URL: every piece renders as a labelled box");
   }
 
-  // key={contentKey} tears down every RigidBody whenever the furniture changes,
-  // including a re-furnish that reuses a plan_id, and never on an identical
-  // patch. Mutating positions in place leaves stale colliders, which shows up
-  // as darts stopping in mid-air where the old couch used to be.
+  let fresh = 0;
   return (
-    <group key={contentKey}>
+    <group>
       {objects.map((o, i) => {
         const asset = catalog[o.asset_id];
         if (!asset) {
           warnOnce(`noasset:${o.asset_id}`, `[furniture] no catalog entry for ${o.asset_id}; skipping it`);
           return null;
         }
+        const key = keys[i];
+        if (hiddenLocally({ active, held, pending }, o.instance_id, key)) return null;
+        const isNew = !drawn?.has(key);
         return (
+          // key = instance + pose: a moved piece is a new RigidBody, never a
+          // collider mutated in place (stale colliders stop darts in mid-air).
           <FurniturePiece
-            key={o.instance_id}
+            key={key}
             obj={o}
             asset={asset}
             url={packBaseUrl === null ? null : `${packBaseUrl}/${asset.file}`}
-            index={i}
+            index={isNew ? fresh++ : -1}
+            dropFrom={o.reason ? DROP_FROM_M : SHORT_DROP_M}
             showLabel={showLabels}
           />
         );

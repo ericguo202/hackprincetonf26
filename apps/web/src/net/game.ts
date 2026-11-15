@@ -5,6 +5,7 @@ import type { GameMode } from "../../../../contracts/game-state";
 import type { FirePayload } from "../player/blasterMath";
 import { useStore } from "../store";
 import { applyBroadcast, BROADCAST_TYPES } from "./broadcasts";
+import { applyLocalEdit, type FurnitureEdit } from "./furnitureEdits";
 import { mirrorState, type StateJSON } from "./mirror";
 
 const GAME_URL = import.meta.env.VITE_GAME_URL ?? "ws://localhost:2567";
@@ -54,4 +55,20 @@ export function sendFire(p: FirePayload) {
 export function setMode(mode: GameMode) {
   if (room) room.send("set_mode", { mode });
   else useStore.getState().set({ mode });
+}
+
+/**
+ * Manual furnishing (messages.md v2.6.0): one place / move / remove for the
+ * house I am in. The piece reaches every player (me included) through the
+ * next state patch. Without a game server (SOLO, or offline in dev) the same
+ * edit is applied to the local store instead.
+ */
+export function sendFurnitureEdit(edit: FurnitureEdit) {
+  const s = useStore.getState();
+  if (room) {
+    room.send(edit.type, edit.payload);
+    return;
+  }
+  const houses = applyLocalEdit(s.houses, edit, s.me.id ?? "solo");
+  if (houses) s.set({ houses });
 }
