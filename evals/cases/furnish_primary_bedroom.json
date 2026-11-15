@@ -1,6 +1,6 @@
 {
   "id": "furnish_primary_bedroom",
-  "description": "Bedroom skill: bed head against a wall, nightstands",
+  "description": "furnish-bedroom: bed sized to the room, head against a wall, nightstands beside it",
   "zone": "hou_236595179",
   "turns": [
     {
