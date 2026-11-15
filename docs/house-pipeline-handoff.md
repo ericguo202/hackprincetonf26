@@ -1,10 +1,131 @@
 # Handoff: turning Matterport scans into playable house maps (Lane A)
 
-Written 2026-11-14 at the end of a long session, for the next coding agent working on the house pipeline. Read `AGENTS.md` first (sections 3, 7, 9 and 11 matter most here), then this file.
+**This is the one document for the house pipeline: the inside of each house (Matterport scan to `interior.glb`, `collision.glb`, `rooms.json`, `graph.json`) and its scanned lot outdoors (yard, facades, roof, fences, trees, backdrop).** Any agent working on `worldgen/build_house.py`, `rebake.py`, `panos.py`, `exterior.py`, `aerial.py`, `roof.py`, `fences.py`, `vegetation.py`, `worldgen/overrides/`, `worldgen/scripts/preview/` or a house pack must read section 0 before writing code, and keep this file current in the same commit as any change to a heuristic, threshold, ranked list or decision. Read `AGENTS.md` first (sections 3, 7, 9, 11). The block (the street around the houses) is a separate pipeline, `worldgen/build_block.py` and `block_*.py`, not covered here.
 
-Updated 2026-11-14 by a second session (branch `lane-a/house-quality`): wall-attached fixtures become clean boxes, open doors become slabs, hanging fans are removed, unseen walls fall back to the scan's texture, and quality is now judged from views away from the scan positions. Section 3.6 is the log of that session; sections 3.4, 4, 5, 6, 7 and 9 were brought up to date. Section 3.7 is its second round (same day): one photo per box face, texture synthesis for what no camera saw, the bar ledge, toilets left as scan. Section 3.8 is its third round: nothing may be missing (see-through pillars, half toilets, wall ends, the wall under a bar ledge) and hand removal of clutter.
+Written by three sessions on 2026-11-14 and brought up to date on 2026-11-15. Section 0 is the summary and the rules; sections 1 to 10 are the full record (3.4 the method step by step, 3.6 to 3.10 each session's log with "tried and changed" tables, 4 known problems ranked, 5 improvements ranked, 6 measuring, 7 adding a property, 9 gotchas, 10 pack versions).
 
-The goal of this work: given any Matterport model of a home, produce a house pack that feels like walking through the real house (as close to Matterport's own viewer as possible), with straight walls and clean doorways, collision that plays well in a nerf fight, and room data the furnishing agent can use. The current result is good on both demo houses. This document records exactly what was built, what was tried and rejected and why, how quality is measured, and a ranked list of what to improve next so the pipeline keeps getting better and works on new properties.
+---
+
+## 0. Start here
+
+### 0.1 The goal and the bar
+
+Given any Matterport model of a home, produce a house zone that feels like walking through the real house and its yard: "as close to Matterport's own viewer as possible", "playable outdoor areas that look just as good as the Matterport", straight walls and clean doorways, collision that plays well in a nerf fight, room data the furnishing agent can use. **The house must look right from anywhere a player stands, not only from where the scanner stood: nothing see-through, clipped, missing, shattered or floating.** Every room and every corner of the yard counts, not only the scripted demo path (the user, 2026-11-14: "wouldn't we want players to be able to explore all rooms possible?"). The method must work on a new scan with few hand tweaks, so every heuristic and threshold is written down here.
+
+### 0.2 Where things stand (2026-11-15)
+
+- **All house work is merged into `main`** (fast-forward to 0429cc2 on 2026-11-15; history in sections 3.6 to 3.10). Work continues on branch `lane-a/combined-quality`, worktree `/Users/pfu/hp-combined-quality` (shared data: section 1). Rebase it onto `main` before every merge (0.5).
+- **Packs** (`worldgen/out/packs/hou_navidad_01/`; `uv run python -m worldgen.versions status hou_navidad_01` is the source of truth):
+
+  | Version | What | Status |
+  |---|---|---|
+  | v1 | First-session houses (panorama-textured interiors, no lot) | old live |
+  | v2 | v1's houses byte for byte + the block (lane-a/block-combined) + furniture v2 | old live |
+  | v3 | v2 + furniture v3 | **LIVE** (pinned in `worldgen/blocks/hou_navidad_01.json`) |
+  | v4 | v3's block and furniture byte for byte + the **v43 houses** | built, **not live**: waits for Lane C (HANDOFF 23:55: drop the placeholder `HouseGround` slab, move the leave-the-house trigger off the front door) |
+  | v10 | Second-session interior only (3.6 to 3.8) | reference |
+  | v40, v41 | Outdoors on the first-session interior; first combined candidate | superseded |
+  | **v43** | **Current house candidate**: second-session interior + lot + third-session roofs, trees, fences (3.10) | audited, `quality.json` per house |
+  | v9, v95 | Old copy of v10; another session's pack (its manifest fails `contracts/validate.py`) | not ours to delete without asking |
+
+- **Measured** (lower score is better; section 6 says why the score is a regression alarm, not a judge):
+
+  | | 7014 v1/v2/v3 | 7014 v43 | 6915 v1/v2/v3 | 6915 v43 |
+  |---|---|---|---|---|
+  | Indoor mean abs error / p95 / bad / holes | 14.07 / 53.3 / 3.83% / 0.09% | 14.93 / 57.3 / 4.55% / 0.04% | 14.76 / 59.0 / 4.82% / 0.01% | 13.20 / 53.3 / 3.90% / 0.00% |
+  | Outdoor mean abs error | no lot | 33.45 | no lot | 25.57 |
+  | interior.glb / collision.glb | 5.0 MB / 94 KB | 15.9 MB / 771 KB | 3.5 MB / 136 KB | 11.4 MB / 1.02 MB |
+  | Outside doors open (`door_check.py`) | 0 | 2 (front, back) | 0 | 2 |
+
+  7014's indoor rise is only the cameras that look out of the opened doors (the photos show those doors closed). `rooms.json` and `graph.json` are identical between v1 and v43; the house-local frame is unchanged (floor at y = 0, Matterport origin and axes).
+- **Not verified yet:** the houses in the real game client (`apps/web`). Everything was checked in ray-traced renders and the QA viewer (`worldgen/viewer`, three.js, headless walk test passes).
+- **The user directs the next improvements** (2026-11-15: "I will tell you how to improve those houses, don't start without me"). Do not start a new round of changes on your own; propose from 0.7 and section 5 and wait.
+
+### 0.3 The pipeline in one page
+
+`build_house.build` (one house; about 12 to 20 minutes with the lot):
+1. **Rooms, doors, graph** from Matterport's floor plan (`read_rooms`, hand splits from `overrides/<model>.json`, doors located by rays across each wall: 3.4 steps 1 to 4).
+2. **Interior** (`rebake.write_rebaked_interior_glb`): walls, floors and ceilings are clean planes from the plan; vaulted ceilings stay scan and their walls stop at the scanned ceiling; fixtures flat against a wall become boxes (relief maps), open doors slabs, bar ledges slabs with risers; fans removed with stand-in solids for line of sight; everything else stays scan; every texel coloured from the skybox panoramas (planes: per-texel blend of views; box faces: one photo per face); what no camera saw takes colour and grain from the same surface (3.4 steps 5 to 13, 3.6 to 3.8).
+3. **Outdoors** (`exterior.add_exterior`, through the `extra` hook just before export): ground heightfield from rays cast upward, facades moved onto the scanned wall face, the **roof fitted to Vexcel's surface model** (`aerial.py`, `roof.py`) with measured eaves and porch ceilings, **fence panels** (`fences.py`), **tree and shrub models** (`vegetation.py`), the remaining outdoor scan pieces, a 45 m backdrop dome and ground disk, front and back doors opened (3.9, 3.10).
+4. **Compress and collision** (`house_mesh.compress_glb`: unlit, meshopt, WebP; `write_collision_glb`: plan walls, floors, boxes, kept scan, plus `ground`, `outdoor`, `bounds`).
+
+Packing the houses with the live block and furniture is not this pipeline: `build_block.py --houses-from <version>` copies `houses/` unchanged (main, 2026-11-15). `costar.py` sets `Listing.world.position` y from the live block's ground at each front door.
+
+### 0.4 Decisions the user made (do not re-open them without the user)
+
+| Date | Decision |
+|---|---|
+| 2026-11-14 | Hero house is **7014 Navidad Rd** (`hou_236595179`, Matterport `y1cVPR1HsnL`, demo room `hou_236595179.r3`); 6915 (`hou_237901269`, `xpspAtb5H59`) is the second house. Both must keep building. |
+| 2026-11-14 | Bathrooms must be reachable in both houses; door widths are real measurements and are not widened (Lane C shrank the capsule to 0.25 m). Closets need not be reachable. |
+| 2026-11-14 | House zone = house + its scanned lot, same house-local frame and same files (new nodes, no contract change). Past the scan's edge: a panorama backdrop, not the Vexcel block. |
+| 2026-11-14 | Front and back doors open for play; the garage door stays shut. |
+| 2026-11-14 | Trees: fine to cut the scanned canopies; replace them with models that fill the same space. Use the other data layers (Vexcel) to fill in roofs and the outdoors. |
+| 2026-11-14 | Every room and yard corner matters; never deprioritise something because it is "not in the demo" (ordering work along the demo path is fine; say it as an order). |
+| 2026-11-15 | All house work merged into `main`; the user tells the agent what to improve next. |
+
+**Open questions (ask, do not decide):** (1) unscanned side yards (7014's south strip): fence them off, or keep them walkable with plain walls (current); (2) where players leave the house zone now that the front door opens onto the yard (with Lane C; HANDOFF 18:24, 23:55); (3) a roof texture for 7014: another Vexcel capture date (billed, one call per try) or a tiled CC0 shingle texture tinted to the photographed colour; (4) GPU memory (33 and 28 texture pages of 2048 px): lower outdoor resolution, xatlas charts, or a separate `exterior.glb` (a manifest contract change, all four lanes).
+
+### 0.5 Ground rules for agents on this pipeline
+
+- **Your own git worktree** on a `lane-a/<topic>` branch (or `lane-a/combined-quality`), never the main checkout. New worktree: `git worktree add -b lane-a/<topic> /Users/pfu/hp-<topic> origin/main`, then symlink `worldgen/out` and `.env` from `/Users/pfu/hackprincetonf26` into it, `cd worldgen && uv sync && npm i`. Never touch other agents' worktrees or branches (`git worktree list`).
+- **`worldgen/out` is one folder shared by every worktree**, and several agents build into it at once. Build only into your own versions: **house experiments v44 to v69** (v40 to v43 are taken), interior-only experiments 11 to 39, scratch 90 to 99; delete scratch when done. **Never write into v1 to v4**, never edit `worldgen/blocks/hou_navidad_01.json`, `apps/web/public/packs/` or `render.yaml`, never pin or publish unless the user asks.
+- **Stop your own processes by PID only** (never `pkill -f`): it once killed another session's builds. `python -m worldgen.exterior` must always get `--dest`: its default output is read by the block builder.
+- **Matterport is read-only** (`worldgen/sources/matterport.py`, never unlock or buy, never log signed URLs). **Vexcel is billed**: everything here uses cached rasters; ask the user before any new call. Secrets stay in `.env`.
+- **Baseline before a change, re-score and look after it.** Never judge from the panorama positions or the score alone (section 6): look from places no camera stood (0.6). Run `compare_panos.py` after any change that moves a score, and look at the side-by-side of every camera that moves by more than 3.
+- **Before each commit**, from `worldgen/` (unset `VIRTUAL_ENV` if uv warns): `uv run pytest`, `uv run ruff check .`, `uv run python ../contracts/validate.py out/packs/hou_navidad_01` (one known error from v95). Format only the files you changed (never `ruff format .`). Never commit `worldgen/worldgen.egg-info/*`. Commit messages start with `lane-a:`.
+- **Commit and push only when the user asks.** Merging into main (the user's procedure, 2026-11-15): commit open work; `git fetch origin && git rebase --rebase-merges origin/main` (the branch carries merge commits); on a `HANDOFF.md` conflict keep main's file plus your branch-only lines, each placed after the last main line with an earlier or equal time (`HANDOFF.md` is append-only); check `git diff origin/main...HEAD --stat` touches only `worldgen/`, `docs/`, `HANDOFF.md` (stop and ask otherwise); run the checks; from the main checkout `git pull --ff-only && git merge --ff-only lane-a/combined-quality && git push origin main`, push the branch (`--force-with-lease` after a rebase); if main moved meanwhile, rebase again, never a merge commit.
+- **Going live:** tell the user the candidate's version number; Lane A packs it with the live block and furniture into the next pack version (`build_block.py --houses-from N`) and pins it under the promotion rule (section 10). Post a dated `HANDOFF.md` line whenever another lane is affected (new node names, collision changes, sizes).
+
+### 0.6 The working loop
+
+From `worldgen/` in your worktree:
+
+```
+# quick: bake only some rooms (about 1 min), or only some outdoor parts (1 to 3 min)
+uv run python scripts/preview/bake_rooms.py hou_navidad_01 hou_236595179 out/cache/glb/<you>/rooms.glb r3 r4
+uv run python -m worldgen.exterior --block hou_navidad_01 --listing=hou_236595179 --parts roof,facade,yard --dest out/cache/glb/<you>/ext.glb
+# full build of a house into your version (background; about 12 to 20 min each)
+uv run python -m worldgen.build_house --block hou_navidad_01 --listing=hou_236595179 --version 44
+uv run python -m worldgen.audit --block hou_navidad_01 --version 44
+# checks, right after your own build (the scorer reads out/cache/glb/<model>_interior_pano_v<N>.glb)
+G=out/cache/glb/y1cVPR1HsnL_interior_pano_v44.glb
+uv run python scripts/preview/render_compare.py --score $G out/cache/matterport/y1cVPR1HsnL.json out/raw/y1cVPR1HsnL/skybox_2k
+OUTDOOR=1 uv run python scripts/preview/render_compare.py --score $G out/cache/matterport/y1cVPR1HsnL.json out/raw/y1cVPR1HsnL/skybox_2k
+uv run python scripts/preview/compare_panos.py out/cache/glb/y1cVPR1HsnL_interior_pano_v43.glb $G out/cache/matterport/y1cVPR1HsnL.json out/raw/y1cVPR1HsnL/skybox_2k [--outdoor]
+uv run python scripts/preview/room_views.py $G out/packs/hou_navidad_01/v44/houses/hou_236595179/rooms.json <dir> [r3 r4 ...]   # TINT=1: raw scan in magenta
+uv run python scripts/preview/door_check.py out/packs/hou_navidad_01/v44 hou_236595179 [--all]
+uv run python scripts/preview/render_compare.py $G out/cache/matterport/y1cVPR1HsnL.json out/raw/y1cVPR1HsnL/skybox_2k <out.jpg> <pano label>   # render next to the real photo
+python3 ../worldgen/viewer/serve.py --port <free port>   # from the repo root of your worktree; ?pack=hou_navidad_01/v44&house=hou_236595179
+```
+
+Spell out paths in zsh (an unquoted `$VAR` holding two paths is not split, and the scorer then fails silently). macOS has no `timeout`. The headless viewer walk test: `npm i --prefix <scratch> playwright-core@1.52.0`, then `PW_CORE=<scratch>/node_modules/playwright-core node scripts/preview/viewer_walk.mjs "<viewer url>" [out_prefix]`.
+
+**Standard free views** (`scripts/preview/freeview.py <glb> <out.jpg> "eye;look;fov" ...`, Matterport plan coordinates x, y, z; house-local is (x, z = -y)):
+- 7014: street `"24,3,1.6;5,4,2.2;75"`; walk-up to the front door `"13,4.5,1.6;5.4,4.5,1.4;70"`; inside the entry alcove `"8.5,4.6,1.6;5.4,4.5,1.5;75"`; driveway close-up `"22,-1,1.7;18.5,2.7,0.5;60"`; far back-yard corner `"-13,13,1.6;3,4,1.8;75"`; the user's two back-yard positions `"-14.8,12.6,1.7;0,5,2.5;80"` and `"-9.4,11.4,1.7;-16,18,2;80"`; back porch from its camera `"-3.0,3.5,1.5;-10,8,2.6;90"`; back of the house `"-9,10,1.7;0,5,2.8;70"`; south side strip `"-3,-5,2.0;3,0,1.5;80"`; from above `"18,-8,10;3,3,2.5;55"`.
+- 6915: front yard `"-14.9,-8.8,1.7;0,-2,2.5;75"`; back wall and eave `"12,-2,1.7;2,-3,2.8;70"` and `"10,-3.5,1.7;5.2,-3.2,2.5;55"`; back fence `"8,0,1.6;16,-5,1.2;75"`; from above `"-16,-12,10;0,-3,2.5;55"`.
+- Indoors: `room_views.py` corner sheets; living rooms r3 (7014) and r4 (6915), kitchens, bathrooms r10, r11 (7014) and r9, r10 (6915).
+
+### 0.7 What works, what failed, what is next (summary; details in sections 3 to 5)
+
+**Works (keep):** the panoramas as the only texture source (3.4); clean geometry where the scan is noisy (plan walls, boxes, ground heightfield, facades, fitted roof, fence panels) and scan where it is not; one photo per box face and per fence panel; line of sight against a clean model (scan minus what was replaced plus what was built: boxes, fan stand-ins, the fitted roof); measuring from the scan instead of guessing (door positions, wall-face offsets, soffit and porch-ceiling heights, flat vs built undersides); positive evidence before carving, filling or moving anything; `_shade_local` (one shading call per 3 m cell) everywhere points are spread out; hand overrides for what rules cannot decide (`splits`, `drop_boxes`, `remove`, `remove_outdoor`, `inside`); judging from room corners, free views and the per-camera comparison.
+
+**Failed (do not retry without a new idea):** the MatterPak texture as a texture source or a fallback for unseen walls (smears, brick indoors); judging from the panorama positions or the score; boxing round fixtures; per-texel blending on shiny box faces; patch-copy texture synthesis (stamped lights, grids); stand-in solids for every hanging face; flattening a porch with open rafters; the aerial photo on a roof in winter shadow; per-texel photos on roof edges and eaves (sky and leaf colours: plain trim colour instead); automatic rules for scan artefacts and masonry notches (both judged the two houses wrongly: use the overrides); the default outdoor `exterior.py` output path for experiments; reused variable names in long functions (four broken builds). Each has its row in a "tried and changed" table in 3.5 to 3.10.
+
+**Next, ranked (the user picks; sections 4 and 5 have the full lists):**
+1. Verify the v43 houses in the real game client once Lane C has removed the placeholder yard slab and moved the zone triggers; fix what shows there (tone mapping, alpha cutoffs on leaves and fences, texture memory, the seam between the block's ground and the scanned yard at the door).
+2. Round fixtures (toilets, pedestal sinks, faucets, the fireplace) are still raw scan: one photo per scan piece (5 item 2), then possibly catalog models placed at the scan's position.
+3. Deck, railings, posts, the AC unit, open porch rafters as boxes, one photo per face (5 outdoors 17): most of the raw scan a player still touches outdoors and most outdoor collision triangles.
+4. Eave widths from the scan where it has soffits (5 outdoors 18): roof edges are only placed to 0.3 to 0.5 m.
+5. Tree variety (more species, bare-branch variants) and repainting the backdrop's sky where the old canopies were (5 outdoors 19).
+6. Exposure compensation between panoramas (5 item 3): wall blotches indoors, sun and shade outdoors.
+7. A number that sees crumple (5 item 1): share of raw-scan pixels in the room views and free views.
+
+### 0.8 Interfaces between the parts (keep them, or tell the user before changing them)
+
+- `exterior.py`, `fences.py` and `vegetation.py` use from `rebake`: `pack`, `plane_mesh`, `bake_plane(..., fallback, relief)`, `bake_triangles`, `_drop_crumbs`, `_shade_local`, `_material`, `_fill`, `room_top`, `ceiling_z`, `measure_ceiling`, `load_scan`, `Plane`, `ShellRoom` (`cuts`, `ceiling`), `Scan` (`rays`, `sight`/`eyes`), `WALL_INSET`, `PAGE`, `PAD`; from `panos`: `shade`, `PanoSet.subset`, `Raycaster`; from `house_mesh`: `Z_UP_TO_Y_UP`, `WallSegment`, `wall_box`. It deliberately does not use `rb._seen` (outdoors uses `_seen_faces`, face by face).
+- `build_house` passes `exterior.add_exterior(scene, scan, rooms, panos, doors, house_outline, aerial=, remove=)` through `write_rebaked_interior_glb(..., extra=)`, and outdoor collision through `write_collision_glb(..., extra=collision_meshes(...))`. `house_outline` (not the name `footprint`, which is the MatterPak crop region) comes from `exterior.house_footprint(scan, shell_rooms(parts), void_polys(parts, overrides))`; `play_doors(parts, spans, outline)` picks the opened doors.
+- Generated outdoor geometry plugs in through one hook in `add_exterior`: `fences.replace_fences` then `vegetation.replace_vegetation`, each `(scene, scan, g, faces, tree, avail, panos, walls, report) -> (taken, solids)`: it adds its nodes, returns which scan faces it replaces and its collision triangles. A new replacer (decks, posts) belongs there.
+- Node names other lanes see (HANDOFF.md 17:00, 18:24, 23:30, 23:55): `floor_N`, `walls_N`, `ceiling_N`, `ceiling_scan_N`, `fixtures_box_N`, `fixtures_N`, `yard_N`, `facade_N`, `roof_N`, `backdrop_N`, `outdoor_N`, `trees_N`, `fence_N`, `plants_N`; collision `walls`, `floor`, `fixtures`, `ground`, `outdoor`, `bounds`. Renaming any of them needs a HANDOFF line.
 
 ---
 
@@ -12,15 +133,15 @@ The goal of this work: given any Matterport model of a home, produce a house pac
 
 | What | Where |
 |---|---|
-| Branch | First session: merged into `main` (2026-11-14, after contracts v2.3.0). Second session: `lane-a/house-quality`, worktree `/Users/pfu/hp-house-quality`, not merged or committed yet when this was written. Start further house work on a fresh `lane-a/<topic>` branch from `main`. Outdoors session: `lane-a/outdoor` (`/Users/pfu/hp-outdoor`, pushed). Both combined on `lane-a/combined` (`/Users/pfu/hp-combined`). Third session (3.10): `lane-a/combined-quality`, worktree `/Users/pfu/hp-combined-quality`, branched from `lane-a/combined` c67f5aa. |
+| Branch | Everything is on `main` (first session 2026-11-14; second, outdoors and third sessions fast-forwarded in on 2026-11-15 at 0429cc2). Continue on `lane-a/combined-quality`, worktree `/Users/pfu/hp-combined-quality` (rebase onto `main` before each merge, 0.5). The older branches `lane-a/house-quality`, `lane-a/outdoor`, `lane-a/combined` and their worktrees (`/Users/pfu/hp-house-quality`, `/Users/pfu/hp-outdoor`, `/Users/pfu/hp-combined`) are superseded; do not build on them. |
 | Checkout and data | Main checkout `/Users/pfu/hackprincetonf26`. All gitignored outputs below now live in its `worldgen/out/` (moved from the old worktree). New worktrees symlink `worldgen/out` and `.env` to the main checkout's, so every worktree shares one data folder. **Several agents build into that folder at the same time**: experiment in your own pack version (`--version <N>`, see section 9), never in one somebody else is writing. |
 | Pipeline code | `worldgen/build_house.py` (orchestration, rooms, doors, graph, collision), `worldgen/rebake.py` (clean shell, carving, fixtures, texture baking, glb export), `worldgen/panos.py` (panorama sampling, ray-caster, multi-view shading), `worldgen/exterior.py` (the scanned lot outdoors: yard, facades, roof, outdoor pieces, backdrop, outdoor collision; section 3.9), `worldgen/aerial.py` (Vexcel surface model, ortho and roof outline in the house's frame), `worldgen/roof.py` (roof planes fitted to the surface model), `worldgen/vegetation.py` (tree and shrub models in place of scanned ones), `worldgen/fences.py` (fence panels in place of scanned fences) (all four: section 3.10), `worldgen/house_mesh.py` (OBJ reading, collision.glb, gltf-transform compression, the older interior writers), `worldgen/sources/matterport.py` (the only Matterport client: read-only, cached), `worldgen/pack.py` (manifest; `furniture_catalog` is the shared library `furniture/v1/catalog.json`, contracts v2.3.0), `worldgen/publish.py` (`--local` only; also copies the furniture library). |
 | Per-house config | `worldgen/blocks/hou_navidad_01.json` (listing id to Matterport model, which interior method to use, hero role). `worldgen/overrides/<model_id>.json` (hand room splits). |
 | Tests | `worldgen/tests/test_build_house.py`, `worldgen/tests/test_rebake.py` (shell, carving, shading, relief boxes, door slabs, hanging objects), `worldgen/tests/test_exterior.py` (outdoors), `test_aerial.py`, `test_roof.py`, `test_vegetation.py`, `test_fences.py` (3.10), `worldgen/tests/test_pack.py` (manifest). |
 | Preview and scoring tools | `worldgen/scripts/preview/` (see section 6). Not part of the package; run with `uv run python scripts/preview/<name>.py` from `worldgen/`. |
 | Outputs (gitignored) | `worldgen/out/packs/hou_navidad_01/v<N>/houses/<listing_id>/{interior.glb, collision.glb, rooms.json, graph.json}` and `manifest.json`. Downloads in `worldgen/out/raw/<model_id>/` (MatterPak zip and OBJ, skybox faces, defurnished OBJ for 6915), caches in `worldgen/out/cache/` (Matterport JSON; uncompressed glbs in `cache/glb/<model>_interior_pano.glb` for v1 and `..._pano_v<N>.glb` for other versions). About 1.1 GB for the two houses. |
-| Pack versions on disk (2026-11-14, night) | `v1`: LIVE, the first-session build other lanes load. `v10`: the second-session interior, built from exactly f1b2737 (3.6 to 3.8); `v9` is a byte-identical older copy, delete it once nobody has it open. `v40`: outdoors (3.9) on the first-session interior. `v41`: the second-session combined candidate (interior + outdoors, lane-a/combined 3b0a124). `v43`: the third-session candidate (3.10: roofs from the aerial data, tree models, fence panels), built from `lane-a/combined-quality`, audited, scores in each house's `quality.json`. `v95` belongs to another session (its manifest has a `notes` key that `contracts/validate.py` rejects, so validating the whole pack folder reports one error that is not from the house builds). `v2`, `v42`, `v98`, `v99` were deleted. `uv run python -m worldgen.versions status hou_navidad_01` is the source of truth. |
-| Notes for other lanes | `HANDOFF.md` entries dated 2026-11-14 16:30 to 23:40. |
+| Pack versions on disk | See 0.2. In short: v3 LIVE (v1's houses), v4 built with the v43 houses but not live, v43 the house candidate. |
+| Notes for other lanes | `HANDOFF.md`, the lane-a entries dated 2026-11-14 (house pipeline: 17:00, 18:24, 23:30, 23:55). |
 
 ### The two houses (block `hou_navidad_01`, Houston 77083)
 
@@ -629,12 +750,10 @@ The pipeline has no per-house code. A new scan needs a block entry, usually a ro
 
 ## 8. Other open items for Lane A (not house quality, but blocking others)
 
-- `listings/index.json` (`worldgen/costar.py` is still a stub). Without it houses have no door points (`Listing.world`) and the web client cannot enter a house from the block; `VITE_START_ROOM` is the workaround.
-- `furniture/catalog.json` (`build_catalog.py` stub). The furnishing agent has nothing to place.
-- `audit.json` per house (`audit.py` stub). The manifest already lists it. 6915 has a ready contradiction: listed 1,317 sqft vs about 1,017 sqft scanned.
-- The block (`build_block.py` stub): render and collision for the street. The drone splats in the hackathon portal are an option for the exterior (about 420 MB each, need cropping).
-- `publish.py` bucket upload (only `--local` exists).
-- Merge `lane-a/hero-house` into `main` after the team agrees on 7014 as hero and the listing id format.
+Done since this list was first written: `listings/index.json` (`worldgen/costar.py`, with `Listing.world` poses and door points), the furniture library (`furniture/v<N>/`), `audit.json` per house (`worldgen/audit.py`), the block (`worldgen/build_block.py`), and the hero-house merge. Still open:
+
+- `publish.py` bucket upload (only the static-site publish exists; packs are served from `apps/web/public/packs`).
+- The seam where the block's ground meets each scanned lot at the front door (`costar.py` sets the house's y from the block ground; the yard heightfield is 0.1 to 0.4 m under the floor): look at it in the game client when v4 goes live.
 
 ## 9. Gotchas
 
@@ -663,7 +782,7 @@ uv run python -m worldgen.versions status hou_navidad_01     # every version on 
 uv run python -m worldgen.versions pin hou_navidad_01 --version N --reason "..." --compared-to-live "..."
 ```
 
-**Version numbers per worktree** (so experiments never collide): house-quality 10-39, outdoor and combined builds 40-69 (40, 41 and 43 are taken; the third session's candidate is 43), block work 70-89, scratch 90-99. Delete your scratch versions when a test is done. The next candidate meant to go live takes the next free low number (2, 3, ...).
+**Version numbers** (so experiments never collide): interior-only experiments 11-39, house builds 44-69 (40, 41 and 43 are taken; 43 is the current candidate), block work 70-89, scratch 90-99, and the low numbers (1 to 4 so far) are the packs that are or were meant to go live, made by Lane A with `build_block.py --houses-from <house version>`. Delete scratch versions when a test is done. As of 2026-11-15: v3 live, v4 = v3 + the v43 houses, built, not live.
 
 **Promotion rule: build on the live version, never drop what it already does well.** The goal is that versions build on each other: a candidate should keep everything the live version gets right and improve on it, so the metrics are mostly better and none is clearly worse. It is not a gate where every number must improve; small noise on one metric is fine. What blocks a promotion is a real regression: a house or room that looks visibly worse, a lost improvement from an earlier version, a new hole or broken doorway, or a score that gets clearly worse. If a trade-off is worth it anyway, the human accepts it in writing in `--compared-to-live`.
 

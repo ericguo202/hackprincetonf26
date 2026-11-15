@@ -132,6 +132,8 @@ The client seam between Lanes C and D is `store.ts`: D writes network and agent 
 
 ## 7. World generation (Lane A)
 
+> **Working on the houses?** (Matterport scan to `interior.glb` / `collision.glb` / `rooms.json` / `graph.json`, or a house's scanned lot outdoors: `worldgen/build_house.py`, `rebake.py`, `panos.py`, `exterior.py`, `aerial.py`, `roof.py`, `fences.py`, `vegetation.py`, `worldgen/overrides/`, `worldgen/scripts/preview/`.) Read **`docs/house-pipeline-handoff.md`** section 0 first: current state and candidate pack, user decisions, ground rules (shared `worldgen/out`, version ranges, merge procedure), the working loop, what works and what failed, and what is next. Keep that file current in the same commit as any change to the house pipeline.
+
 Output is one **world pack** per block. A pack is immutable once published; republish with a new version.
 
 ```
