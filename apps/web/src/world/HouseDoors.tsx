@@ -8,8 +8,12 @@ import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group } from "three";
 
 import { ZONE_COLLIDER } from "./collisionGroups";
+import { DOORWAY_H_M } from "./doorCutout";
 import type { OpenedDoor } from "./doorSplit";
 import { useDoorState } from "./doorState";
+
+/** The leaf reaches this far past each jamb, over the edge of the texture cut. */
+const LEAF_OVERLAP_M = 0.01;
 
 type Props = {
   listingId: string;
@@ -83,8 +87,10 @@ function SingleDoor({ door }: { door: OpenedDoor }) {
       {/* Door leaf mesh: hinged at point a, rotates 90 deg when open */}
       <group position={[door.a[0], door.floorY, door.a[1]]} rotation-y={yaw}>
         <group ref={hingeRef} rotation-y={initialProgress * (Math.PI / 2)}>
-          <mesh position={[door.width / 2, 1.0, 0]} castShadow receiveShadow>
-            <boxGeometry args={[door.width, 2.0, 0.04]} />
+          {/* Fills the doorway cut out of the wall texture (doorCutout.ts): full cut height,
+              and 1 cm past each jamb so no gap shows beside it. */}
+          <mesh position={[door.width / 2, DOORWAY_H_M / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[door.width + LEAF_OVERLAP_M * 2, DOORWAY_H_M, 0.04]} />
             <meshStandardMaterial color="#f0ede6" roughness={0.7} />
           </mesh>
         </group>

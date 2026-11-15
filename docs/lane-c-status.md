@@ -596,3 +596,28 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - `variantFor` is stable (FNV-1a reference values pinned) and spreads ids across all three looks.
   - Per variant: the file is self-contained and under 3 MB; it has the 17 clips; RocketLauncher and the 14 weapon nodes are on the hand bone.
   - Per variant: the rig is 1.3 m tall with feet at 0; only the tinted blaster is kept; the noodle points world-up and is 1.2 m long; the jiggle stays finite.
+
+## 28. Opened doorways cut out of the wall textures
+
+**Not seen in a browser.** Checked by unit tests and a Node run on 7014's real `interior.glb` (meshopt geometry decoded; the webp textures can't be decoded in Node, so the canvas step has only been exercised in code).
+
+- **Problem:** the doors split open by `doorSplit.ts` still showed the scan's photo of a closed door on the wall, so an open doorway looked shut.
+- **`world/doorCutout.ts`:**
+  - **Pure math:** for each opened door, the doorway is the vertical rectangle a→b, floorY to floorY + 2.03 m (`DOORWAY_H_M`). It's matched against every `walls_N` triangle in that wall plane: vertical, facing across the door line, within 0.15 m of it, so both faces of the wall count. Each match is clipped to the triangle (Sutherland–Hodgman) and mapped to UV with barycentric coordinates.
+  - **Inset:** the cut stops 2 texture pixels inside the sides and top, measured at the densest texture the door touches, so the frame stays.
+  - **Skips:** a door is skipped, with one `warnOnce`, when it has no matching triangle or its UV falls outside [0, 1].
+  - **`applyDoorCutouts(listingId, scene, doors)`:** a one-time pass, idempotent per cached scene and door, that never throws.
+    - Each affected texture is redrawn once onto a canvas, even when doors share it, and the UV polygons are cleared with `destination-out`.
+    - A `CanvasTexture` copying the original's settings (flipY, colour space, wrap, filters, anisotropy, mipmaps, channel) replaces it in every material that used it, and the original is disposed.
+    - Materials that were OPAQUE in the glTF (`walls_4`, `walls_5`, `walls_7`, `walls_8`, `walls_14` on 7014) get `alphaTest = 0.5`, so the cut becomes a hole. `toneMapped` stays as `interiorMaterials` set it.
+- **`HouseScene`:** the render glb's `prepare` now also records the interior scene. An effect runs `applyDoorCutouts` once both the scene and `split.doors` exist, never in the render loop. Only the split's doors are cut, so never the front door.
+- **`HouseDoors` leaf:** now 2.03 m tall (was 2.0 m) and 0.02 m wider than the doorway, 1 cm past each jamb, so it covers the cut with no gap at the top or sides.
+- **7014 result (Node):** all 7 opened doors are cut, none skipped.
+  - The 4 doors between rooms (r1–r6, r2–r9, r2–r3, r3–r9) are cut on both faces.
+  - The 3 doors to the outside (r3, r7, r8) are cut on the inside face only; `interior.glb` has no outside face for them. When one of those is open you look out through the hole; indoors the block isn't drawn, so expect sky or empty space there.
+- **Tests (`doorCutout.test.ts`, 12):**
+  - UV mapping of a synthetic textured quad with both triangle diagonals (exact UV bounds and area); the 2 px inset.
+  - Both faces in two textures; walls too far off, floors and walls across the door line ignored; UV outside [0, 1] skipped.
+  - Clipping (either winding); barycentric coordinates.
+  - A texture shared by two doors deduped; a door with no match skipped with a single warning.
+  - The real 7014 run.

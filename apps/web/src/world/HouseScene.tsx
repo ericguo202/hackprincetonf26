@@ -4,7 +4,7 @@
 // room, walls along each polygon edge with gaps for doors, and the front door
 // lit so you can find the way out.
 
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { CuboidCollider, RigidBody, TrimeshCollider } from "@react-three/rapier";
 import { Shape, type Object3D } from "three";
 
@@ -13,6 +13,7 @@ import { FurnitureLayer } from "./FurnitureLayer";
 import { disableToneMapping } from "./interiorMaterials";
 import { ZONE_COLLIDER } from "./collisionGroups";
 import { extractWallBoxes, splitClosedDoors } from "./doorSplit";
+import { applyDoorCutouts } from "./doorCutout";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { HouseDoors } from "./HouseDoors";
 import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, warnOnce, type Door, type LoadedPack } from "./pack";
@@ -70,6 +71,23 @@ export function HouseScene({ pack, listingId }: Props) {
     return { ...splitClosedDoors(boxes, rooms, doorLocal), wallBoxes: boxes.length };
   }, [collisionScene, listingId, rooms, doorLocal]);
 
+  // The interior render scene, once loaded (prepare runs once per scene).
+  const [interior, setInterior] = useState<{ id: string; scene: Object3D } | null>(null);
+  const prepareInterior = useCallback(
+    (scene: Object3D) => {
+      // Finished photo textures: no second tone-mapping pass (interiorMaterials.ts).
+      disableToneMapping(scene);
+      setInterior({ id: listingId, scene });
+    },
+    [listingId],
+  );
+  const interiorScene = interior?.id === listingId ? interior.scene : null;
+  // One-time pass: cut the opened doorways out of the wall textures (doorCutout.ts).
+  useEffect(() => {
+    if (!interiorScene || !split?.doors.length) return;
+    applyDoorCutouts(listingId, interiorScene, split.doors);
+  }, [interiorScene, split, listingId]);
+
   if (!house) return null;
 
   return (
@@ -78,8 +96,7 @@ export function HouseScene({ pack, listingId }: Props) {
         kind="render"
         url={base && packUrl(base, house.interior)}
         label={house.interior}
-        // Finished photo textures: no second tone-mapping pass (interiorMaterials.ts).
-        prepare={disableToneMapping}
+        prepare={prepareInterior}
         placeholder={<PlaceholderHouseRender rooms={rooms} door={door} />}
       />
       <GlbOrPlaceholder
