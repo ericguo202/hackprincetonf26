@@ -266,6 +266,75 @@ async def test_game_tools(game):
     assert ctx["in_house"] == "hou_000123" and ctx["block_id"] == "hou_navidad_01"
 
 
+@pytest.fixture
+def cleared(monkeypatch):
+    """Fake of the game's clear endpoint: reports 3 pieces per room asked for (two rooms for a house)."""
+    calls = []
+
+    async def clear_furniture(block_id, player_id, listing_id, room_id=None, room_label=None):
+        calls.append((block_id, player_id, listing_id, room_id, room_label))
+        ids = [room_id] if room_id else [f"{listing_id}.r1", f"{listing_id}.r2"]
+        return {"removed": 3 * len(ids), "rooms": [{"room_id": i, "removed": 3} for i in ids]}
+
+    monkeypatch.setattr(game_api, "clear_furniture", clear_furniture)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_clear_one_room_by_label_id_or_where_the_player_stands(files, game, cleared):
+    furnish_tv_and_sofa()
+    assert files.read_json(f"/plans/{ROOM}.json")["objects"]
+    out = await acall(tools.clear_furniture, listing_id="hou_000123", room="Living room", runtime=RT)
+    assert out == {
+        "scope": "room",
+        "room_id": ROOM,
+        "label": "living_room",
+        "removed": 3,
+        "rooms": [{"room_id": ROOM, "removed": 3, "label": "living_room"}],
+    }
+    assert cleared[-1] == ("hou_navidad_01", "p1", "hou_000123", ROOM, "living_room")
+    # The session's own plan is emptied too, so a later edit cannot bring the pieces back.
+    plan = files.read_json(f"/plans/{ROOM}.json")
+    assert plan["objects"] == [] and plan["status"] == "draft"
+    for room in (ROOM, "here"):  # the fixture player stands at (1, 2), inside the living room
+        assert (await acall(tools.clear_furniture, listing_id="hou_000123", room=room, runtime=RT))[
+            "room_id"
+        ] == ROOM
+    assert game == []  # no plan was posted: clearing is its own call
+
+
+@pytest.mark.asyncio
+async def test_clear_whole_house(files, game, cleared):
+    furnish_tv_and_sofa()
+    out = await acall(tools.clear_furniture, listing_id="hou_000123", runtime=RT)
+    assert (out["scope"], out["room_id"], out["removed"]) == ("house", None, 6)
+    assert cleared[-1] == ("hou_navidad_01", "p1", "hou_000123", None, None)
+    assert files.read_json(f"/plans/{ROOM}.json")["objects"] == []
+
+
+@pytest.mark.asyncio
+async def test_clear_asks_which_room_when_a_label_is_shared(files, game, cleared, monkeypatch):
+    square = lambda x: [[x, 10], [x + 3, 10], [x + 3, 13], [x, 13]]  # noqa: E731  away from the player
+    rooms = [
+        {"id": f"hou_000123.r{n}", "label": "bedroom", "area_m2": 9.0, "polygon": square(10 * n)}
+        for n in (2, 3)
+    ]
+    monkeypatch.setattr(packs, "get_rooms", lambda listing_id: rooms)
+    out = await acall(tools.clear_furniture, listing_id="hou_000123", room="bedroom", runtime=RT)
+    assert "2 rooms are labelled bedroom" in out["error"] and "hou_000123.r3" in out["error"]
+    assert cleared == []
+    # The one this session furnished wins.
+    files.write_json(
+        "/plans/hou_000123.r3.json", {"room_id": "hou_000123.r3", "objects": [{"instance_id": "o1"}]}
+    )
+    out = await acall(tools.clear_furniture, listing_id="hou_000123", room="bedroom", runtime=RT)
+    assert out["room_id"] == "hou_000123.r3"
+    unknown = await acall(tools.clear_furniture, listing_id="hou_000123", room="attic", runtime=RT)
+    assert "its rooms are: bedroom" in unknown["error"]
+    here = await acall(tools.clear_furniture, listing_id="hou_000123", room="here", runtime=RT)
+    assert "not standing in a room" in here["error"]
+
+
 @pytest.mark.asyncio
 async def test_game_down_is_an_error_not_a_crash(files, monkeypatch):
     furnish_tv_and_sofa()

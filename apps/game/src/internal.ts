@@ -45,6 +45,29 @@ export function internalRouter(): Router {
     res.json({ placed: plan.objects.length });
   });
 
+  // v2.6.1: empty one room (room_id) or the whole house (no room_id), hand-placed pieces included.
+  r.post("/rooms/:block_id/houses/:listing_id/clear", (req, res) => {
+    const room = roomsByBlock.get(req.params.block_id);
+    if (!room) return void res.status(404).json({ error: "no room for block" });
+    const listingId = req.params.listing_id;
+    const { player_id, room_id, room_label } = req.body as {
+      player_id: string;
+      room_id?: string | null;
+      room_label?: string | null;
+    };
+    const oneRoom = room_id !== undefined && room_id !== null;
+    if (oneRoom && (typeof room_id !== "string" || !room_id.startsWith(`${listingId}.`))) {
+      return void res.status(400).json({ error: "room_id must be a room of this listing" });
+    }
+    const rooms = room.clearFurniture(listingId, oneRoom ? room_id : undefined);
+    const removed = rooms.reduce((n, r) => n + r.removed, 0);
+    if (removed > 0) {
+      const name = room.state.players.get(player_id)?.name ?? "Someone";
+      room.broadcast("toast", { text: `${name}'s agent cleared ${oneRoom ? roomPhrase(room_label) : "the house"}` });
+    }
+    res.json({ removed, rooms });
+  });
+
   r.post("/rooms/:block_id/focus", (req, res) => {
     const room = roomsByBlock.get(req.params.block_id);
     if (!room) return void res.status(404).json({ error: "no room for block" });

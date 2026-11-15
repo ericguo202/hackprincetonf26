@@ -254,6 +254,23 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
   }
 
   /**
+   * Clear furniture (messages.md v2.6.1): every piece of one room, or of the whole house when roomId is
+   * omitted, hand-placed pieces included. Returns the rooms that held something, with how many pieces.
+   */
+  clearFurniture(listingId: string, roomId?: string): { room_id: string; removed: number }[] {
+    const rooms = this.roomsOf(listingId);
+    const cleared: { room_id: string; removed: number }[] = [];
+    for (const [id, list] of rooms) {
+      if ((roomId === undefined || id === roomId) && list.length > 0) {
+        cleared.push({ room_id: id, removed: list.length });
+        rooms.set(id, []); // an existing key keeps its place, as in applyPlan
+      }
+    }
+    if (cleared.length > 0) this.rebuildHouse(listingId);
+    return cleared;
+  }
+
+  /**
    * Manual furnishing (messages.md v2.6.0): one piece added, moved or removed by
    * a player standing in the house. Geometry is the client's job (the game has
    * no room polygons); this checks the message's shape, the zone and the limits.

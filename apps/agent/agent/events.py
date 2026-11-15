@@ -90,6 +90,10 @@ SUMMARIES: dict[str, Callable[[Any], str]] = {
         + ", ".join(f"{m['listing_id']} {m['score']}" for m in r["matches"])
     ),
     "focus_listing": lambda r: f"Beacon on {r['focused']}",
+    "clear_furniture": lambda r: (
+        f"{r['removed']} pieces removed from "
+        + ((r.get("label") or "the room").replace("_", " ") if r["scope"] == "room" else "the house")
+    ),
     "get_player_context": lambda r: f"in {r.get('in_house') or 'the street'}",
 }
 

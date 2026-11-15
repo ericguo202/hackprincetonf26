@@ -1,0 +1,36 @@
+{
+  "id": "clear_furniture",
+  "description": "Removing furniture: one room by name, then the whole house, each with one clear call and no new plan (contracts v2.6.1)",
+  "zone": "hou_236595179",
+  "turns": [
+    {
+      "prompt": "Furnish the living room for movie nights",
+      "expect": { "max_words": 45, "committed": true, "room_label": "living_room", "valid": true }
+    },
+    {
+      "prompt": "Remove the furniture from the living room",
+      "expect": {
+        "max_words": 45,
+        "committed": false,
+        "cleared": "room",
+        "cleared_label": "living_room",
+        "tools": ["clear_furniture"],
+        "max_seconds": 45
+      }
+    },
+    {
+      "prompt": "Set up the living room for a nerf war",
+      "expect": { "max_words": 45, "committed": true, "room_label": "living_room", "valid": true }
+    },
+    {
+      "prompt": "Remove all the furniture",
+      "expect": {
+        "max_words": 45,
+        "committed": false,
+        "cleared": "house",
+        "tools": ["clear_furniture"],
+        "max_seconds": 45
+      }
+    }
+  ]
+}

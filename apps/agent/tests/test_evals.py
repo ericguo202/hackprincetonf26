@@ -27,9 +27,14 @@ def plan(*objects, room="h.r3"):
     return {"plan_id": "p", "listing_id": "h", "room_id": room, "objects": list(objects), "conflicts": []}
 
 
-def turn(*plans, events=(), focus=(), seconds=10.0):
+def turn(*plans, events=(), focus=(), seconds=10.0, cleared=()):
     return ev.TurnResult(
-        prompt="x", seconds=seconds, events=list(events), plans=list(plans), focus=list(focus)
+        prompt="x",
+        seconds=seconds,
+        events=list(events),
+        plans=list(plans),
+        focus=list(focus),
+        cleared=list(cleared),
     )
 
 
@@ -110,3 +115,18 @@ def test_case_files_are_well_formed():
     assert len({c["id"] for c in cases}) == len(cases) >= 5
     for c in cases:
         assert c["turns"] and c.get("zone") and all(t["prompt"] for t in c["turns"])
+
+
+def test_cleared_checks_scope_and_room_label():
+    room = turn(cleared=[{"listing_id": "h", "room_id": "h.r3", "removed": 4}])
+    house = turn(cleared=[{"listing_id": "h", "room_id": None, "removed": 9}])
+    assert score({"cleared": "room", "cleared_label": "living_room", "committed": False}, room) == {
+        "no_error": True,
+        "committed": True,
+        "cleared": True,
+        "cleared_label": True,
+    }
+    assert score({"cleared": "house"}, house)["cleared"]
+    assert not score({"cleared": "house"}, room)["cleared"]
+    assert not score({"cleared": "room", "cleared_label": "living_room"}, turn())["cleared"]
+    assert not score({"cleared_label": "living_room"}, house)["cleared_label"]

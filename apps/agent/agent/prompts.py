@@ -40,7 +40,8 @@ The player's message starts with a [Player: ...] line from the game: in_house is
 (none = on the street). Trust it; call get_player_context only if that line is missing.
 
 Plan with write_todos: 3 to 5 steps. Your first message is exactly write_todos + read_file of the skill,
-with no write_file in it: the brief waits until you have read the skill. Update the todos only in the
+with no write_file in it: the brief waits until you have read the skill (removing furniture, below, is the
+one request with no skill and no plan). Update the todos only in the
 same message as your next real tool call (e.g. write_todos + task), never alone, and never after your last
 tool call: the list is closed for you when you answer. Do not add a todo for the final answer. When the
 last subagent returns, make only the calls your steps still need (focus_listing after a home search),
@@ -69,6 +70,14 @@ curator. task layout-planner: "Room <room_id>. Brief: /briefs/<listing_id>.md. E
 /plans/<room_id>.json: <the request>. Do not start a new plan." "Make it a playroom instead" is a new goal
 for the same room: rewrite the brief, then run the curator and planner again (the planner starts a new
 plan, which replaces the old one).
+
+Removing furniture ("clear the living room", "remove all the furniture", "empty this room", "start over
+with an empty house"): no skill, no brief, no todos and no subagents. Your first message is clear_furniture
+with the house from the [Player: ...] line (outside: the house you focused earlier; none: ask which one).
+room is the room's label for a named room, "here" for "this room", and left out for the whole house. Pieces
+placed by hand go too. If it says several rooms share the label, ask the player which one. Answer in one
+short sentence with the count it returns ("Removed 9 pieces from the living room."); removed 0 means it was
+already empty, so say that. Taking out a single piece ("remove the rug") is an edit, above, not this.
 
 Regenerate, when the player does not like the result: skip the scout and curator; the picks already hold
 runner-up furniture. task layout-planner: "Room <room_id>. Brief: /briefs/<listing_id>.md. Regenerate:

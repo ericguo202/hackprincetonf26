@@ -308,6 +308,97 @@ describe("NeighborhoodRoom", () => {
     });
   });
 
+  describe("clear furniture (v2.6.1)", () => {
+    const HOUSE = "hou_236595179";
+    const R1 = `${HOUSE}.r1`;
+    const R2 = `${HOUSE}.r2`;
+    const obj = (instance_id: string, asset_id: string) => ({ instance_id, asset_id, x: 1, y: 0, z: 1, rot_deg: 0, reason: "t" });
+    const post = (path: string, body: Record<string, unknown>) =>
+      colyseus.http.post(`/internal/rooms/${BLOCK}/houses/${HOUSE}/${path}`, {
+        headers: { "Content-Type": "application/json", "X-Internal-Secret": SECRET },
+        body,
+      });
+    const furnish = (roomId: string, objects: ReturnType<typeof obj>[]) =>
+      post("plan", { player_id: "agent", plan: { plan_id: "p", listing_id: HOUSE, room_id: roomId, status: "placed", objects, conflicts: [] } });
+
+    /** A house with two agent-furnished rooms and one hand-placed piece in the first. */
+    async function furnished() {
+      const room = await colyseus.createRoom("neighborhood", { block_id: BLOCK });
+      const client = await colyseus.connectTo(room, { name: "ana" });
+      client.send("enter_zone", { zone: HOUSE });
+      await room.waitForNextPatch();
+      await furnish(R1, [obj("o1", "sofa"), obj("o2", "tv")]);
+      await furnish(R2, [obj("o1", "crib")]);
+      client.send("furniture_place", { listing_id: HOUSE, room_id: R1, asset_id: "plant_01", x: 2, y: 0, z: 2, rot_deg: 0 });
+      await room.waitForNextPatch();
+      const toasts: string[] = [];
+      client.onMessage("toast", (m: { text: string }) => toasts.push(m.text));
+      const ids = () => room.state.houses.get(HOUSE)?.objects.map((o) => o.instance_id) ?? [];
+      return { room, client, ids, toasts };
+    }
+
+    it("clears one room, hand-placed pieces included, and keeps the others", async () => {
+      const { client, ids, toasts } = await furnished();
+      assert.strictEqual(ids().length, 4);
+      const res = await post("clear", { player_id: client.sessionId, room_id: R1, room_label: "living_room" });
+      assert.deepStrictEqual(res.data, { removed: 3, rooms: [{ room_id: R1, removed: 3 }] });
+      assert.deepStrictEqual(ids(), [`${R2}/o1`]);
+      await sleep(50);
+      assert.deepStrictEqual(toasts, ["ana's agent cleared the living room"]);
+    });
+
+    it("clears the whole house without a room_id, with one toast", async () => {
+      const { client, ids, toasts } = await furnished();
+      const res = await post("clear", { player_id: client.sessionId });
+      assert.strictEqual(res.data.removed, 4);
+      assert.deepStrictEqual(res.data.rooms, [{ room_id: R1, removed: 3 }, { room_id: R2, removed: 1 }]);
+      assert.deepStrictEqual(ids(), []);
+      await sleep(50);
+      assert.deepStrictEqual(toasts, ["ana's agent cleared the house"]);
+    });
+
+    it("a cleared room can be furnished again and keeps its place in the order", async () => {
+      const { client, ids } = await furnished();
+      await post("clear", { player_id: client.sessionId, room_id: R1 });
+      await furnish(R1, [obj("o1", "desk")]);
+      assert.deepStrictEqual(ids(), [`${R1}/o1`, `${R2}/o1`]);
+    });
+
+    it("removes nothing and sends no toast for an empty room or an empty house", async () => {
+      const { client, ids, toasts } = await furnished();
+      const empty = await post("clear", { player_id: client.sessionId, room_id: `${HOUSE}.r7` });
+      assert.deepStrictEqual(empty.data, { removed: 0, rooms: [] });
+      assert.strictEqual(ids().length, 4);
+      await post("clear", { player_id: client.sessionId });
+      const again = await post("clear", { player_id: client.sessionId });
+      assert.deepStrictEqual(again.data, { removed: 0, rooms: [] });
+      await sleep(50);
+      assert.deepStrictEqual(toasts, ["ana's agent cleared the house"]);
+    });
+
+    it("rejects a room of another house and a missing secret", async () => {
+      const { client, ids } = await furnished();
+      const status = async (run: () => Promise<{ statusCode: number }>) => {
+        try {
+          return (await run()).statusCode;
+        } catch (e) {
+          return (e as { statusCode: number }).statusCode;
+        }
+      };
+      assert.strictEqual(await status(() => post("clear", { player_id: client.sessionId, room_id: "hou_999.r1" })), 400);
+      assert.strictEqual(
+        await status(() =>
+          colyseus.http.post(`/internal/rooms/${BLOCK}/houses/${HOUSE}/clear`, {
+            headers: { "Content-Type": "application/json" },
+            body: { player_id: client.sessionId },
+          }),
+        ),
+        401,
+      );
+      assert.strictEqual(ids().length, 4);
+    });
+  });
+
   describe("fire", () => {
     const HEAD = 0.5; // the client fires from its head, above the body centre that move reports
     const BLAST_GAP = MIN_FIRE_INTERVAL_MS.blaster + 60;

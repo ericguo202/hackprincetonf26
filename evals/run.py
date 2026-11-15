@@ -30,6 +30,8 @@ Turns run in one session, so follow-ups see earlier turns. Checks (all optional,
     valid: true               the committed plan re-validates with zero conflicts
     replaces_previous: true   same room as the previous turn's plan, different pieces or poses
     focus: "<listing_id>"     the beacon went on this listing
+    cleared: "room"|"house"   furniture was cleared this turn, from one room or the whole house
+    cleared_label: "..."      ...and the room cleared has this label
     answer_mentions: ["a|b"]  the final answer contains each item (any "|" alternative), case-insensitive
     max_words: n              the final answer is at most n words (judges read it on screen)
     max_seconds: s            the turn finished within s seconds (also a hard timeout, default 300)
@@ -55,7 +57,8 @@ AGENT_DIR = EVALS.parent / "apps" / "agent"
 DEFAULT_TIMEOUT_S = 300
 CHECKS = {
     "no_error", "planned", "subagents", "tools", "committed", "room_label", "categories_all",
-    "categories_any", "min_objects", "min_cover", "valid", "replaces_previous", "focus",
+    "categories_any", "min_objects", "min_cover", "valid", "replaces_previous", "focus", "cleared",
+    "cleared_label",
     "answer_mentions", "max_words", "max_seconds",
 }  # fmt: skip
 
@@ -71,6 +74,7 @@ class TurnResult:
     events: list[dict] = field(default_factory=list)
     plans: list[dict] = field(default_factory=list)  # plans POSTed to the (fake) game this turn
     focus: list[str] = field(default_factory=list)
+    cleared: list[dict] = field(default_factory=list)  # clear calls: {listing_id, room_id, removed}
     trace: str | None = None
     run_id: str | None = None
 
@@ -178,6 +182,12 @@ def score_turn(
             add("replaces_previous", same_room and changed, detail)
     if "focus" in expect:
         add("focus", expect["focus"] in turn.focus, f"beacon on {turn.focus or 'nothing'}")
+    if "cleared" in expect:
+        scopes = ["room" if c["room_id"] else "house" for c in turn.cleared]
+        add("cleared", expect["cleared"] in scopes, f"cleared {scopes or 'nothing'}")
+    if "cleared_label" in expect:
+        labels = [label_of(c["room_id"]) for c in turn.cleared if c["room_id"]]
+        add("cleared_label", expect["cleared_label"] in labels, f"cleared {labels or 'no room'}")
     if "answer_mentions" in expect:
         text = turn.answer.lower()
         missing = [m for m in expect["answer_mentions"] if not any(a.lower() in text for a in m.split("|"))]
@@ -213,6 +223,8 @@ class FakeGame:
         self.zones: dict[str, str] = {}  # player_id -> zone
         self.plans: dict[str, list[dict]] = {}
         self.focus: dict[str, list[str]] = {}
+        self.cleared: dict[str, list[dict]] = {}
+        self.furniture: dict[str, dict[str, int]] = {}  # listing_id -> room_id -> pieces now in it
 
     def install(self, game_api) -> None:
         async def get_player(block_id, player_id):
@@ -222,13 +234,26 @@ class FakeGame:
             if plan.get("conflicts"):
                 raise ValueError("refusing to commit a plan with conflicts")
             self.plans.setdefault(player_id, []).append(plan)
+            self.furniture.setdefault(plan["listing_id"], {})[plan["room_id"]] = len(plan["objects"])
             return {"placed": len(plan["objects"])}
+
+        async def clear_furniture(block_id, player_id, listing_id, room_id=None, room_label=None):
+            house = self.furniture.setdefault(listing_id, {})
+            rooms = [{"room_id": r, "removed": n} for r, n in house.items() if n and room_id in (None, r)]
+            for r in rooms:
+                house[r["room_id"]] = 0
+            removed = sum(r["removed"] for r in rooms)
+            self.cleared.setdefault(player_id, []).append(
+                {"listing_id": listing_id, "room_id": room_id, "removed": removed}
+            )
+            return {"removed": removed, "rooms": rooms}
 
         async def post_focus(block_id, player_id, listing_id):
             self.focus.setdefault(player_id, []).append(listing_id)
             return {"ok": True}
 
         game_api.get_player, game_api.post_plan, game_api.post_focus = get_player, post_plan, post_focus
+        game_api.clear_furniture = clear_furniture
 
 
 async def run_case(case: dict, game: FakeGame, block_id: str, env: dict[str, Any]) -> dict:
@@ -247,6 +272,7 @@ async def run_case(case: dict, game: FakeGame, block_id: str, env: dict[str, Any
         result = TurnResult(prompt=spec["prompt"])
         sent_before = len(game.plans.get(player, []))
         focus_before = len(game.focus.get(player, []))
+        cleared_before = len(game.cleared.get(player, []))
 
         async def emit(e: dict, result: TurnResult = result) -> None:
             result.events.append(e)
@@ -261,6 +287,7 @@ async def run_case(case: dict, game: FakeGame, block_id: str, env: dict[str, Any
         result.seconds = time.monotonic() - t0
         result.plans = game.plans.get(player, [])[sent_before:]
         result.focus = game.focus.get(player, [])[focus_before:]
+        result.cleared = game.cleared.get(player, [])[cleared_before:]
         run_id = runner.RUNS.get(ctx.session_id)
         result.run_id = str(run_id) if run_id else None
         checks = score_turn(expect, result, previous, env["catalog"], env["label_of"], env["revalidate"])
@@ -273,6 +300,7 @@ async def run_case(case: dict, game: FakeGame, block_id: str, env: dict[str, Any
                 "answer": result.answer,
                 "plan": result.plans[-1] if result.plans else None,
                 "focus": result.focus,
+                "cleared": result.cleared,
                 "tools": Counter(t["tool"] for t in result.of("agent.tool")),
                 "trace": result.trace,
                 "run_id": result.run_id,

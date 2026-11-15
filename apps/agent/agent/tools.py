@@ -28,6 +28,7 @@ from deepagents import FilesystemPermission
 from deepagents.backends import StateBackend
 from langchain.tools import ToolRuntime, tool
 from pydantic import BaseModel, Field
+from shapely.geometry import Point, Polygon
 
 import settings
 from agent import game_api, plain, search
@@ -836,9 +837,98 @@ async def get_player_context(runtime: ToolRuntime[AgentContext]) -> str:
     return await _arun(run)
 
 
+def _room_to_clear(listing_id: str, room: str, player: dict | None) -> dict:
+    """The one room a clear request means: a room id, "here" (where the player stands) or a label.
+
+    A label shared by several rooms (two bedrooms) means the one this session furnished, else the one the
+    player stands in; otherwise the caller has to say which."""
+    rooms = rooms_of(listing_id)
+    by_id = {r["id"]: r for r in rooms}
+    if room in by_id:
+        return by_id[room]
+
+    def standing_in(candidates: list[dict]) -> dict | None:
+        if not player or player.get("zone") != listing_id:
+            return None
+        at = Point(player["x"], player["z"])
+        return next((r for r in candidates if Polygon(r["polygon"]).buffer(0.05).contains(at)), None)
+
+    key = room.strip().lower().replace("-", " ").replace("_", " ")
+    if key in ("here", "this room", "this", "current room"):
+        found = standing_in(rooms)
+        if found is None:
+            raise ToolError("the player is not standing in a room of this house; name the room instead")
+        return found
+    label = "_".join(key.removeprefix("the ").split())
+    matches = [r for r in rooms if r["label"] == label]
+    if not matches:
+        labels = sorted({r["label"] for r in rooms})
+        raise ToolError(f"no room {room!r} in {listing_id}; its rooms are: {', '.join(labels)}")
+    if len(matches) > 1:
+        furnished = [r for r in matches if (FILES.read_json(plan_path(r["id"])) or {}).get("objects")]
+        here = standing_in(matches)
+        if len(furnished) == 1:
+            return furnished[0]
+        if here is not None:
+            return here
+        options = ", ".join(f"{r['id']} ({r['area_m2']} m2)" for r in matches)
+        raise ToolError(
+            f"{len(matches)} rooms are labelled {label}: {options}. Pass the room id of the one meant"
+        )
+    return matches[0]
+
+
+@tool(parse_docstring=True)
+async def clear_furniture(
+    listing_id: str, runtime: ToolRuntime[AgentContext], room: str | None = None
+) -> str:
+    """Remove furniture from the shared world: everything in one room, or in the whole house.
+
+    Pieces placed by hand go too, for every player in the house. Returns how many pieces were removed and
+    from which rooms; removed 0 means there was nothing to remove.
+
+    Args:
+        listing_id: The house, e.g. the in_house value of the [Player: ...] line.
+        room: The room to empty: a label ("living_room"), a room id ("hou_236595179.r3"), or "here" for
+            the room the player stands in. Leave it out to empty the whole house.
+    """
+    ctx = runtime.context
+
+    async def run() -> dict:
+        rooms = {r["id"]: r for r in rooms_of(listing_id)}
+        target = None
+        if room is not None:
+            needs_player = room not in rooms
+            player = await game_api.get_player(ctx.block_id, ctx.player_id) if needs_player else None
+            target = _room_to_clear(listing_id, room, player)
+        result = await game_api.clear_furniture(
+            ctx.block_id,
+            ctx.player_id,
+            listing_id,
+            room_id=target["id"] if target else None,
+            room_label=target["label"] if target else None,
+        )
+        # Keep this session's plans in step with the world, so a later edit does not bring pieces back.
+        for room_id in [target["id"]] if target else list(rooms):
+            plan = FILES.read_json(plan_path(room_id))
+            if plan and plan.get("objects"):
+                save_plan({**plan, "objects": [], "conflicts": [], "status": "draft"})
+        return {
+            "scope": "room" if target else "house",
+            "room_id": target["id"] if target else None,
+            "label": target["label"] if target else None,
+            "removed": result.get("removed", 0),
+            "rooms": [
+                {**r, "label": rooms.get(r["room_id"], {}).get("label")} for r in result.get("rooms", [])
+            ],
+        }
+
+    return await _arun(run)
+
+
 # --- tool sets per agent (AGENTS.md section 10 table) ------------------------------------------------
 
-CONCIERGE_TOOLS = [search_listings, get_listing, focus_listing, get_player_context]
+CONCIERGE_TOOLS = [search_listings, get_listing, focus_listing, get_player_context, clear_furniture]
 AUDITOR_TOOLS = [get_listing, get_house_graph, get_rooms, get_audit]
 ROOM_SCOUT_TOOLS = [get_rooms, get_house_graph, get_room_geometry]
 CURATOR_TOOLS = [search_assets, save_picks]

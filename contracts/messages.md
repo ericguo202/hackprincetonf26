@@ -1,4 +1,4 @@
-# Game service messages (contracts v2.6.0)
+# Game service messages (contracts v2.6.1)
 
 Colyseus 0.18, one room type `NeighborhoodRoom` keyed by `block_id`, up to 16 players.
 Shared state schema: `game-state.ts`. Positions are in the player's current zone frame
@@ -101,6 +101,7 @@ HTTP with header `X-Internal-Secret: $GAME_INTERNAL_SECRET`. Private network fir
 | Method | Path                                                  | Body                                                                 | Effect                                                                                     |
 | ------ | ----------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `POST` | `/internal/rooms/{block_id}/houses/{listing_id}/plan` | `{player_id, plan, room_label?}` (plan: `placement_plan.schema.json`, no conflicts) | Replace that room's furniture (rules below); broadcast `toast` "{name}'s agent furnished the {room}" |
+| `POST` | `/internal/rooms/{block_id}/houses/{listing_id}/clear` | `{player_id, room_id?, room_label?}`                                 | Clear furniture (v2.6.1, rules below): empty one room, or the whole house without `room_id`; returns `{removed, rooms: [{room_id, removed}]}` |
 | `POST` | `/internal/rooms/{block_id}/focus`                    | `{player_id, listing_id}`                                            | Beacon on a house; a changed beacon opens that player's teleport window                   |
 | `GET`  | `/internal/rooms/{block_id}/players/{player_id}`      | none                                                                 | `{zone, x, y, z}` for agent context                                                        |
 
@@ -113,6 +114,18 @@ room of the listing in the path (`<listing_id>.r<n>`), else 400. Each
 `instance_id` in `House.objects` is prefixed with its room id
 (`"hou_236595179.r3/o1"`), because agents number pieces `o1, o2...` per plan.
 `House.plan_id` is the latest plan's id for that house.
+
+Clear furniture (v2.6.1). `clear` removes every piece of the room named by
+`room_id` (a room of the listing in the path, else 400), or of every room of
+the house when `room_id` is absent or null. Hand-placed pieces go too: they
+live in the same per-room furniture. `rooms` lists only the rooms that held
+something, in first-furnished order, and `removed` is their sum; a room or a
+house that was already empty returns `{removed: 0, rooms: []}` and sends no
+toast. Otherwise the game broadcasts one `toast`: "{name}'s agent cleared the
+{room}" (from `room_label`, "a room" without it) or "{name}'s agent cleared
+the house". A cleared room keeps its place in the room order, so furnishing it
+again puts its pieces where they were in `House.objects`. `House.plan_id` is
+not changed. Additive: the plan POST with no objects still clears one room.
 
 `room_label` (v2.4.2, optional) is the room's `label` from `room.schema.json`
 (for example `living_room`). The toast shows it in words ("the living room");

@@ -28,6 +28,21 @@ async def post_plan(block_id: str, player_id: str, plan: dict, room_label: str |
         return r.json()
 
 
+async def clear_furniture(
+    block_id: str, player_id: str, listing_id: str, room_id: str | None = None, room_label: str | None = None
+) -> dict:
+    """Empty one room, or the whole house when room_id is None (contracts v2.6.1). Hand-placed pieces go too.
+
+    Returns {"removed": n, "rooms": [{"room_id", "removed"}]} for the rooms that held something."""
+    body: dict = {"player_id": player_id}
+    if room_id is not None:
+        body |= {"room_id": room_id, "room_label": room_label}
+    async with _client() as c:
+        r = await c.post(f"/internal/rooms/{block_id}/houses/{listing_id}/clear", json=body)
+        r.raise_for_status()
+        return r.json()
+
+
 async def post_focus(block_id: str, player_id: str, listing_id: str) -> dict:
     async with _client() as c:
         r = await c.post(
