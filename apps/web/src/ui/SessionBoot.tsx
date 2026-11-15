@@ -3,11 +3,12 @@ import { useEffect } from "react";
 import { joinBlock } from "../net/game";
 import { startAgentSession } from "../net/agent";
 import { useStore } from "../store";
+import { makePlayerName } from "./playerNames";
 
 function playerName(): string {
   const n = sessionStorage.getItem("bw-name");
   if (n) return n;
-  const made = `Player ${Math.floor(10 + Math.random() * 89)}`;
+  const made = makePlayerName(); // "Foamy Otter" (playerNames.ts, Lane C)
   sessionStorage.setItem("bw-name", made);
   return made;
 }
