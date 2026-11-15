@@ -430,3 +430,14 @@ While the server has my `Player.alive` false (the 3 s before respawn), the blast
 - `player/Blaster.tsx`: the existing per-frame gate is now `canAttackNow(foamModeNow(), meAliveNow())`. `player/Crosshair.tsx` hides on the same gate.
 - Lane D's respawn path (`world/RespawnWatcher.tsx`, `world/respawn.ts`, `Player.tsx` elimination handling) is untouched.
 - Tested: `foamMode.test.ts` (no id, missing entry, alive, dead and respawn, another player's death, the 4-row gate table, keys 1/2 while dead). Not yet seen in a browser.
+
+## 21. Weapon hotbar
+
+A two-slot weapon bar in the style of a battle-royale hotbar, bottom centre: **1** Foam blaster, **2** Pool noodle. Each slot is a 64 px rounded square with the key number top-left, an icon and a short name under it. The selected slot gets a yellow border, 1.12x scale and full opacity; the other is dimmed. Changes ease over 120 ms.
+
+- **Files:** `player/WeaponBar.tsx` (DOM overlay, mounted next to `<Crosshair />` in `world/World.tsx`), `player/hotbar.ts` (pure logic), `player/weaponIcons.tsx`, `player/attackClock.ts`.
+- **Slots** come from `weapons.ts` `WEAPON_KEYS`, so they can't drift from the keys. Names are a `Record<Weapon, string>`, so a new weapon fails typecheck until it's named.
+- **Cooldown sweep:** after an attack, a dark shade over the selected slot shrinks so the slot clears from the bottom up, over that weapon's interval (`WEAPON_RULES`: blaster 0.25 s, noodle 0.8 s). Same rule as Blaster's `canAttack`. Blaster now calls `markAttack(weapon)` (a tiny zustand store, `attackClock.ts`) next to its own `lastShotAt`; its logic is otherwise unchanged. The bar animates with rAF only while a cooldown runs.
+- **Visibility** (`barView`): only in foam mode, whether or not the pointer is locked. Greyed (40%, grayscale) while eliminated (`useMeAlive`). Hidden while a text input, textarea or contenteditable has focus, so it doesn't cover the chat panel. `pointer-events: none` throughout. Scales to 0.75 below 700 px wide.
+- **Icons:** original inline SVGs (orange toy blaster with a dart, bendy green noodle tube). No logos, not traced from the kit or any product. CC0, recorded in the `weaponIcons.tsx` header (`public/characters/CREDITS.md` lists model files only).
+- **Tested** (`hotbar.test.ts`, `WeaponBar.test.tsx`): slot order from the keys, highlight per weapon, explore hidden / foam shown / dead dimmed, typing hides, cooldown fraction at t = 0, half and full for both weapons, sweep only on the selected slot. **Not yet seen in a browser:** the Chrome extension wasn't connected, so the F / 1 / 2 / shot check is still to do. The dev server compiles and serves every new module.
