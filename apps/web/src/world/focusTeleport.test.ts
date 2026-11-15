@@ -31,6 +31,28 @@ describe("yawToward", () => {
 });
 
 describe("focusArrival", () => {
+  // Door at x = 10 facing +X (exit point 1.2 m further along +X).
+  const d = door([10, 0.3, 5], [11.2, 0.3, 5]);
+
+  it("lands on the nearest sidewalk spawn on the street side, facing the door", () => {
+    const spawns: [number, number, number][] = [
+      [30, 0.2, 5], // street side, 20 m
+      [22, 0.25, 9], // street side, nearest
+      [0, 0.2, 5], // behind the house: never
+      [50, 0.2, 5], // street side but too far
+    ];
+    const a = focusArrival(d, 1, spawns);
+    expect(a.pos).toEqual([22, 1.25, 9]);
+    const [vx, , vz] = viewDir(a.yaw, 0);
+    const len = Math.hypot(10 - 22, 5 - 9);
+    expect(vx).toBeCloseTo((10 - 22) / len, 6);
+    expect(vz).toBeCloseTo((5 - 9) / len, 6);
+  });
+
+  it("falls back to the exit point with no spawn in front within range", () => {
+    expect(focusArrival(d, 1, [[0, 0.2, 5], [80, 0.2, 5]]).pos).toEqual([11.2, 1.3, 5]);
+  });
+
   it("lands on the door's exit point, lifted, looking back at the door", () => {
     const a = focusArrival(door([10, 0.3, 5], [11.2, 0.3, 5]), 1);
     expect(a.pos).toEqual([11.2, 1.3, 5]);

@@ -170,7 +170,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
         if (!listing || s.players[id]?.alive === false) return;
         const door = pack.doors.find((d) => d.listing_id === listing);
         if (!door) return; // not a house on this block
-        const arrival = focusArrival(door, 0);
+        const arrival = focusArrival(door, 0, pack.manifest.spawns as Vec3[]);
         // Right outside the door: the trigger stays disarmed until we walk clear.
         zoneState.current = { zone: "block", armed: false };
         goTo("block", arrival.pos, arrival.yaw);
