@@ -100,11 +100,15 @@ Run each service locally with the commands in [`AGENTS.md` §13](AGENTS.md). Eve
 
 ## Challenges we faced
 
-_TBD_
+**Sparse scans make an unfinished map.** Matterport's interior and exterior images are high quality, but they are still too sparse to build a usable 3D map on their own. A large share of our time went into refinements and heuristics to turn the scans into something you can walk around in. Any surface that no camera saw would render textureless, or not at all, which a player would notice right away, and outdoors it was a huge eyesore.
+
+**Aerial data to fill the gaps, in small doses.** To fix the outdoors we turned to Vexcel's Gaussian splat and aerial drone imagery around the houses. That was a challenge of its own: the splat is so detailed that loading all of it would crash the browser. Instead we took strategic shots from it and spent a lot of time finding the right camera angles to texture the geometry we had first built from Matterport.
 
 ## What we learned
 
-_TBD_
+**Build a loop, not a one-shot pipeline.** Map quality came from a repeated cycle: find an issue, design a refinement, then run a suite of tests to vet the change quickly and go around again. Investing early in fast checks and preview tools is what made that loop quick enough to run many times in one weekend.
+
+**Use heavy data as a source, not as the product.** The most detailed data (the full Gaussian splat) was too big to ship to a browser, but it was very useful as a reference to sample from. Taking only the views we needed gave us most of the detail at a fraction of the cost.
 
 ## Next steps
 
