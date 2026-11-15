@@ -204,6 +204,17 @@ def test_a_closed_or_outside_door_stays_solid_in_collision():
     assert sum(abs(w.b[1] - w.a[1]) for w in shared) == pytest.approx(3.0, abs=0.01)
 
 
+def test_hand_relabel_picks_the_room_by_point():
+    fix = {**SPLIT, "labels": [{"at": [1, 4], "label": "dining_room"}]}
+    parts = bh.apply_splits(bh.read_rooms(MODEL), fix)
+    areas = {p.label: round(p.poly.area, 1) for p in parts if p.keep and p.raw_label == "Kitchen"}
+    assert areas == {"kitchen": 12.0, "dining_room": 12.0}
+    with pytest.raises(ValueError):
+        bh.apply_splits(bh.read_rooms(MODEL), {"labels": [{"at": [1, 4], "label": "lounge"}]})
+    with pytest.raises(ValueError):
+        bh.apply_splits(bh.read_rooms(MODEL), {"labels": [{"at": [99, 99], "label": "kitchen"}]})
+
+
 def test_second_split_picks_the_room_by_point():
     two = {
         "splits": [

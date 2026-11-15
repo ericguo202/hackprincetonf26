@@ -1,0 +1,19 @@
+{
+  "block_id": "hou_lawson_01",
+  "note": "Extra house outside the Navidad block (2026-11-15, lane-a/more-houses). A lot-only map: no block/ files, no live pack version. Built into v50+ with worldgen.build_house; not published, not read by the game.",
+  "center": {
+    "lat": 29.729191,
+    "lon": -95.329887
+  },
+  "radius_m": 60,
+  "houses": [
+    {
+      "listing_id": "hou_231395941",
+      "costar_listing_id": 231395941,
+      "address": "1411 Lawson St, Houston, TX",
+      "matterport_model_id": "r5UE5zy6pU3",
+      "role": "two_storey_trial",
+      "interior_source": "panorama"
+    }
+  ]
+}

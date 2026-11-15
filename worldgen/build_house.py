@@ -63,6 +63,10 @@ LABELS = {
     "laundry room": "utility",
     "utility room": "utility",
 }
+ROOM_LABELS = {  # contracts/room.schema.json, AGENTS.md section 9
+    "living_room", "bedroom", "primary_bedroom", "kitchen", "dining_room", "bathroom", "hallway",
+    "staircase", "office", "closet", "garage", "utility", "other",
+}  # fmt: skip
 OUTDOOR = {"patio", "yard", "balcony", "exterior", "outdoor", "porch", "deck", "pool", "driveway", "terrace"}
 VOID = "void"
 
@@ -206,6 +210,22 @@ def apply_splits(parts: list[RoomPart], overrides: dict) -> list[RoomPart]:
             )
         i = out.index(parent)
         out[i : i + 1] = new
+    # Hand relabels, after the splits: Matterport's classifier can be plainly wrong (4380 W 28th St: the
+    # room with the range and the island is a 'Living Room'). The room is picked by a point inside it.
+    for spec in overrides.get("labels") or []:
+        floor = spec.get("floor")
+        hit = [
+            p
+            for p in out
+            if p.keep and (floor is None or p.floor == floor) and p.poly.contains(Point(spec["at"]))
+        ]
+        if len(hit) != 1:
+            raise ValueError(f"label {spec['label']!r}: point {spec['at']} is in {len(hit)} kept rooms")
+        if spec["label"] not in ROOM_LABELS:
+            raise ValueError(f"label {spec['label']!r} is not a Room.label (contracts/room.schema.json)")
+        hit[0].label = spec["label"]
+        hit[0].confidence = float(spec.get("confidence", 0.9))
+        hit[0].notes.append(f"relabelled by hand from Matterport '{hit[0].raw_label}'")
     return out
 
 

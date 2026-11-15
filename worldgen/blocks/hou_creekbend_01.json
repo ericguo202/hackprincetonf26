@@ -1,0 +1,20 @@
+{
+  "block_id": "hou_creekbend_01",
+  "note": "Extra house outside the Navidad block (2026-11-15, lane-a/more-houses). A lot-only map: no block/ files, no live pack version. Built into v50+ with worldgen.build_house; not published, not read by the game.",
+  "center": {
+    "lat": 29.66502,
+    "lon": -95.52527
+  },
+  "radius_m": 60,
+  "houses": [
+    {
+      "listing_id": "hou_234793602",
+      "costar_listing_id": 234793602,
+      "address": "8271 Creekbend Dr Unit 8271, Houston, TX",
+      "matterport_model_id": "tVSnNf9VCii",
+      "role": "starter_condo",
+      "interior_source": "panorama",
+      "exterior": false
+    }
+  ]
+}

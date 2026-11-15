@@ -1,0 +1,25 @@
+{
+  "model_id": "tVSnNf9VCii",
+  "note": "Hand fixes for 8271 Creekbend Dr Unit 8271 (condo, interior only). Coordinates are Matterport plan coordinates (x, y), not house-local.",
+  "splits": [
+    {
+      "room_label": "Kitchen",
+      "why": "Matterport classifies the whole 46 m2 open area as 'Kitchen'. The galley kitchen and the dining corner (chandelier, mirror wall) are west of the peninsula counter, whose living-room face is at x = -5.80 (near-orthographic top view of v50); the living room with the fireplace is east of it. The line sits on that face so the peninsula is measured as a fixture from the kitchen side.",
+      "line": [[-5.8, -10.0], [-5.8, 10.0]],
+      "parts": [
+        { "label": "kitchen", "point": [-7.0, 1.0], "confidence": 0.9 },
+        { "label": "living_room", "point": [-2.5, -1.5], "confidence": 0.9 }
+      ]
+    },
+    {
+      "room_label": "Kitchen",
+      "at": [-7.0, 1.0],
+      "why": "West of the peninsula: the galley (west counter, stove, fridge, peninsula) ends at y = -1.06, where the west counter's end panel and the peninsula's end are; south of it is the dining corner.",
+      "line": [[-10.0, -1.06], [10.0, -1.06]],
+      "parts": [
+        { "label": "kitchen", "point": [-7.0, 1.0], "confidence": 0.9 },
+        { "label": "dining_room", "point": [-7.0, -2.5], "confidence": 0.85 }
+      ]
+    }
+  ]
+}

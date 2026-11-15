@@ -1,0 +1,19 @@
+{
+  "block_id": "la_w28th_01",
+  "note": "Extra house outside the Navidad block (2026-11-15, lane-a/more-houses). A lot-only map: no block/ files, no live pack version. Built into v50+ with worldgen.build_house; not published, not read by the game.",
+  "center": {
+    "lat": 34.030913,
+    "lon": -118.33586
+  },
+  "radius_m": 60,
+  "houses": [
+    {
+      "listing_id": "hou_218320859",
+      "costar_listing_id": 218320859,
+      "address": "4380 W 28th St, Los Angeles, CA",
+      "matterport_model_id": "uFUX5KJHVjp",
+      "role": "la_spanish",
+      "interior_source": "panorama"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "block_id": "hou_redondo_01",
+  "note": "Extra house outside the Navidad block (2026-11-15, lane-a/more-houses). A lot-only map: no block/ files, no live pack version. Built into v50+ with worldgen.build_house; not published, not read by the game.",
+  "center": {
+    "lat": 29.782898,
+    "lon": -95.197807
+  },
+  "radius_m": 60,
+  "houses": [
+    {
+      "listing_id": "hou_231146282",
+      "costar_listing_id": 231146282,
+      "address": "702 Redondo Dr, Houston, TX",
+      "matterport_model_id": "8DS5ofxKt2Y",
+      "role": "multi_unit",
+      "interior_source": "panorama"
+    }
+  ]
+}
