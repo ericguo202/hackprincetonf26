@@ -25,7 +25,7 @@
 // While this player carries a piece in build mode (buildState), that piece
 // is hidden here, collider included; everyone else still sees it.
 
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group } from "three";
@@ -44,6 +44,8 @@ import { hiddenLocally, useBuild } from "./buildState";
 import { useFurnitureLayout, useStableFurniture } from "./useFurniturePlan";
 import { useIndoorSpawns } from "./indoorSpawns";
 import { warnOnce } from "./pack";
+import { footprintRadius, useLandingPuffs } from "./landingPuff";
+import { play } from "../player/sfx";
 import { ScreenVideo } from "./TvScreen";
 import { TV_VIDEO_URL, findScreen } from "./tvVideo";
 
@@ -136,6 +138,7 @@ function FurniturePiece({
   index,
   showLabel,
   dropFrom,
+  onLanded,
 }: {
   obj: PlacedObject;
   asset: Asset;
@@ -144,6 +147,8 @@ function FurniturePiece({
   index: number;
   showLabel: boolean;
   dropFrom: number;
+  /** Called once, on the frame a drop-in reaches the floor (landing puff and thunk). */
+  onLanded: (obj: PlacedObject, asset: Asset) => void;
 }) {
   const group = useRef<Group>(null);
   const elapsed = useRef(index < 0 ? DROP_S + 1 : -index * STAGGER_S);
@@ -154,7 +159,10 @@ function FurniturePiece({
 
   useFrame((_, dt) => {
     if (!group.current || elapsed.current > DROP_S) return;
+    const before = elapsed.current;
     elapsed.current += Math.min(dt, 0.1);
+    // Landed this frame: only pieces that actually drop in (index >= 0).
+    if (index >= 0 && before < DROP_S && elapsed.current >= DROP_S) onLanded(obj, asset);
     const t = Math.min(1, Math.max(0, elapsed.current / DROP_S));
     const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
     group.current.position.y = (1 - e) * dropFrom;
@@ -224,6 +232,19 @@ export function FurnitureLayer({ catalog, rooms, packBaseUrl, showLabels = true 
   }, [zone, keys]);
   useEffect(() => () => void drawnKeys.delete(zone), [zone]);
 
+  // Landing puffs (pooled, house frame) and the thunk, when a drop-in reaches the floor.
+  const puffs = useLandingPuffs();
+  const spawnPuff = puffs.spawn; // stable
+  const onLanded = useCallback(
+    (obj: PlacedObject, asset: Asset) => {
+      const { w, d } = asset.size_m;
+      spawnPuff([obj.x, obj.y, obj.z], footprintRadius(w, d));
+      play("thunk", { size: Math.max(w, d) });
+    },
+    [spawnPuff],
+  );
+  useFrame((_, dt) => puffs.step(Math.min(dt, 0.1)));
+
   // Build mode: the piece I carry, or just moved, is hidden here until its new pose arrives.
   const held = useBuild((s) => s.held);
   const active = useBuild((s) => s.active);
@@ -257,9 +278,11 @@ export function FurnitureLayer({ catalog, rooms, packBaseUrl, showLabels = true 
             index={isNew ? fresh++ : -1}
             dropFrom={o.reason ? DROP_FROM_M : SHORT_DROP_M}
             showLabel={showLabels}
+            onLanded={onLanded}
           />
         );
       })}
+      {puffs.elements}
     </group>
   );
 }

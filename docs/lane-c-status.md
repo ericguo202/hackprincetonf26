@@ -683,3 +683,16 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - The rate limiter: per key, and 40 calls in 0.2 s let 5 through.
   - Mute persistence with a mocked storage, including blocked storage, and the M toggle.
   - Nothing plays, and no context is created, before unlock. After unlock: a bounded number of nodes per sound, rate-limited, silent when muted, combat sounds silent in explore, and a remote sound beyond 25 m skipped.
+
+## 32. Name tags and furniture landing puff
+
+**Not seen in a browser.** Checked by unit tests and the production-build grep.
+
+- **Name tags (`RemotePlayers.tsx`, `nameTag.ts`):** each remote player's `store.players[id].name` (read only) is shown in a small pill `WorldLabel` 0.35 m above the model's top.
+  - It uses `labelFade` with `NAME_TAG_RANGE`: fully visible to 21 m, gone at 25 m.
+  - Hidden while they're eliminated (the interpolated sample's `alive`), never shown for myself, and not drawn without a name. Names over 16 characters are cut to 15 plus "…", counting by code point so emoji aren't split.
+- **Furniture landing (`FurnitureLayer.tsx`, `landingPuff.tsx`):** when a drop-in reaches the floor, the piece calls `onLanded` once (only pieces that actually drop).
+  - **Puff:** a pooled pale-dust ring on the floor around the footprint, plus 6 to 10 bits kicked outward from its edge, all fading over 0.35 s and scaled to `size_m`. The pool is 6 rings and 60 bits, reused oldest-first, and allocation-free per frame.
+  - **Sound:** `sfx` gained a "thunk": 130 Hz for small pieces down to 70 Hz for big ones. It has its own 0.15 s rate limit, so a room landing 0.12 s apart thunks about every other piece. It respects mute and also plays in explore mode.
+  - Colliders, push-out and the drop-in timing are unchanged.
+- **Tests:** `nameTag.test.ts` (truncation, self/eliminated/no-name, the 25 m range), `landingPuff.test.ts` (footprint scaling, ring growth and fade, pool reuse, outward bits) and `sfx.test.ts` (+3: thunk pitch vs size, the room rate limit, plays in explore and respects mute).

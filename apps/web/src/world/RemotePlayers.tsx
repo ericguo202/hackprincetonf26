@@ -7,7 +7,7 @@
 // samples become the hitboxes the blaster tests (remoteTargets.ts), so what
 // you shoot at is exactly what is drawn.
 
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
 
@@ -15,9 +15,11 @@ import type { AnimState } from "../../../../contracts/game-state";
 import { useStore } from "../store";
 import { Character } from "../player/Character";
 import { heldWeaponProp, useFoamMode } from "../player/foamMode";
-import { FOOT_BELOW_CENTRE_M, variantFor } from "../player/characterAsset";
+import { CHARACTER, FOOT_BELOW_CENTRE_M, variantFor } from "../player/characterAsset";
 import { MOVEMENT } from "../player/movement";
 import { REMOTE_PRIORITY } from "./frameOrder";
+import { NAME_TAG_ABOVE_M, NAME_TAG_RANGE, nameTagText, showNameTag } from "./nameTag";
+import { WorldLabel } from "./WorldLabel";
 import {
   MOVING_SPEED,
   footBelowCentre,
@@ -93,7 +95,14 @@ export function RemotePlayers({ zone }: { zone: string }) {
 
 function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers: Buffers }) {
   const group = useRef<Group>(null);
-  const [look, setLook] = useState<{ anim: AnimState; moving: boolean }>({ anim: "idle", moving: false });
+  const [look, setLook] = useState<{ anim: AnimState; moving: boolean; alive: boolean }>({
+    anim: "idle",
+    moving: false,
+    alive: true,
+  });
+  // Their name (read only) and mine, for the tag.
+  const name = useStore((s) => s.players[id]?.name);
+  const meId = useStore((s) => s.me.id);
   const lookRef = useRef(look);
   // Remote players show the blaster in foam (the wire has no per-player weapon), nothing in explore.
   const weapon = heldWeaponProp(useFoamMode(), "blaster");
@@ -110,8 +119,12 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
     footBelow.current += (target - footBelow.current) * Math.min(1, dt * 12);
     group.current.position.set(s.pos[0], s.pos[1] - footBelow.current, s.pos[2]);
     group.current.rotation.y = s.yaw;
-    const next = { anim: s.anim, moving: s.speed > MOVING_SPEED };
-    if (next.anim !== lookRef.current.anim || next.moving !== lookRef.current.moving) {
+    const next = { anim: s.anim, moving: s.speed > MOVING_SPEED, alive: s.alive };
+    if (
+      next.anim !== lookRef.current.anim ||
+      next.moving !== lookRef.current.moving ||
+      next.alive !== lookRef.current.alive
+    ) {
       lookRef.current = next;
       setLook(next);
     }
@@ -127,6 +140,11 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
         flashId={id}
         fallback={<RemoteCapsule />}
       />
+      {showNameTag(id, meId, look.alive, name) ? (
+        <WorldLabel position={[0, CHARACTER.heightM + NAME_TAG_ABOVE_M, 0]} style={nameTagStyle} range={NAME_TAG_RANGE}>
+          {nameTagText(name)}
+        </WorldLabel>
+      ) : null}
     </group>
   );
 }
@@ -140,3 +158,16 @@ function RemoteCapsule() {
     </mesh>
   );
 }
+
+/** A small pill, in the door labels' colours. */
+const nameTagStyle: CSSProperties = {
+  background: "rgba(16,20,26,0.8)",
+  color: "#e8eaed",
+  padding: "2px 8px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  pointerEvents: "none",
+  textAlign: "center",
+};

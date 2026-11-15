@@ -12,6 +12,8 @@ import {
   REMOTE_GAIN,
   REMOTE_MAX_M,
   remoteVolume,
+  KIND_GAP_S,
+  thunkPitch,
   saveMuted,
   unlockAudio,
   useSfxMute,
@@ -196,5 +198,39 @@ describe("play", () => {
     await Promise.resolve();
     expect(play("fire", { volume: remoteVolume(30), remote: true })).toBe(false);
     expect(play("fire", { volume: remoteVolume(5), remote: true })).toBe(true);
+  });
+});
+
+describe("thunk (furniture landing)", () => {
+  it("is lower for bigger pieces, within 70 to 130 Hz", () => {
+    expect(thunkPitch(0.3)).toBeGreaterThan(thunkPitch(1));
+    expect(thunkPitch(1)).toBeGreaterThan(thunkPitch(2.2));
+    expect(thunkPitch(0)).toBe(130);
+    expect(thunkPitch(10)).toBe(70);
+    expect(thunkPitch(Number.NaN)).toBe(130);
+  });
+
+  it("a room landing 0.12 s apart thunks about every other piece", () => {
+    const r = new RateLimiter();
+    let n = 0;
+    for (let i = 0; i < 10; i++) if (r.allow("thunk", i * 0.12, KIND_GAP_S.thunk)) n++;
+    expect(n).toBe(5);
+  });
+
+  it("plays in explore mode, and respects mute", async () => {
+    let made: FakeAudioContext | null = null;
+    _setAudioContextFactory(() => (made = new FakeAudioContext()) as unknown as AudioContext);
+    vi.useFakeTimers();
+    useStore.setState({ mode: "explore" });
+    useSfxMute.getState().set(false);
+    unlockAudio();
+    await Promise.resolve();
+    expect(made).not.toBeNull();
+    expect(play("thunk", { size: 2 })).toBe(true);
+    made!.currentTime += 1;
+    useSfxMute.getState().set(true);
+    expect(play("thunk", { size: 2 })).toBe(false);
+    useSfxMute.getState().set(false);
+    vi.useRealTimers();
   });
 });

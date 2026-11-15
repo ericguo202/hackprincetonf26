@@ -25,7 +25,8 @@ export type SfxKind =
   | "pop" // elimination foam pop + sparkle
   | "doorOpen" // click + creak-lite
   | "doorClose" // click
-  | "hurt"; // I got hit: muffled thud
+  | "hurt" // I got hit: muffled thud
+  | "thunk"; // a furniture piece lands: low muffled thump (lower for bigger pieces)
 
 /** Sounds that only play in foam mode. */
 const COMBAT: ReadonlySet<SfxKind> = new Set(["fire", "hitPlayer", "hitSurface", "swing", "bonk", "pop", "hurt"]);
@@ -37,6 +38,21 @@ export const RATE_LIMIT_S = 0.04;
 export const REMOTE_GAIN = 0.55;
 export const REMOTE_MAX_M = 25;
 export const MUTE_KEY = "lc.sfx.muted";
+/**
+ * Kinds with a longer gap than RATE_LIMIT_S. A furnished room drops its
+ * pieces in 0.12 s apart; at 0.15 s about every other landing thunks, so a
+ * whole room doesn't pile up.
+ */
+export const KIND_GAP_S: Partial<Record<SfxKind, number>> = { thunk: 0.15 };
+
+/**
+ * The thunk's pitch (Hz) for a piece whose largest footprint side is `sizeM`
+ * metres: 130 Hz for small things, falling to 70 Hz for a 2.7 m sofa or bed.
+ */
+export function thunkPitch(sizeM: number): number {
+  const s = Number.isFinite(sizeM) ? Math.max(0, sizeM) : 0;
+  return Math.max(70, Math.min(130, 130 - 22 * s));
+}
 
 // ---------------------------------------------------------------------------
 // Pure parts
@@ -53,9 +69,9 @@ export function remoteVolume(dist: number): number {
 export class RateLimiter {
   private last = new Map<string, number>();
   constructor(private gap = RATE_LIMIT_S) {}
-  allow(key: string, now: number): boolean {
+  allow(key: string, now: number, gap = this.gap): boolean {
     const t = this.last.get(key);
-    if (t !== undefined && now - t < this.gap && now >= t) return false;
+    if (t !== undefined && now - t < gap && now >= t) return false;
     this.last.set(key, now);
     return true;
   }
@@ -142,6 +158,8 @@ export function audioUnlocked(): boolean {
 export type PlayOptions = {
   /** 0..1 on top of the master gain (remoteVolume for other players' sounds). */
   volume?: number;
+  /** thunk: the piece's largest footprint side, metres (thunkPitch). */
+  size?: number;
   /** Rate-limit separately from my own sounds of the same kind. */
   remote?: boolean;
 };
@@ -156,11 +174,11 @@ export function play(kind: SfxKind, opts: PlayOptions = {}): boolean {
   if (useSfxMute.getState().muted || !(vol > 0)) return false;
   if (COMBAT.has(kind) && !foamModeNow()) return false;
   const { ctx } = engine;
-  if (!limiter.allow(opts.remote ? `${kind}:r` : kind, ctx.currentTime)) return false;
+  if (!limiter.allow(opts.remote ? `${kind}:r` : kind, ctx.currentTime, KIND_GAP_S[kind] ?? RATE_LIMIT_S)) return false;
   const out = ctx.createGain();
   out.gain.value = Math.min(1, vol);
   out.connect(engine.master);
-  RECIPES[kind](engine, out, ctx.currentTime);
+  RECIPES[kind](engine, out, ctx.currentTime, opts);
   // Let the per-sound gain go once its recipe is over (all under 0.4 s).
   setTimeout(() => out.disconnect(), 600);
   return true;
@@ -219,7 +237,12 @@ function tone(e: Engine, out: AudioNode, t0: number, s: Tone): void {
   o.stop(t + s.dur + 0.02);
 }
 
-const RECIPES: Record<SfxKind, (e: Engine, out: AudioNode, t: number) => void> = {
+const RECIPES: Record<SfxKind, (e: Engine, out: AudioNode, t: number, opts: PlayOptions) => void> = {
+  thunk: (e, out, t, opts) => {
+    const f = thunkPitch(opts.size ?? 0.8);
+    tone(e, out, t, { dur: 0.22, type: "sine", f0: f, f1: f * 0.55, gain: 0.7, attack: 0.004 });
+    noise(e, out, t, { dur: 0.12, type: "lowpass", f0: 380, f1: 160, gain: 0.35 });
+  },
   fire: (e, out, t) => {
     noise(e, out, t, { dur: 0.09, type: "bandpass", f0: 3200, f1: 700, q: 1.2, gain: 0.6 });
     tone(e, out, t, { dur: 0.06, type: "sine", f0: 900, f1: 280, gain: 0.25 });
