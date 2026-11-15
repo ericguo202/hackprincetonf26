@@ -565,3 +565,34 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - Production build tree-shaking verified: `DevFocusToggle`, `DevModeToggle`, `dev plan`, `p_dev_b`, `dev-remote`, `VITE_START_ROOM`, and `__laneC` are all 0 occurrences in `/tmp/x/assets/*.js`.
 - **Not seen in a browser:** The visual appearance of the 30 m column of light, the opacity pulse feel, and the "Your match" label placement on the real block.
 
+
+## 27. Player looks: three characters, picked from the player id
+
+**Not seen in a browser.** Checked by unit tests (each file loaded in Node) and the production-build grep.
+
+- **Kept: all three people in the Toon Shooter Game Kit**, copied unmodified to `public/characters/` and credited in `CREDITS.md` (CC0):
+
+  | File | Size |
+  | --- | --- |
+  | `Character_Soldier.gltf` (already shipped) | 2.34 MB |
+  | `Character_Hazmat.gltf` | 2.33 MB |
+  | `Character_Enemy.gltf` (the red-helmet person, shown as "Red helmet") | 2.27 MB |
+
+  All three have:
+  - the same 17 clip names;
+  - all 14 weapon nodes on `Index1.R`, including RocketLauncher (three.js loads the bone as `Index1R`);
+  - no external buffers or images.
+
+  The kit has no other characters, so nothing was rejected. The Hazmat and Enemy files lack the Soldier's `ShoulderPad.L/R` nodes, which the rig doesn't use.
+- **Picking (`characterAsset.ts`):** `CHARACTER_VARIANTS` (Soldier first). `variantFor(id)` is the FNV-1a 32-bit hash of the id, modulo 3. No id (SOLO, or before joining) gives the Soldier.
+  - The local player uses `variantFor(me.id)` (`Player.tsx`); `RemotePlayers` uses each player's id.
+  - The URL is passed to `<Character url>`. The mesh probe and glTF loader key on the URL, so only looks in use are fetched.
+  - The capsule fallback is unchanged.
+- **Per-file rig:** `measure()` already scaled each source on its own (1.3 m, feet at 0, per-clip lift). One Soldier constant was baked in: the noodle's "world up in hand space" vector in `attachNoodle`. It's now computed from the hand's world rotation at the rest pose; a test checks it still matches the Soldier's old value.
+  - The weapon prune, foam tint, hit flash (per-instance material copies) and elimination pop are generic.
+- **Dev:** the `VITE_DEV_REMOTES` fakes are now `dev-remote-5` (Hazmat) and `dev-remote-2` (Red helmet), so both differ from your Soldier in SOLO.
+- **Deploy size:** +4.6 MB (Hazmat 2.33 MB + Enemy 2.27 MB). A client only downloads the looks of the players it sees.
+- **Tests (`characterVariants.test.ts`, 21):**
+  - `variantFor` is stable (FNV-1a reference values pinned) and spreads ids across all three looks.
+  - Per variant: the file is self-contained and under 3 MB; it has the 17 clips; RocketLauncher and the 14 weapon nodes are on the hand bone.
+  - Per variant: the rig is 1.3 m tall with feet at 0; only the tinted blaster is kept; the noodle points world-up and is 1.2 m long; the jiggle stays finite.

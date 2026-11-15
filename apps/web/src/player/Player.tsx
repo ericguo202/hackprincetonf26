@@ -34,7 +34,7 @@ import { CROUCH, MOVEMENT } from "./movement";
 /** Hold to crouch (contracts v2.4.0). C rather than Ctrl, which the browser owns (Ctrl+W). */
 export const CROUCH_KEY = "KeyC";
 import { Character } from "./Character";
-import { CHARACTER, FOOT_BELOW_CENTRE_M } from "./characterAsset";
+import { FOOT_BELOW_CENTRE_M, variantFor } from "./characterAsset";
 import { useMeshState } from "../world/meshProbe";
 import { registerPlayer } from "./playerControl";
 import { useWeaponState } from "./weaponState";
@@ -107,7 +107,9 @@ export function Player({
   /** Inside bodyMesh: moved each frame so the model's feet meet the ground. */
   const feet = useRef<Group | null>(null);
   const bodyWorld = useRef(new Vector3());
-  const model = useMeshState(children ? null : CHARACTER.url, CHARACTER.url);
+  // My look, from my player id (variantFor; Soldier before joining and in SOLO).
+  const lookUrl = variantFor(useStore((s) => s.me.id)).url;
+  const model = useMeshState(children ? null : lookUrl, lookUrl);
   // What the model shows. Changes a few times a second at most, so a state.
   const [look, setLook] = useState<{ anim: AnimState; moving: boolean }>({ anim: "idle", moving: false });
   const lookRef = useRef(look);
@@ -324,6 +326,7 @@ export function Player({
                   animState={look.anim}
                   moving={look.moving}
                   weapon={weapon}
+                  url={lookUrl}
                   // A file that passes the probe but fails to parse: the capsule, back at the body centre.
                   fallback={
                     <group position-y={FOOT_BELOW_CENTRE_M}>

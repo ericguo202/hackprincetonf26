@@ -223,9 +223,10 @@ function attachNoodle(root: Object3D): { holder: Object3D; jiggle: NoodleJiggle 
     geom,
     new MeshStandardMaterial({ color: n.color, roughness: 0.9 }),
   );
-  // Held straight up vertically in the hand.
-  // In holder (blaster) space, the world UP vector is [-0.4735, 0.6360, 0.6094].
-  const upDir = new Vector3(-0.4735, 0.636, 0.6094).normalize();
+  // Held straight up in the hand: world up, expressed in holder (blaster)
+  // space at the rest pose, measured on this model (the Soldier's is about
+  // [-0.47, 0.64, 0.61]; other variants' hands sit differently).
+  const upDir = new Vector3(0, 1, 0).applyQuaternion(holder.getWorldQuaternion(new Quaternion()).invert()).normalize();
   mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), upDir);
   mesh.position.copy(upDir.clone().multiplyScalar((n.lengthM / 2 - n.gripBackM) * k));
   mesh.castShadow = true;

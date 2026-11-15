@@ -3,7 +3,7 @@
 // no game server. Logic only (paths, a stand-in for the server's hit rules);
 // DevRemotes.tsx feeds the results into store.players at 20 Hz.
 //
-// dev-remote-1 runs a circle around the room's centre. dev-remote-2 walks a
+// The first fake runs a circle around the room's centre. The second walks a
 // line back and forth, pausing at each end and shooting while paused.
 // devFire() is passed to <Player onFire> in this mode: it logs the payload and
 // plays a stand-in for Lane D's server: 3 blaster or 2 noodle hits eliminate, respawn after 3 s.
@@ -21,7 +21,9 @@ import { WEAPON_RULES } from "../player/weapons";
  * replace it statically.
  */
 export const DEV_REMOTES_ON = import.meta.env.DEV && Boolean(import.meta.env.VITE_DEV_REMOTES);
-export const DEV_REMOTE_IDS = ["dev-remote-1", "dev-remote-2"] as const;
+// Ids picked so variantFor gives two different looks (Hazmat, Red helmet), both
+// unlike the local player's Soldier in SOLO (characterAsset.ts variantFor).
+export const DEV_REMOTE_IDS = ["dev-remote-5", "dev-remote-2"] as const;
 // Stand-in for Lane D's server: health 6, so the blaster's 3 hits and the
 // noodle's 2 (WEAPON_RULES) both divide it evenly.
 const FULL_HP = 6;

@@ -15,7 +15,7 @@ import type { AnimState } from "../../../../contracts/game-state";
 import { useStore } from "../store";
 import { Character } from "../player/Character";
 import { heldWeaponProp, useFoamMode } from "../player/foamMode";
-import { FOOT_BELOW_CENTRE_M } from "../player/characterAsset";
+import { FOOT_BELOW_CENTRE_M, variantFor } from "../player/characterAsset";
 import { MOVEMENT } from "../player/movement";
 import { REMOTE_PRIORITY } from "./frameOrder";
 import {
@@ -119,7 +119,14 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
 
   return (
     <group ref={group} visible={false}>
-      <Character animState={look.anim} moving={look.moving} weapon={weapon} flashId={id} fallback={<RemoteCapsule />} />
+      <Character
+        animState={look.anim}
+        moving={look.moving}
+        weapon={weapon}
+        url={variantFor(id).url}
+        flashId={id}
+        fallback={<RemoteCapsule />}
+      />
     </group>
   );
 }

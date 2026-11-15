@@ -8,7 +8,7 @@
 // (AGENTS.md section 5).
 import type { AnimState } from "../../../../contracts/game-state";
 
-/** Every animations[].name in Character_Soldier.gltf, in file order. */
+/** Every animations[].name in Character_Soldier.gltf, in file order (Hazmat and Enemy have the same 17: characterVariants.test.ts). */
 export const PACK_CLIPS = [
   "Death",
   "Duck",

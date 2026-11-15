@@ -5,7 +5,7 @@
 import { MOVEMENT } from "./movement";
 
 export const CHARACTER = {
-  /** Served by Vite from apps/web/public/characters/. */
+  /** Served by Vite from apps/web/public/characters/. The default look; see CHARACTER_VARIANTS. */
   url: "/characters/Character_Soldier.gltf",
   pack: "Toon Shooter Game Kit",
   author: "Quaternius",
@@ -34,6 +34,41 @@ export const CHARACTER = {
   /** Model height after scaling: the capsule's 2 * (halfHeight + radius). */
   heightM: 2 * (MOVEMENT.capsuleHalfHeight + MOVEMENT.capsuleRadius),
 } as const;
+
+/**
+ * Player looks: the kit's three characters, all people, all with the same 17
+ * clips, the same right-hand bone (Index1.R) and the same 14 weapon props
+ * (RocketLauncher kept). Every file is measured and scaled on its own
+ * (characterRig.ts measure), so nothing assumes the Soldier's numbers.
+ * Soldier first: it is the default with no player id.
+ */
+export const CHARACTER_VARIANTS = [
+  { id: "soldier", name: "Soldier", url: "/characters/Character_Soldier.gltf" },
+  { id: "hazmat", name: "Hazmat", url: "/characters/Character_Hazmat.gltf" },
+  // The kit calls it "Enemy"; it is the red-helmet person in the pack preview.
+  { id: "red", name: "Red helmet", url: "/characters/Character_Enemy.gltf" },
+] as const;
+
+export type CharacterVariant = (typeof CHARACTER_VARIANTS)[number];
+
+/** 32-bit FNV-1a of a string: the same on every client and every JS engine. */
+export function hashId(id: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/**
+ * The look for a player, picked from their id so every client agrees. No id
+ * (SOLO, or before joining the room) is the Soldier.
+ */
+export function variantFor(playerId: string | null | undefined): CharacterVariant {
+  if (!playerId) return CHARACTER_VARIANTS[0];
+  return CHARACTER_VARIANTS[hashId(playerId) % CHARACTER_VARIANTS.length];
+}
 
 /**
  * Feet below the body centre when standing: ecctrl floats the capsule
