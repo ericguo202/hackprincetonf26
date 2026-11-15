@@ -26,6 +26,7 @@ import { retargetPlan } from "./furniturePlan";
 import { warnOnce, type LoadedPack } from "./pack";
 import { FURNITURE_COLLIDER, SHOT_QUERY } from "./collisionGroups";
 import { useIndoorSpawns } from "./indoorSpawns";
+import { useDoorState } from "./doorState";
 import { localPlayer } from "../player/playerControl";
 
 import { START_ROOM } from "./devFlags";
@@ -130,6 +131,12 @@ export function DevProbe() {
         return h ? { plan_id: h.plan_id, objects: h.objects.length } : null;
       },
       spawns: () => useIndoorSpawns.getState().byHouse[useStore.getState().me.zone] ?? [],
+      /** Door debugging: where I am (house-local indoors) and the doors HouseDoors registered. */
+      doors: () => {
+        const { zone, pos } = useStore.getState().me;
+        const d = useDoorState.getState();
+        return { zone, pos, activeDoors: d.activeDoors, open: d.openDoors };
+      },
       /** First zone/furniture hit along a ray: { dist, furniture } or null. */
       dart: (o: [number, number, number], d: [number, number, number], max = 40) => {
         const hit = world.castRay(
