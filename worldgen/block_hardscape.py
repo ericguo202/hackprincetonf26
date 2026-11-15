@@ -21,12 +21,12 @@ from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 from worldgen import block_data as bd
-from worldgen.block_buildings import polys_of, triangulate
+from worldgen.block_buildings import polys_of
 from worldgen.block_glb import MeshBuf
 from worldgen.block_ground import TURN_R, WIDTH, calibrate
 
-SIDEWALK_H = 0.03  # sidewalk top above the lawn (a small clean step)
-DRIVE_H = 0.02
+SIDEWALK_H = 0.025  # sidewalk top above the lawn (a small clean step); drives cross it flush
+DRIVE_H = 0.025
 STOOP_H = 0.15
 GUTTER_W = 0.45
 JOINT_SIDEWALK = 1.5  # m between sidewalk joints
@@ -153,7 +153,7 @@ def find_sidewalks(
                 P[:, 1] + side * N[:, 1] * (rec["width"] / 2 + 2),
             )
             groups.setdefault((rec["name"], id(rec), side), []).append((rec, P, N, C, V, inzone, CW, VW))
-    strips, report = [], []
+    strips, report, real_ends = [], [], []
     k = np.ones(7)
     for (name, _wid, side), items in groups.items():
         # fit (setback, width) over the whole street side
@@ -225,20 +225,9 @@ def find_sidewalks(
                 sc[:, i] = f[:, i : i + w].mean(1) - f[:, i + w + 1 : i + w + 4].mean(1) - 0.5 * fr
             bi = sc.argmax(1).astype(float)
             bi[sc.max(1) < 0.3] = np.nan
-            if np.isfinite(bi).sum() >= 5:
-                med = np.array(
-                    [
-                        np.nanmedian(bi[max(0, j - 15) : j + 16])
-                        if np.isfinite(bi[max(0, j - 15) : j + 16]).any()
-                        else np.nan
-                        for j in range(len(bi))
-                    ]
-                )
-                ok_ = np.isfinite(med)
-                jj = np.arange(len(med))
-                i0s = np.round(np.interp(jj, jj[ok_], med[ok_])).astype(int)
-            else:
-                i0s = np.full(len(P), i0)
+            # one constant setback per way and side: a real sidewalk does not wobble
+            ic = int(round(np.nanmedian(bi))) if np.isfinite(bi).sum() >= 5 else i0
+            i0s = np.full(len(P), ic)
             cols = i0s[:, None] + np.arange(w)[None, :]
             band_c = np.take_along_axis(C, cols, axis=1).sum(1)
             band_v = np.take_along_axis(V, cols, axis=1).sum(1)
@@ -248,37 +237,96 @@ def find_sidewalks(
             frac = fc / np.maximum(fv, 1e-6)
             hidden = fv < 0.3 * 9 * w
             state = np.where(hidden, 0, np.where(frac > 0.45, 1, -1))  # 1 present, -1 absent, 0 unknown
-            # stations whose band runs into another street (intersections): absent
             o1 = rec["width"] / 2 + (d[i0s] - 0.1)
             mid = P + side * N * (o1 + width / 2)[:, None]
-            state[contains_xy(road, mid[:, 0], mid[:, 1])] = -1
-            state[~inz] = -1
-            # the median of a divided road: another carriageway within 12 m on this side
+            at_road = contains_xy(road, mid[:, 0], mid[:, 1])  # a crossing street
             far = P + side * N * (rec["width"] / 2 + 12.0)
-            state[contains_xy(road, far[:, 0], far[:, 1])] = -1
+            median_side = contains_xy(road, far[:, 0], far[:, 1])  # a divided road's median
+            outside = ~inz
+            state[at_road | median_side | outside] = -1
             pres = state == 1
-            # unknown gaps bridged when present on both sides; short absent gaps (<= 10 m) too
-            lab_, nr = ndimage.label(state != 1)
+            # bridge every gap between present stretches (shade, crowns, driveways, ambiguous ortho)
+            # unless the street crosses it or the ortho clearly shows >= 15 m without a walk (a real end)
+            lab_, nr = ndimage.label(~pres)
             for j in range(1, nr + 1):
                 idx = np.flatnonzero(lab_ == j)
                 a, b = idx[0] - 1, idx[-1] + 1
                 if a < 0 or b >= len(state) or not (pres[a] and pres[b]):
                     continue
-                gap = state[idx]
-                if (gap == 0).all() or (len(idx) <= 10 and not (gap == -1).sum() > 6):
-                    pres[idx] = ~contains_xy(road, mid[idx, 0], mid[idx, 1])
+                if at_road[idx].any() or median_side[idx].any() or outside[idx].any():
+                    continue
+                gap = state[idx] == -1
+                longest = max(
+                    (
+                        len(r_)
+                        for r_ in np.split(gap, np.flatnonzero(np.diff(gap.astype(int))) + 1)
+                        if r_.all()
+                    ),
+                    default=0,
+                )
+                if longest >= 15:
+                    real_ends.append(
+                        {
+                            "street": name,
+                            "side": side,
+                            "x": round(float(mid[idx[0], 0]), 1),
+                            "z": round(float(mid[idx[0], 1]), 1),
+                            "gap_m": int(len(idx)),
+                            "kind": "gap",
+                        }
+                    )
+                    continue
+                pres[idx] = True
             runs, nr = ndimage.label(pres)
             for j in range(1, nr + 1):
                 idx = np.flatnonzero(runs == j)
-                if len(idx) < 8:
+                ends_ = []
+                for e_, step in ((idx[0], -1), (idx[-1], 1)):
+                    # run into a crossing street: carry on to the curb (curb ramp)
+                    q = e_ + step
+                    extra = []
+                    while 0 <= q < len(P) and len(extra) < 8 and not median_side[q] and not outside[q]:
+                        extra.append(q)
+                        if at_road[q]:
+                            break
+                        q += step
+                    if extra and at_road[extra[-1]]:
+                        ends_.append(("ramp", extra))
+                    else:
+                        ends_.append(("end", []))
+                if len(idx) < 8 and not any(k_ == "ramp" for k_, _ in ends_):
                     continue
-                a = P[idx] + side * N[idx] * o1[idx, None]
-                b = P[idx] + side * N[idx] * (o1[idx] + width)[:, None]
+                full = np.r_[ends_[0][1][::-1], idx, ends_[1][1]].astype(int)
+                a = P[full] + side * N[full] * o1[full, None]
+                b = P[full] + side * N[full] * (o1[full] + width)[:, None]
                 poly = Polygon(np.r_[a, b[::-1]]).buffer(0)
                 if poly.is_empty:
                     continue
-                strips.append({"poly": poly, "line": rec["line"], "side": side})
-                present_m += len(idx) - 1
+                strip = {"poly": poly, "line": rec["line"], "side": side, "ramps": []}
+                for (kind_, ext), e_ in zip(ends_, (idx[0], idx[-1]), strict=True):
+                    if kind_ == "ramp":
+                        q = ext[-1]
+                        ramp = Polygon(
+                            [
+                                P[q] + side * N[q] * (o1[q] - 0.6),
+                                P[q] + side * N[q] * (o1[q] + width + 0.3),
+                                P[e_] + side * N[e_] * (o1[e_] + width),
+                                P[e_] + side * N[e_] * o1[e_],
+                            ]
+                        ).buffer(0)
+                        strip["ramps"].append(ramp)
+                    elif not outside[min(max(e_ + (1 if e_ == idx[-1] else -1), 0), len(P) - 1)]:
+                        real_ends.append(
+                            {
+                                "street": name,
+                                "side": side,
+                                "x": round(float(mid[e_, 0]), 1),
+                                "z": round(float(mid[e_, 1]), 1),
+                                "kind": "end",
+                            }
+                        )
+                strips.append(strip)
+                present_m += len(full) - 1
         report.append(
             {
                 "street": name,
@@ -289,6 +337,7 @@ def find_sidewalks(
                 "width_m": round(width, 1),
             }
         )
+    report.append({"real_ends": real_ends})
     return strips, report
 
 
@@ -384,22 +433,28 @@ def front_walk(door: dict, drive: dict | None, sidewalks, road, lab_vis, half, r
 def strip_mesh(top: MeshBuf, edge: MeshBuf, poly, ground, h, uvf, colorf, edge_shade: float = 0.85):
     """Flat slab `h` above the ground on `poly` (segmentised so it follows the terrain), with vertical
     edge faces down to just below the ground."""
+    from worldgen.block_ground import gridded
+
+    def lifted(x, z):
+        x, z = np.asarray(x, float), np.asarray(z, float)
+        return ground(x, z) + (h(x, z) if callable(h) else h)
+
     for p in polys_of(poly):
         p = p.segmentize(1.0)
-        v, tri = triangulate(p)
-        if not len(tri):
-            continue
-        hv = h(v[:, 0], v[:, 1]) if callable(h) else np.full(len(v), h)
-        y = ground(v[:, 0], v[:, 1]) + hv
-        col = colorf(v[:, 0], v[:, 1])
-        top.add(
-            np.c_[v[:, 0], y, v[:, 1]],
-            tri,
-            uv=uvf(v[:, 0], v[:, 1]),
-            normals=np.array([0, 1, 0]),
-            facing=np.array([0, 1, 0]),
-            color=col,
-        )
+        # cut into 1 m cells (like the lawn), so the slab follows the terrain everywhere: earcut's long
+        # thin triangles across a strip sagged below the neighbouring lawn
+        tmp = MeshBuf()
+        gridded(tmp, p, lifted, 160.0, 1.0, 0.0, uvf, 2.0, colorf=colorf)
+        if not tmp.empty():
+            a_ = tmp.arrays()
+            top.add(
+                a_["POSITION"],
+                a_["indices"].reshape(-1, 3),
+                uv=a_["TEXCOORD_0"],
+                normals=np.array([0, 1, 0]),
+                facing=np.array([0, 1, 0]),
+                color=a_["COLOR_0"],
+            )
         if not callable(h) and h <= 0.005:
             continue
         for ring in [p.exterior, *p.interiors]:
@@ -729,18 +784,10 @@ def curb_mesh(face: MeshBuf, top: MeshBuf, road, ground, curb: float, skip=None,
     if skip is not None and not skip.is_empty:
         band = band.difference(skip)
     band = band.intersection(box(-lim, -lim, lim, lim))
-    for p in polys_of(band):
-        p = p.segmentize(0.5)
-        v, tri = triangulate(p)
-        if len(tri):
-            y = ground(v[:, 0], v[:, 1]) + CURB_TOP_H
-            top.add(
-                np.c_[v[:, 0], y, v[:, 1]],
-                tri,
-                uv=v / 1.0,
-                normals=np.array([0, 1, 0]),
-                facing=np.array([0, 1, 0]),
-            )
+    from worldgen.block_ground import gridded
+
+    # 1 m cells so the band follows the terrain (no long triangles sagging under the lawn)
+    gridded(top, band, lambda x, z: ground(x, z) + CURB_TOP_H, half, 1.0, 0.0, lambda x, z: np.c_[x, z], 1.0)
     for p in polys_of(orient(road, 1.0)):
         for ring, toward_in in [(p.exterior, True)] + [(r, True) for r in p.interiors]:
             xy = np.asarray(LineString(ring.coords).segmentize(0.5).coords)
