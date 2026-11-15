@@ -1,6 +1,6 @@
 {
  "block_id": "hou_navidad_01",
- "version": 2,
+ "version": 3,
  "origin": {
   "lat": 29.70113,
   "lon": -95.670841
@@ -69,5 +69,5 @@
    91.69
   ]
  ],
- "furniture_catalog": "furniture/v2/catalog.json"
+ "furniture_catalog": "furniture/v3/catalog.json"
 }

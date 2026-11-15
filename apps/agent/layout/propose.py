@@ -63,6 +63,11 @@ BLOCKED_LIMIT = 3  # blocked poses offered when no pose fits
 BLOCKED_SCAN = 60  # room-valid blocked candidates examined, best scores first
 
 
+def mount_y(asset: dict) -> float:
+    """Wall-mounted assets (catalog mount_y_m, contracts v2.5.0: a wall TV) hang this far above the floor."""
+    return float(asset.get("mount_y_m") or 0.0)
+
+
 def _cand(x: float, z: float, rot: float, score: float, reason: str) -> dict:
     return {"x": x, "z": z, "rot_deg": rot % 360, "score": score, "reason": reason}
 
@@ -322,7 +327,7 @@ def propose_poses(
         {
             "pose_id": f"p{i + 1}",
             "x": round(c["x"], 3),
-            "y": round(c.get("y", floor_y), 3),
+            "y": round(c.get("y", floor_y + mount_y(asset)), 3),
             "z": round(c["z"], 3),
             "rot_deg": round(c["rot_deg"], 1),
             "reason": c["reason"],
@@ -388,7 +393,7 @@ def _blocked(
         {
             "pose_id": f"b{i + 1}",
             "x": round(c["x"], 3),
-            "y": round(c.get("y", floor_y), 3),
+            "y": round(c.get("y", floor_y + mount_y(asset)), 3),
             "z": round(c["z"], 3),
             "rot_deg": round(c["rot_deg"], 1),
             "reason": c["reason"],

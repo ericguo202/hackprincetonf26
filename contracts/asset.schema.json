@@ -56,6 +56,11 @@
         "right": { "type": "number", "minimum": 0 }
       }
     },
+    "mount_y_m": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-mounted assets only (e.g. a wall TV): height of the mesh origin above the floor; a placement's y is floor_y + mount_y_m"
+    },
     "cover": {
       "enum": ["full", "half", "none"],
       "description": "full: taller than 1.2 m; half: 0.5 to 1.2 m; none: below 0.5 m"
@@ -65,7 +70,10 @@
       "additionalProperties": false,
       "required": ["dataset", "license", "credit"],
       "properties": {
-        "dataset": { "enum": ["ABO", "PolyHaven", "KayKit", "Kenney"] },
+        "dataset": {
+          "enum": ["ABO", "PolyHaven", "KayKit", "Kenney", "FurniMesh", "Team"],
+          "description": "Team: made by the team (procedural, e.g. the flat-screen TVs), license CC0"
+        },
         "item_id": { "type": ["string", "null"] },
         "product_name": {
           "type": ["string", "null"],

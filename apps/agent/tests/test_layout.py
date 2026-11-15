@@ -350,3 +350,30 @@ def test_rule_argument_errors(room, plan):
         propose_poses(geo, ASSETS["side"], "beside", "o7", placed(plan, "o1"))
     with pytest.raises(ValueError):
         propose_poses(geo, ASSETS["side"], "floating")
+
+
+WALL_TV = {  # furniture/v3 tv_team_wall
+    "id": "tv_team_wall",
+    "name": "Wall-mounted flat-screen TV",
+    "category": "tv",
+    "size_m": {"w": 1.236, "d": 0.065, "h": 0.703},
+    "placement": "wall",
+    "clearance_m": {"front": 1.0},
+    "mount_y_m": 0.75,
+}
+
+
+def test_wall_tv_hangs_at_its_mount_height(room):
+    out = propose_poses(room_geometry(room), WALL_TV, "against_wall")
+    assert out["poses"]
+    floor_y = float(room.get("floor_y", 0.0))
+    assert all(p["y"] == pytest.approx(floor_y + 0.75) for p in out["poses"])
+
+
+def test_wall_tv_counts_its_mount_height_against_windows(room, plan):
+    # 0.703 m tall alone is under WINDOW_MAX_H_M; hung at 0.75 m its top is at 1.45 m and covers the window
+    assets = {**ASSETS, "tv_team_wall": WALL_TV, "tv_low": {**WALL_TV, "id": "tv_low", "mount_y_m": None}}
+    plan["objects"].append(obj("o3", "tv_team_wall", 0.05, 3.2, rot=90))
+    assert "blocks_opening" in types(validate_layout(plan, room, assets))
+    plan["objects"][-1] = obj("o3", "tv_low", 0.05, 3.2, rot=90)
+    assert "blocks_opening" not in types(validate_layout(plan, room, assets))

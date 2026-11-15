@@ -73,7 +73,8 @@ def object_conflicts(
                 out.append(_c(iid, "blocks_opening", f"{asset['name']} is in the swing of the {where}"))
             elif (
                 o.type == "window"
-                and asset["size_m"]["h"] > WINDOW_MAX_H_M
+                # top edge above the floor: a wall-mounted TV (mount_y_m) covers a window even though short
+                and asset["size_m"]["h"] + float(asset.get("mount_y_m") or 0.0) > WINDOW_MAX_H_M
                 and fp.intersection(o.keep_clear).area > MIN_AREA_M2
             ):
                 out.append(

@@ -34,6 +34,8 @@ import { footprints } from "./furniturePlan";
 import { useFurnitureLayout, useStableFurniture } from "./useFurniturePlan";
 import { useIndoorSpawns } from "./indoorSpawns";
 import { warnOnce } from "./pack";
+import { ScreenVideo } from "./TvScreen";
+import { TV_VIDEO_URL, findScreen } from "./tvVideo";
 
 type Props = {
   /** asset_id -> Asset, from the pack's furniture catalog. */
@@ -62,6 +64,8 @@ const BOX_COLORS: Record<string, string> = {
   armchair: "#a7927c",
   coffee_table: "#9b7b5b",
   tv_stand: "#3d4148",
+  tv: "#1d1f24",
+  crib: "#d8c3a0",
   rug: "#b9a27e",
   bookshelf: "#8a6a4c",
   floor_lamp: "#e6d8b8",
@@ -89,7 +93,20 @@ function MeshModel({ url }: { url: string }) {
   const { scene } = usePackGLTF(url);
   // Clone per instance: two couches from one glb must not share a transform.
   const model = useMemo(() => scene.clone(true), [scene]);
-  return <primitive object={model} />;
+  // A TV's "tv_screen" mesh plays VITE_TV_VIDEO_URL (TvScreen.tsx); clone(true)
+  // shares materials, but ScreenVideo swaps the material on this instance only.
+  const screen = useMemo(() => (TV_VIDEO_URL ? findScreen(model) : undefined), [model]);
+  return (
+    <>
+      <primitive object={model} />
+      {screen && TV_VIDEO_URL ? (
+        // Own boundary: the video loading must not swap the TV back to its box.
+        <Suspense fallback={null}>
+          <ScreenVideo mesh={screen} src={TV_VIDEO_URL} />
+        </Suspense>
+      ) : null}
+    </>
+  );
 }
 
 function FurniturePiece({

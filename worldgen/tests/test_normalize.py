@@ -9,6 +9,7 @@ from jsonschema import Draft202012Validator
 
 from worldgen import normalize
 from worldgen.sources.furniture import EXTRA, load_extra
+from worldgen.sources.furniture import sha256 as file_sha256
 
 ASSET_SCHEMA = json.loads(
     (Path(__file__).resolve().parents[2] / "contracts" / "asset.schema.json").read_text(encoding="utf-8")
@@ -95,8 +96,47 @@ def test_extra_furniture_yaml_is_complete(tmp_path):
     assert items, "extra_furniture.yaml has no items"
     pattern = re.compile(ASSET_SCHEMA["properties"]["id"]["pattern"])
     for it in items:
-        assert pattern.match(it["id"]) and it["id"].startswith(f"{it['category']}_{it['dataset'].lower()}_")
+        source = {"FurniMesh": "fm"}.get(it["dataset"], it["dataset"].lower())
+        assert pattern.match(it["id"]) and it["id"].startswith(f"{it['category']}_{source}_")
         assert it["raw"] == str(tmp_path / it["file"])
         assert len(it["sha256"]) == 64
         assert it["placement"] in ASSET_SCHEMA["properties"]["placement"]["enum"]
-        assert it["license"] in ("CC0 1.0", "CC BY 4.0")
+        assert it["dataset"] in ASSET_SCHEMA["properties"]["source"]["properties"]["dataset"]["enum"]
+        assert it["license"] in (
+            "CC0 1.0",
+            "CC BY 4.0",
+            "FurniMesh free license: commercial use, no attribution required",
+        )
+        if it.get("local"):  # committed source file, checked against its pinned hash
+            assert file_sha256(Path(EXTRA).parent / it["local"]) == it["sha256"]
+
+
+def test_packed_source_is_measured_in_meters():
+    # FurniMesh cribs arrive meshopt-compressed and quantized; trimesh alone reads them ~100x too big
+    crib = Path(EXTRA).parent / "furniture_src" / "furnimesh" / "crib_fm_03.glb"
+    assert normalize.is_meshopt(crib)
+    v = normalize.load_vertices(crib)
+    ext = v.max(0) - v.min(0)
+    assert ext == pytest.approx([1.37, 0.893, 0.699], abs=0.01)
+
+
+def test_wall_mounted_entry_carries_mount_height_and_no_cover():
+    entry = {
+        "id": "tv_team_wall",
+        "category": "tv",
+        "name": "Wall-mounted flat-screen TV",
+        "dataset": "Team",
+        "item_id": "tv_55_wall",
+        "product_name": "55 in flat-screen TV, wall-mounted",
+        "license": "CC0 1.0",
+        "credit": "HackPrinceton team",
+        "tags": ["living_room", "tv"],
+        "placement": "wall",
+        "clearance_m": {"front": 1.0},
+        "mount_y_m": 0.75,
+    }
+    a = normalize.catalog_entry(entry, {"size_m": {"w": 1.236, "d": 0.065, "h": 0.703}}, 3)
+    assert list(Draft202012Validator(ASSET_SCHEMA).iter_errors(a)) == []
+    assert a["mount_y_m"] == 0.75 and a["cover"] == "none"
+    unmounted = normalize.catalog_entry({**entry, "mount_y_m": None}, {"size_m": a["size_m"]}, 3)
+    assert "mount_y_m" not in unmounted

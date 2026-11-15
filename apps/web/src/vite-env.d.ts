@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_PACK_BASE_URL?: string;
   /** "1" runs without the game server: local state only (AGENTS.md section 12). */
   readonly VITE_SOLO?: string;
+  /** Muted looping clip played on catalog TV screens (world/TvScreen.tsx). Unset: TVs stay off. */
+  readonly VITE_TV_VIDEO_URL?: string;
 }
 
 interface ImportMeta {

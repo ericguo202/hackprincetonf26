@@ -107,8 +107,30 @@ NAMES = {
 # ---------------------------------------------------------------- geometry
 
 
+PACKED = {"EXT_meshopt_compression", "KHR_mesh_quantization"}
+
+
+def is_meshopt(path: Path) -> bool:
+    """Compressed or quantized geometry, which trimesh reads wrong (quantized positions are not rescaled)."""
+    return bool(PACKED & set(GLTF2().load(str(path)).extensionsUsed or []))
+
+
+def decoded(path: Path, tmp: Path) -> Path:
+    """`path`, or a float-position copy of it in `tmp` when it is meshopt-compressed or quantized.
+    Sources can arrive already packed (the FurniMesh cribs): trimesh misreads them and pygltflib cannot
+    re-save them."""
+    if not is_meshopt(path):
+        return path
+    plain = tmp / f"{path.stem}.plain.glb"
+    _cli("dequantize", str(path), str(plain))
+    return plain
+
+
 def load_vertices(path: Path) -> np.ndarray:
     """All vertices in scene (world) coordinates, node transforms applied."""
+    if is_meshopt(path):
+        with tempfile.TemporaryDirectory(prefix="decode_") as tmp:
+            return load_vertices(decoded(path, Path(tmp)))
     scene = trimesh.load(path, force="scene", process=False)
     parts = []
     for node in scene.graph.nodes_geometry:
@@ -260,7 +282,7 @@ def process(entry: dict, out_dir: Path, yaw: float, force: bool) -> dict:
     m, size, scale, vt = transform_for(entry, yaw)
     with tempfile.TemporaryDirectory(prefix="normalize_") as tmp:
         mid = Path(tmp) / "wrapped.glb"
-        wrap_root(raw, mid, m)
+        wrap_root(decoded(raw, Path(tmp)), mid, m)
         tex = 1024
         tmp_out = Path(tmp) / "out.glb"
         _cli(
@@ -355,7 +377,9 @@ def catalog_entry(entry: dict, rec: dict, version: int) -> dict:
         "size_m": rec["size_m"],
         "placement": entry["placement"],
         "clearance_m": entry.get("clearance_m") or {},
-        "cover": cover_for(rec["size_m"]["h"]),
+        # a wall-mounted panel (e.g. a wall TV) is a few cm thick and off the floor: nobody hides behind it
+        "cover": "none" if entry.get("mount_y_m") is not None else cover_for(rec["size_m"]["h"]),
+        **({"mount_y_m": entry["mount_y_m"]} if entry.get("mount_y_m") is not None else {}),
         "source": source,
     }
 
@@ -493,9 +517,13 @@ def main(argv: list[str] | None = None) -> int:
 
     fdir = OUT / "furniture" / f"v{a.version}"
     base = copy_base(OUT / "furniture" / f"v{a.base}", fdir, a.version) if a.base else []
-    clash = {b["id"] for b in base} & {e["id"] for e in full}
-    if clash:
-        raise SystemExit(f"ids in both --base v{a.base} and this run: {sorted(clash)}")
+    # extra items the base already ships (e.g. v2's Kenney TVs when building v3) keep the base's bytes
+    in_base = {b["id"] for b in base}
+    carried = [e["id"] for e in full if e["id"] in in_base]
+    full = [e for e in full if e["id"] not in in_base]
+    selection = [e for e in selection if e["id"] not in in_base]
+    if carried:
+        print(f"kept from v{a.base} unchanged: {', '.join(carried)}")
     recs: dict[str, dict] = {}
     failed: dict[str, str] = {}
     with cf.ProcessPoolExecutor(max_workers=a.jobs) as pool:

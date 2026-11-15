@@ -59,11 +59,18 @@ export interface Asset {
     right?: number;
   };
   /**
+   * Wall-mounted assets only (e.g. a wall TV): height of the mesh origin above the floor; a placement's y is floor_y + mount_y_m
+   */
+  mount_y_m?: number;
+  /**
    * full: taller than 1.2 m; half: 0.5 to 1.2 m; none: below 0.5 m
    */
   cover: "full" | "half" | "none";
   source: {
-    dataset: "ABO" | "PolyHaven" | "KayKit" | "Kenney";
+    /**
+     * Team: made by the team (procedural, e.g. the flat-screen TVs), license CC0
+     */
+    dataset: "ABO" | "PolyHaven" | "KayKit" | "Kenney" | "FurniMesh" | "Team";
     item_id?: string | null;
     /**
      * Full listing name; credits screen and chat panel only, never in-world signage

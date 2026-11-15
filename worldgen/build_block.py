@@ -2,6 +2,8 @@
 
 uv run python -m worldgen.build_block --block hou_navidad_01 --version 2          # rebuild block, then pack
 uv run python -m worldgen.build_block --block hou_navidad_01 --version 2 --reuse  # pack the last build
+uv run python -m worldgen.build_block --block hou_navidad_01 --version 3 --block-from 2 --furniture 3
+    # furniture-only version: block/ and spawns copied unchanged from v2 (no combined build needed)
 
 The block itself is built by worldgen.block_combined (procedural near zone with ortho-fitted roads, curbs,
 sidewalks, driveways and walks; Vexcel 3D Cities far zone; see worldgen/out/block_compare/combined/notes.md).
@@ -101,6 +103,7 @@ def build(
     reuse: bool = False,
     force: bool = False,
     out: Path = OUT,
+    block_from: int | None = None,
 ) -> dict:
     versions.refuse_live(block_id, version, "build the block")
     cfg = versions.block_config(block_id)
@@ -116,6 +119,8 @@ def build(
     if not (out / "furniture" / f"v{furniture}" / "catalog.json").is_file():
         raise SystemExit(f"furniture/v{furniture} is not built under {out}")
 
+    if block_from is not None:
+        return _repack(block_id, version, src, dst, versions.pack_dir(block_id, block_from, out), furniture)
     if not reuse:
         from worldgen import block_combined
 
@@ -156,6 +161,24 @@ def build(
     }
 
 
+def _repack(block_id: str, version: int, src: Path, dst: Path, block_src: Path, furniture: int) -> dict:
+    """A version that changes only what --houses-from and --furniture change: block/, spawns and the rest of
+    the manifest come unchanged from `block_src` (so a furniture bump never touches the block)."""
+    manifest = json.loads((block_src / "manifest.json").read_text())
+    shutil.copytree(src / "houses", dst / "houses")
+    shutil.copytree(block_src / "block", dst / "block")
+    manifest["version"] = version
+    manifest["houses"] = json.loads((src / "manifest.json").read_text())["houses"]
+    manifest["furniture_catalog"] = f"furniture/v{furniture}/catalog.json"
+    (dst / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
+    return {
+        "pack": str(dst),
+        "houses_from": src.name,
+        "block_from": block_src.name,
+        "furniture_catalog": manifest["furniture_catalog"],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--block", required=True, help="block id; worldgen/blocks/<block>.json")
@@ -164,8 +187,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--furniture", type=int, default=2, help="furniture library version the manifest names")
     p.add_argument("--reuse", action="store_true", help="pack the last combined build instead of rebuilding")
     p.add_argument("--force", action="store_true", help="replace an existing (non-live) target version")
+    p.add_argument(
+        "--block-from", type=int, help="copy block/ and spawns from this pack version instead of building"
+    )
     a = p.parse_args(argv)
-    print(json.dumps(build(a.block, a.version, a.houses_from, a.furniture, a.reuse, a.force), indent=1))
+    result = build(a.block, a.version, a.houses_from, a.furniture, a.reuse, a.force, block_from=a.block_from)
+    print(json.dumps(result, indent=1))
     return 0
 
 
