@@ -75,12 +75,12 @@ export type DoorAction = "interior" | "front" | null;
 
 /**
  * Interior door vs front door, both already in their own range (distances in
- * metres, null when out of range). The nearer wins; the interior door wins a tie.
+ * metres, null when out of range). The front door wins whenever it is in range,
+ * so E at the front door always leaves (or enters) instead of toggling a leaf.
  */
 export function pickDoorAction(interiorDist: number | null, frontDist: number | null): DoorAction {
-  if (interiorDist === null) return frontDist === null ? null : "front";
-  if (frontDist === null) return "interior";
-  return interiorDist <= frontDist ? "interior" : "front";
+  if (frontDist !== null) return "front";
+  return interiorDist === null ? null : "interior";
 }
 
 /** "E  Enter <address>" on the block (the listing id if it has no address), "E  Leave house" inside. */

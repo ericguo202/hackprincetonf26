@@ -118,13 +118,13 @@ describe("E at 7014's front door (real v3 data)", () => {
 });
 
 describe("interior door vs front door precedence", () => {
-  it("pickDoorAction: nearer wins, the interior door wins a tie", () => {
+  it("pickDoorAction: the front door wins whenever it is in range", () => {
     expect(pickDoorAction(null, null)).toBeNull();
     expect(pickDoorAction(1.0, null)).toBe("interior");
     expect(pickDoorAction(null, 1.9)).toBe("front");
-    expect(pickDoorAction(0.8, 1.2)).toBe("interior");
+    expect(pickDoorAction(0.2, 1.9)).toBe("front");
     expect(pickDoorAction(1.2, 0.8)).toBe("front");
-    expect(pickDoorAction(1.0, 1.0)).toBe("interior");
+    expect(pickDoorAction(1.0, 1.0)).toBe("front");
   });
 
   describe("with 7014's real interior doors", () => {
@@ -160,7 +160,7 @@ describe("interior door vs front door precedence", () => {
       expect(t?.kind === "front" && t.door.listing_id).toBe(H7014);
     });
 
-    it("an interior door and the front door both in range: the nearer wins, a tie goes to the interior door", () => {
+    it("an interior door and the front door both in range: the front door wins, even when the leaf is nearer", () => {
       // A synthetic interior door placed beside 7014's real front door.
       const fd = door7014.local;
       const beside = (dx: number): OpenedDoor => ({
@@ -171,9 +171,13 @@ describe("interior door vs front door precedence", () => {
         width: 0.8,
       });
       const pos = off(fd, 0.5); // 0.5 m from the front door
-      expect(doorTargetAt(H7014, pos, [beside(0.7)], doors)?.kind).toBe("interior"); // 0.2 m away
+      expect(doorTargetAt(H7014, pos, [beside(0.7)], doors)?.kind).toBe("front"); // leaf 0.2 m away
       expect(doorTargetAt(H7014, pos, [beside(1.9)], doors)?.kind).toBe("front"); // 1.4 m away
-      expect(doorTargetAt(H7014, pos, [beside(1.0)], doors)?.kind).toBe("interior"); // 0.5 m: a tie
+      expect(doorTargetAt(H7014, pos, [beside(1.0)], doors)?.kind).toBe("front"); // 0.5 m: a tie
+      // Out of the front door's 2 m range, the leaf works again.
+      const far = off(fd, FRONT_DOOR_KEY_M + 0.1);
+      const leaf: OpenedDoor = { ...beside(0), a: [far[0], far[2] - 0.4], b: [far[0], far[2] + 0.4] };
+      expect(doorTargetAt(H7014, far, [leaf], doors)?.kind).toBe("interior");
     });
 
     it("on the block, interior doors never count", () => {
@@ -257,5 +261,60 @@ describe("block door marker and leave landing clear of the real house (pack v3)"
       spawn: d.enterTo,
     });
     expect(pressFrontDoor({ zone: "block", armed: true }, off(d.marker, FRONT_DOOR_KEY_M - 0.05), doors).change?.zone).toBe(d.listing_id);
+  });
+});
+
+describe("E-only leave for houses with a scanned lot (collision ground node)", () => {
+  const eOnly = (id: string) => id === H7014;
+  /** Walk from 1.5 m inside the door, through the door point, 1.5 m out onto the yard. */
+  const walkThrough = (d: Door, keyOnly: (id: string) => boolean) => {
+    let s = { zone: d.listing_id, armed: true };
+    const changes = [];
+    for (let t = -1.5; t <= 1.5001; t += 0.05) {
+      const step = stepZone(s, off(d.local, t), doors, keyOnly);
+      s = step.state;
+      if (step.change) changes.push(step.change);
+      if (s.zone !== d.listing_id) break;
+    }
+    return { state: s, changes };
+  };
+
+  it("walking through 7014's front door does not change zone", () => {
+    const { state, changes } = walkThrough(door7014, eOnly);
+    expect(changes).toEqual([]);
+    expect(state.zone).toBe(H7014);
+    // Standing right on the door point does nothing either.
+    expect(stepZone({ zone: H7014, armed: true }, door7014.local, doors, eOnly).change).toBeNull();
+  });
+
+  it("E still leaves, to the same leaveTo and yaw, from inside and from the yard", () => {
+    for (const t of [-1.5, 1.5]) {
+      const { state, change } = pressFrontDoor({ zone: H7014, armed: true }, off(door7014.local, t), doors);
+      expect(change).toEqual({ zone: "block", spawn: door7014.leaveTo, yaw: door7014.leaveYaw });
+      expect(state).toEqual({ zone: "block", armed: false });
+    }
+  });
+
+  it("the Leave house hint shows from both sides of the door", () => {
+    for (const t of [-1.5, 1.5]) {
+      const target = doorTargetAt(H7014, off(door7014.local, t), [], doors);
+      expect(target?.kind === "front" && target.door.listing_id).toBe(H7014);
+      expect(frontDoorPromptText(H7014, H7014)).toBe("E  Leave house");
+    }
+  });
+
+  it("a house without a ground node keeps the walk-out trigger", () => {
+    const { changes } = walkThrough(door6915, eOnly);
+    expect(changes).toEqual([{ zone: "block", spawn: door6915.leaveTo, yaw: door6915.leaveYaw }]);
+    // The default (no predicate) is today's behaviour too.
+    expect(walkThrough(door7014, () => false).changes).toHaveLength(1);
+    expect(stepZone({ zone: H7014, armed: true }, door7014.local, doors).change?.zone).toBe("block");
+  });
+
+  it("entering from the block is unchanged for an E-only house", () => {
+    expect(stepZone({ zone: "block", armed: true }, door7014.marker, doors, eOnly).change).toEqual({
+      zone: H7014,
+      spawn: door7014.enterTo,
+    });
   });
 });

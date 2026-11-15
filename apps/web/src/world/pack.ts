@@ -464,6 +464,12 @@ export function stepZone(
   state: ZoneState,
   pos: Vec3,
   doors: Door[],
+  /**
+   * Houses you leave with E only (their scanned lot is outside the front
+   * door, houseGround.ts): in them the walk-out trigger never fires. Entering
+   * from the block is unchanged.
+   */
+  leaveByKeyOnly: (listingId: string) => boolean = () => false,
 ): { state: ZoneState; change: ZoneChange | null } {
   if (state.zone === "block") {
     const near = nearestDoor(pos, doors, (d) => d.marker);
@@ -484,7 +490,7 @@ export function stepZone(
   if (!state.armed) {
     return { state: { zone: state.zone, armed: dist > DOOR_REARM_M }, change: null };
   }
-  if (dist <= DOOR_RADIUS_M) return crossDoor(state, door);
+  if (dist <= DOOR_RADIUS_M && !leaveByKeyOnly(state.zone)) return crossDoor(state, door);
   return { state, change: null };
 }
 

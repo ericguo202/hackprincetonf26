@@ -57,6 +57,7 @@ import { remoteHitboxes } from "./remoteTargets";
 import { DEV_PLAN_B, withDevCatalog } from "./devFurniture";
 import { DEV_FOCUS_TOGGLE_ON, DEV_MODE_TOGGLE_ON, DEV_PLAN_ON, START_ROOM } from "./devFlags";
 import { FIXTURE_RAW } from "./fixtures";
+import { leavesByKeyOnly } from "./houseGround";
 import type { Asset, PlacementPlan } from "../contracts.gen";
 
 /** Sky's sun, far out along the baked sun direction (it only reads the direction). */
@@ -180,7 +181,7 @@ function Zones({ pack: loaded }: { pack: LoadedPack }) {
     () =>
       useStore.subscribe((s, prev) => {
         if (s.me.pos === prev.me.pos) return;
-        const { state, change } = stepZone(zoneState.current, s.me.pos, pack.doors);
+        const { state, change } = stepZone(zoneState.current, s.me.pos, pack.doors, leavesByKeyOnly);
         zoneState.current = state;
         if (change) {
           goTo(change.zone, change.spawn, change.yaw);

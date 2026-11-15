@@ -4,7 +4,7 @@
 // room, walls along each polygon edge with gaps for doors, and the front door
 // lit so you can find the way out.
 
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { CuboidCollider, RigidBody, TrimeshCollider } from "@react-three/rapier";
 import { Shape, type Object3D } from "three";
 
@@ -16,7 +16,7 @@ import { ZONE_COLLIDER } from "./collisionGroups";
 import { extractWallBoxes, splitClosedDoors } from "./doorSplit";
 import { GlbOrPlaceholder, LoadBoundary } from "./Glb";
 import { HouseDoors } from "./HouseDoors";
-import { showPlaceholderGround } from "./houseGround";
+import { showPlaceholderGround, useScannedLots } from "./houseGround";
 import { DOOR_RADIUS_M, doorOutward, packUrl, publishedRoot, roomsBounds, warnOnce, type Door, type LoadedPack } from "./pack";
 import { ceilingTrimesh, segmentBox, wallSegments } from "./placeholder";
 import { WorldLabel } from "./WorldLabel";
@@ -59,6 +59,12 @@ export function HouseScene({ pack, listingId }: Props) {
     },
     [listingId],
   );
+
+  // A scanned lot (collision `ground` node) is left with E only (pack.ts stepZone).
+  const setScannedLot = useScannedLots((st) => st.set);
+  useEffect(() => {
+    if (collisionScene) setScannedLot(listingId, !showPlaceholderGround(collisionScene));
+  }, [collisionScene, listingId, setScannedLot]);
 
   const split = useMemo(() => {
     if (!collisionScene || !listingId) return null;

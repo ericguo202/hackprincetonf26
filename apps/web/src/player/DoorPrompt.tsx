@@ -4,7 +4,7 @@
 // - Front doors (within 2.0 m of the door point): "Enter <address>" on the
 //   block, "Leave house" inside. E runs the same zone switch as walking in
 //   (world/frontDoorState press -> pack.ts pressFrontDoor -> crossDoor).
-// When both are in range, the nearer wins and the interior door wins a tie.
+// When both are in range, the front door wins (doorInteract pickDoorAction).
 
 import { useEffect } from "react";
 
