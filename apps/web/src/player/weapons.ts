@@ -45,6 +45,19 @@ function closestOnAxis(p: V3, h: Hitbox): V3 {
   return [h.centre[0], y, h.centre[2]];
 }
 
+/**
+ * Where a swing from `head` meets hitbox `h`: the point on the capsule's
+ * surface closest to the head (for the foam splat). Inside the capsule: the
+ * axis point itself.
+ */
+export function swingImpactPoint(head: V3, h: Hitbox): V3 {
+  const c = closestOnAxis(head, h);
+  const v = sub(head, c);
+  const l = Math.sqrt(dot(v, v));
+  if (l <= h.radius || l < 1e-9) return c;
+  return [c[0] + (v[0] / l) * h.radius, c[1] + (v[1] / l) * h.radius, c[2] + (v[2] / l) * h.radius];
+}
+
 export type SwingHit = { id: string; dist: number };
 
 /**

@@ -119,7 +119,7 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
 
   return (
     <group ref={group} visible={false}>
-      <Character animState={look.anim} moving={look.moving} weapon={weapon} fallback={<RemoteCapsule />} />
+      <Character animState={look.anim} moving={look.moving} weapon={weapon} flashId={id} fallback={<RemoteCapsule />} />
     </group>
   );
 }

@@ -253,19 +253,19 @@ function attachNoodle(root: Object3D): { holder: Object3D; jiggle: NoodleJiggle 
 /** Cylinder segments along the length, so the t^3 bend curves instead of kinking. */
 export const NOODLE_SEGMENTS = 16;
 /** Spring stiffness (1/s^2) pulling the tip back to its droop rest. */
-export const NOODLE_SPRING_K = 40;
-/** Damping (1/s): with K 40 it rings about 1 Hz and dies out in about 1 s. */
-export const NOODLE_DAMPING = 4.5;
+export const NOODLE_SPRING_K = 28;
+/** Damping (1/s): with K 28 it rings about 0.8 Hz and dies out in about 1.5 s. */
+export const NOODLE_DAMPING = 3.5;
 /** Tip acceleration per unit of tip velocity from hand motion (the lag). */
-export const NOODLE_LAG_GAIN = 2.75;
+export const NOODLE_LAG_GAIN = 3.2;
 /** Cap on that lag acceleration (mesh-space units / s^2, as before). */
 export const NOODLE_ACCEL_LIMIT = 80;
 /** Largest tip offset, as a fraction of the length. */
-export const NOODLE_MAX_BEND = 0.6;
+export const NOODLE_MAX_BEND = 0.7;
 /** Tip sag toward world down when still, as a fraction of the length (times the sideways part of down). */
-export const NOODLE_DROOP = 0.18;
+export const NOODLE_DROOP = 0.24;
 /** Tip speed added when a swing starts, in lengths per second. */
-export const NOODLE_WHIP = 4;
+export const NOODLE_WHIP = 5;
 /** Integration substep (s): keeps the spring stable at dt 0.1. */
 const NOODLE_SUBSTEP_S = 1 / 120;
 

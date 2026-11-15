@@ -13,10 +13,11 @@
 
 import { Suspense, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
-import { LoopRepeat, type AnimationAction, type Group } from "three";
+import { Color, LoopRepeat, Mesh, MeshStandardMaterial, type AnimationAction, type Group, type Material, type Object3D } from "three";
 
 import type { AnimState, Weapon } from "../../../../contracts/game-state";
 import { LoadBoundary } from "../world/Glb";
+import { flashLevel } from "../world/hitFlash";
 import { usePackGLTF } from "../world/gltf";
 import { useMeshState } from "../world/meshProbe";
 import { CHARACTER } from "./characterAsset";
@@ -32,15 +33,65 @@ type Props = {
   url?: string;
   /** Rendered while the model is checked or loading, and if it is missing or broken. */
   fallback?: ReactNode;
+  /** Remote players: their id, so a hit of mine flashes this model (world/hitFlash.ts). */
+  flashId?: string;
 };
 
-export function Character({ animState, moving = false, weapon = "blaster", url = CHARACTER.url, fallback = null }: Props) {
+/** Tint of a hit flash (emissive), at full strength. */
+const HIT_FLASH_COLOR = new Color("#ffd8a8");
+const HIT_FLASH_INTENSITY = 1.4;
+
+type Flashable = { mat: MeshStandardMaterial; emissive: Color; intensity: number };
+
+/** Tint the rig's own materials toward the flash colour by `level` (0 restores them). */
+function applyFlash(f: { list: Flashable[]; level: number }, level: number): void {
+  f.level = level;
+  for (const m of f.list) {
+    m.mat.emissive.copy(m.emissive).lerp(HIT_FLASH_COLOR, level);
+    m.mat.emissiveIntensity = m.intensity + (HIT_FLASH_INTENSITY - m.intensity) * level;
+  }
+}
+
+/**
+ * Give this rig its own copies of its standard materials (the skinned clone
+ * shares them with every other character), so only this player flashes.
+ * Returns the copies with their original emissive, and a dispose.
+ */
+function ownMaterials(root: Object3D): { list: Flashable[]; dispose: () => void } {
+  const list: Flashable[] = [];
+  const copies = new Map<Material, MeshStandardMaterial>();
+  const own = (m: Material): Material => {
+    if (!(m instanceof MeshStandardMaterial)) return m;
+    let c = copies.get(m);
+    if (!c) {
+      c = m.clone();
+      copies.set(m, c);
+      list.push({ mat: c, emissive: c.emissive.clone(), intensity: c.emissiveIntensity });
+    }
+    return c;
+  };
+  root.traverse((o) => {
+    const mesh = o as Mesh;
+    if (!mesh.isMesh) return;
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(own) : own(mesh.material);
+  });
+  return { list, dispose: () => list.forEach((f) => f.mat.dispose()) };
+}
+
+export function Character({
+  animState,
+  moving = false,
+  weapon = "blaster",
+  url = CHARACTER.url,
+  fallback = null,
+  flashId,
+}: Props) {
   const mesh = useMeshState(url, url);
   if (mesh !== "ok") return <>{fallback}</>;
   return (
     <LoadBoundary url={url} label={url} fallback={fallback}>
       <Suspense fallback={fallback}>
-        <CharacterModel url={url} animState={animState} moving={moving} weapon={weapon} />
+        <CharacterModel url={url} animState={animState} moving={moving} weapon={weapon} flashId={flashId} />
       </Suspense>
     </LoadBoundary>
   );
@@ -51,17 +102,30 @@ function CharacterModel({
   animState,
   moving,
   weapon,
+  flashId,
 }: {
   url: string;
   animState: AnimState;
   moving: boolean;
   weapon: Weapon | null;
+  flashId?: string;
 }) {
   const gltf = usePackGLTF(url);
   const rig = useMemo(() => buildRig(gltf.scene, gltf.animations), [gltf]);
   useEffect(() => setWeapon(rig, weapon), [rig, weapon]);
   const liftGroup = useRef<Group>(null);
   const current = useRef<AnimationAction | null>(null);
+  // Hit flash (remote players only): this rig's own materials, and the level last applied.
+  const flash = useRef<{ list: Flashable[]; level: number } | null>(null);
+  useEffect(() => {
+    if (!flashId) return;
+    const own = ownMaterials(rig.root);
+    flash.current = { list: own.list, level: 0 };
+    return () => {
+      flash.current = null;
+      own.dispose();
+    };
+  }, [rig, flashId]);
 
   // One-shot hand-over (Jump -> Jump_Idle) when a clip finishes.
   useEffect(() => {
@@ -102,6 +166,11 @@ function CharacterModel({
     rig.mixer.update(step);
     if (liftGroup.current) liftGroup.current.position.y = blendedLift(rig);
     updateNoodleJiggle(rig, step);
+    const f = flash.current;
+    if (f && flashId) {
+      const level = flashLevel(flashId);
+      if (level !== f.level) applyFlash(f, level);
+    }
   });
 
   return (

@@ -40,8 +40,10 @@ import {
   type Ray,
 } from "./blasterMath";
 import { useBlasterHud } from "./blasterHud";
-import { usePuffPool, useTracerPool } from "./shotFx";
-import { canAttack, noodlePayload, noodleSwing } from "./weapons";
+import { HIT_BITS, KILL_BITS, KILL_SPEED_SCALE, useFoamBurstPool, usePuffPool, useTracerPool } from "./shotFx";
+import { canAttack, noodlePayload, noodleSwing, swingImpactPoint } from "./weapons";
+import { clearHit, hitRecently, markHit } from "../world/hitFlash";
+import { useStore } from "../store";
 import { canAttackNow, foamModeNow, meAliveNow, weaponForKey } from "./foamMode";
 import { useWeaponState } from "./weaponState";
 import { markAttack } from "./attackClock";
@@ -58,6 +60,8 @@ type Props = {
 };
 
 const TRACERS = 12;
+/** Foam bits pooled for hit splats and elimination bursts (about two splats plus one elimination at once). */
+const BURST_BITS = 72;
 const FLASH_S = 0.05;
 
 const noHitboxes = () => [];
@@ -80,6 +84,8 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
   // Effect pools: meshes are mounted once and moved imperatively.
   const tracers = useTracerPool(TRACERS);
   const puffs = usePuffPool(1);
+  const bursts = useFoamBurstPool(BURST_BITS);
+  const spawnBurst = bursts.spawn; // stable
   const flashMesh = useRef<Mesh | null>(null);
   const flashLight = useRef<PointLight | null>(null);
   const flashLeft = useRef(0);
@@ -117,6 +123,23 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     };
   }, [canvas, setWeapon]);
 
+  // Elimination burst: a remote I hit within KILL_CREDIT_S goes from alive to
+  // eliminated in store.players. One burst per credited hit, at the body centre.
+  useEffect(
+    () =>
+      useStore.subscribe((s, prev) => {
+        if (s.players === prev.players) return;
+        for (const p of Object.values(s.players)) {
+          if (p.id === s.me.id || p.alive || prev.players[p.id]?.alive !== true) continue;
+          if (!hitRecently(p.id)) continue;
+          clearHit(p.id);
+          const me = s.me.pos;
+          spawnBurst(p.pos as V3, [me[0], me[1] + ARM.headOffsetY, me[2]], KILL_BITS, KILL_SPEED_SCALE);
+        }
+      }),
+    [spawnBurst],
+  );
+
   const headOffset = () =>
     ARM.headOffsetY -
     (crouchedRef?.current ? CENTRE_ABOVE_FLOOR_M.standing - CENTRE_ABOVE_FLOOR_M.crouched : 0);
@@ -127,10 +150,16 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
    */
   function swing(camDir: V3, bodyCentre: V3, now: number) {
     const head = headFrom(bodyCentre, headOffset());
-    const hit = noodleSwing(head, camDir, getHitboxes());
+    const boxes = getHitboxes();
+    const hit = noodleSwing(head, camDir, boxes);
     onFire(noodlePayload(head, camDir, hit));
     onShot?.(now); // the swing uses the `shoot` anim state
-    if (hit) showMarker("player");
+    if (hit) {
+      showMarker("player");
+      markHit(hit.id);
+      const box = boxes.find((b) => b.id === hit.id);
+      if (box) bursts.spawn(swingImpactPoint(head, box), head, HIT_BITS);
+    }
   }
 
   /** First zone-or-furniture hit along a ray, between minT and maxT, ignoring my own body. */
@@ -179,6 +208,10 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
       showMarker(hit.kind);
       puffs.spawn(end);
     }
+    if (hit.kind === "player") {
+      markHit(hit.targetId);
+      bursts.spawn(end, head, HIT_BITS);
+    }
   }
 
   useFrame((state, dt) => {
@@ -214,6 +247,7 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
     // Tracers: a short streak flying from the muzzle to the hit point.
     tracers.step(step);
     puffs.step(step);
+    bursts.step(step);
 
     flashLeft.current = Math.max(0, flashLeft.current - step);
     if (flashMesh.current) flashMesh.current.visible = flashLeft.current > 0;
@@ -229,6 +263,7 @@ export function Blaster({ ecctrl, body, getHitboxes = noHitboxes, onFire = noFir
       </mesh>
       <pointLight ref={flashLight} color="#ffb347" intensity={0} distance={3} />
       {puffs.elements}
+      {bursts.elements}
     </>
   );
 }

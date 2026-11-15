@@ -2,7 +2,7 @@
 // players' shots (world/RemoteShots.tsx). Pooled meshes, mounted once and moved
 // imperatively; call `step(dt)` once per frame from the owner's useFrame.
 
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Mesh, Quaternion, Vector3 } from "three";
 
 import type { V3 } from "./armMath";
@@ -120,4 +120,165 @@ export function usePuffPool(size: number) {
   ));
 
   return { spawn, step, elements };
+}
+
+// ---------------------------------------------------------------------------
+// Foam splat bursts: small orange and white foam bits flying out of a hit, in
+// the hemisphere facing the shooter, falling under gravity, shrinking away
+// over BURST_S. The pool logic is pure (tested in shotFx.test.ts); the hook
+// below only mirrors it onto pooled meshes. Allocation-free per frame.
+// ---------------------------------------------------------------------------
+
+/** Lifetime of one foam bit, seconds. */
+export const BURST_S = 0.4;
+/** Bits in a hit splat (10 to 14) and in an elimination burst. */
+export const HIT_BITS = 12;
+export const KILL_BITS = 30;
+/** Downward acceleration on the bits, m/s^2. */
+export const BURST_GRAVITY = 9.8;
+/** Launch speed range, m/s (an elimination burst launches faster). */
+export const BIT_SPEED_MIN = 1.6;
+export const BIT_SPEED_MAX = 3.4;
+export const KILL_SPEED_SCALE = 1.4;
+/** Edge of a foam bit, metres, at launch. */
+export const BIT_M = 0.04;
+const FOAM_WHITE = "#fff6ea";
+
+export type Bit = { life: number; x: number; y: number; z: number; vx: number; vy: number; vz: number };
+export type BurstState = { bits: Bit[]; next: number };
+
+export function createBurstState(size: number): BurstState {
+  return {
+    bits: Array.from({ length: size }, () => ({ life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })),
+    next: 0,
+  };
+}
+
+/** Unit vector from `at` toward `shooter`; straight up if they coincide. */
+export function facing(at: V3, shooter: V3): V3 {
+  const d: V3 = [shooter[0] - at[0], shooter[1] - at[1], shooter[2] - at[2]];
+  const l = Math.hypot(d[0], d[1], d[2]);
+  return l > 1e-6 ? [d[0] / l, d[1] / l, d[2] / l] : [0, 1, 0];
+}
+
+/**
+ * A direction in the hemisphere around unit `n`, uniform over its area, from
+ * two uniforms in [0, 1). Written into `out` (no allocation).
+ */
+export function hemisphereDir(n: V3, u1: number, u2: number, out: V3): V3 {
+  // Any vector not parallel to n, then an orthonormal basis (t, b, n).
+  const ax = Math.abs(n[0]) < 0.9 ? 1 : 0;
+  const ay = ax ? 0 : 1;
+  // t = normalize(a x n)
+  let tx = ay * n[2];
+  let ty = -ax * n[2];
+  let tz = ax * n[1] - ay * n[0];
+  const tl = Math.hypot(tx, ty, tz);
+  tx /= tl;
+  ty /= tl;
+  tz /= tl;
+  // b = n x t
+  const bx = n[1] * tz - n[2] * ty;
+  const by = n[2] * tx - n[0] * tz;
+  const bz = n[0] * ty - n[1] * tx;
+  const z = u1; // cos(theta), uniform in [0, 1): uniform over the hemisphere
+  const r = Math.sqrt(Math.max(0, 1 - z * z));
+  const phi = 2 * Math.PI * u2;
+  const c = r * Math.cos(phi);
+  const s = r * Math.sin(phi);
+  out[0] = tx * c + bx * s + n[0] * z;
+  out[1] = ty * c + by * s + n[1] * z;
+  out[2] = tz * c + bz * s + n[2] * z;
+  return out;
+}
+
+const tmpLaunch: V3 = [0, 0, 0];
+
+/** Launch `count` bits from `at` into the hemisphere facing `shooter`, reusing the oldest slots. */
+export function spawnBurst(
+  state: BurstState,
+  at: V3,
+  shooter: V3,
+  count: number,
+  speedScale = 1,
+  rand: () => number = Math.random,
+): void {
+  const n = facing(at, shooter);
+  const size = state.bits.length;
+  for (let k = 0; k < Math.min(count, size); k++) {
+    const b = state.bits[state.next];
+    state.next = (state.next + 1) % size;
+    hemisphereDir(n, rand(), rand(), tmpLaunch);
+    const speed = (BIT_SPEED_MIN + (BIT_SPEED_MAX - BIT_SPEED_MIN) * rand()) * speedScale;
+    b.life = BURST_S;
+    b.x = at[0];
+    b.y = at[1];
+    b.z = at[2];
+    b.vx = tmpLaunch[0] * speed;
+    b.vy = tmpLaunch[1] * speed;
+    b.vz = tmpLaunch[2] * speed;
+  }
+}
+
+/** Advance every live bit by dt: gravity, motion, life. */
+export function stepBurst(state: BurstState, dt: number): void {
+  if (!(dt > 0)) return;
+  for (const b of state.bits) {
+    if (b.life <= 0) continue;
+    b.life = Math.max(0, b.life - dt);
+    b.vy -= BURST_GRAVITY * dt;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    b.z += b.vz * dt;
+  }
+}
+
+/** Size factor of a bit: 1 at launch, 0 when it is gone (the fade). */
+export function bitFade(b: Bit): number {
+  return Math.max(0, b.life / BURST_S);
+}
+
+/** A pool of `size` foam bits; spawn(at, shooter, count) starts a burst. spawn and step are stable. */
+export function useFoamBurstPool(size: number) {
+  const [state] = useState(() => createBurstState(size));
+  const meshes = useRef<(Mesh | null)[]>([]);
+
+  const api = useMemo(
+    () => ({
+      spawn(at: V3, shooter: V3, count: number, speedScale = 1) {
+        spawnBurst(state, at, shooter, count, speedScale);
+      },
+      step(dt: number) {
+        stepBurst(state, dt);
+        for (let i = 0; i < state.bits.length; i++) {
+          const mesh = meshes.current[i];
+          if (!mesh) continue;
+          const b = state.bits[i];
+          const f = bitFade(b);
+          mesh.visible = f > 0;
+          if (f <= 0) continue;
+          mesh.position.set(b.x, b.y, b.z);
+          mesh.scale.setScalar(BIT_M * f);
+          mesh.rotation.x += dt * 9;
+          mesh.rotation.y += dt * 7;
+        }
+      },
+    }),
+    [state],
+  );
+
+  const elements = Array.from({ length: size }, (_, i) => (
+    <mesh
+      key={`bit-${i}`}
+      visible={false}
+      ref={(m) => {
+        meshes.current[i] = m;
+      }}
+    >
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial color={i % 3 === 0 ? FOAM_WHITE : FOAM} toneMapped={false} />
+    </mesh>
+  ));
+
+  return { spawn: api.spawn, step: api.step, elements };
 }

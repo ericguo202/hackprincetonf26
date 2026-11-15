@@ -258,7 +258,7 @@ describe("floppy pool noodle", () => {
     expect(NOODLE_SEGMENTS).toBe(16);
   });
 
-  it("wobbles visibly after a stop, then settles back to its droop rest within 1.5 s", () => {
+  it("wobbles visibly after a stop, then settles back to its droop rest within 2 s", () => {
     const rig = noodleRig();
     walk(rig, 0.6, 3);
     const h = j(rig).height;
@@ -270,7 +270,7 @@ describe("floppy pool noodle", () => {
       maxEarly = Math.max(maxEarly, offFromRest(rig));
     }
     expect(maxEarly).toBeGreaterThan(0.05 * h);
-    for (; t < 1.5; t += DT) updateNoodleJiggle(rig, DT);
+    for (; t < 2; t += DT) updateNoodleJiggle(rig, DT);
     expect(offFromRest(rig)).toBeLessThan(0.05 * h);
     expect(Math.hypot(j(rig).tipVel.x, j(rig).tipVel.z)).toBeLessThan(0.2 * h);
   });
@@ -281,7 +281,7 @@ describe("floppy pool noodle", () => {
     rig.root.rotation.z = Math.PI / 3;
     rig.root.updateMatrixWorld(true);
     updateNoodleJiggle(rig, DT); // re-reads the tip; settle from there
-    for (let t = 0; t < 3; t += DT) updateNoodleJiggle(rig, DT);
+    for (let t = 0; t < 4; t += DT) updateNoodleJiggle(rig, DT);
     const h = j(rig).height;
     const rest = Math.hypot(j(rig).rest.x, j(rig).rest.z);
     expect(rest).toBeGreaterThan(0.05 * h);

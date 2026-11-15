@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ARM, type V3 } from "./armMath";
 import { BLASTER, headFrom, type Hitbox } from "./blasterMath";
 import { CENTRE_ABOVE_FLOOR_M, CROUCH, MOVEMENT } from "./movement";
-import { NOODLE, WEAPON_KEYS, WEAPON_RULES, canAttack, noodlePayload, noodleSwing } from "./weapons";
+import { NOODLE, WEAPON_KEYS, WEAPON_RULES, canAttack, noodlePayload, noodleSwing, swingImpactPoint } from "./weapons";
 
 const head = headFrom([0, CENTRE_ABOVE_FLOOR_M.standing, 0], ARM.headOffsetY);
 const ahead: V3 = [0, 0, -1]; // looking down -Z, level
@@ -104,5 +104,21 @@ describe("payload", () => {
   it("origin stays inside the server's 1.5 m check", () => {
     const body: V3 = [0, CENTRE_ABOVE_FLOOR_M.standing, 0];
     expect(Math.hypot(...head.map((v, i) => v - body[i]))).toBeLessThan(1.5);
+  });
+});
+
+describe("swingImpactPoint", () => {
+  const box = { id: "t", centre: [0, 1, -1.5] as [number, number, number], radius: 0.3, halfHeight: 0.35 };
+  it("is on the capsule surface, on the side facing the swing", () => {
+    const head: [number, number, number] = [0, 1.6, 0];
+    const p = swingImpactPoint(head, box);
+    const axis: [number, number, number] = [0, 1.35, -1.5]; // axis point nearest the head (top, clamped)
+    const d = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    expect(d(p, axis)).toBeCloseTo(box.radius, 6); // on the surface
+    expect(d(head, p)).toBeCloseTo(d(head, axis) - box.radius, 6); // the nearest surface point to the swing
+    expect(p[2]).toBeGreaterThan(axis[2]); // on the side facing the head
+  });
+  it("inside the capsule: the axis point", () => {
+    expect(swingImpactPoint([0.1, 1, -1.5], box)).toEqual([0, 1, -1.5]);
   });
 });
