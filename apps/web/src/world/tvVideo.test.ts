@@ -29,7 +29,7 @@ describe("TV screen (furniture v3 team TVs)", () => {
     const off = screen.material;
     const tex = new THREE.VideoTexture(document.createElement("video"));
     const undo = showVideo(screen, tex);
-    const on = screen.material as THREE.MeshBasicMaterial;
+    const on = screen.material as THREE.Material as THREE.MeshBasicMaterial;
     expect(on).toBeInstanceOf(THREE.MeshBasicMaterial);
     expect(on.map).toBe(tex);
     expect(on.toneMapped).toBe(false);
