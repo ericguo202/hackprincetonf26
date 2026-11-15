@@ -463,7 +463,7 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
 
 ## 23. Openable interior doors
 
-**Seen in a browser, 7014 (`hou_236595179`, pack v2) only:** E opens and closes the r3 → r9 door. A closed door blocks walking, and an open one lets you through. Nothing else below has been seen in a browser.
+**Seen in a browser, 7014 (`hou_236595179`, pack v2; v3's house files are byte-identical) only:** E opens and closes the r3 → r9 door. A closed door blocks walking, and an open one lets you through. Nothing else below has been seen in a browser.
 
 - **Why:** doors that were closed during the Matterport scan are baked into `collision.glb` as solid wall boxes, so you couldn't get through them.
 - **Split (`world/doorSplit.ts`, pure):**
@@ -482,8 +482,8 @@ Lane A's notes 1 to 3 (HANDOFF 22:20). Branch `lane-c/block-v2`.
   - E toggles the door. It won't close while you're within 0.4 m of the door line.
   - It's ignored while typing.
 - **Dev probe:** `window.__laneC.doors()` returns `{zone, pos, activeDoors, open, source, packBase}`. `source: null` means `collision.glb` never loaded; `wallBoxes: 0` means it has no `walls` mesh. It's dev-only and absent from the production build (section 14 grep).
-- **Gotcha:** with no `VITE_PACK_BASE_URL`, the client runs on the contracts fixture: there's no `collision.glb`, so there are no doors. For local v2, use `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v2`.
-- **Tests:** `doorSplit.test.ts` (7014 and 6915 real files, synthetic two-door wall), `doorInteract.test.ts`, `doorState.test.ts` (a zone write after the doors register, zone flapping, per-listing clear, re-split keeps open flags).
+- **Gotcha:** with no `VITE_PACK_BASE_URL`, the client runs on the contracts fixture: there's no `collision.glb`, so there are no doors. Locally, use `VITE_PACK_BASE_URL=/packs/packs/hou_navidad_01/v3` (v2 was replaced by v3 on main).
+- **Tests:** `doorSplit.test.ts` (7014 and 6915 real files from pack v3, synthetic two-door wall), `doorInteract.test.ts`, `doorState.test.ts` (a zone write after the doors register, zone flapping, per-listing clear, re-split keeps open flags).
 - **Not seen in a browser:**
   - 7014's other six doors.
   - Every 6915 door.

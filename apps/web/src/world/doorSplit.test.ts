@@ -8,7 +8,7 @@ import type { Listing, Room } from "../contracts.gen";
 import { extractWallBoxes, splitClosedDoors, type SplitResult, type WallBox } from "./doorSplit";
 
 const PACKS = join(dirname(fileURLToPath(import.meta.url)), "../../public/packs");
-const V2_HOUSES = join(PACKS, "packs/hou_navidad_01/v2/houses");
+const HOUSES = join(PACKS, "packs/hou_navidad_01/v3/houses");
 const LISTINGS = join(PACKS, "listings/index.json");
 
 describe("doorSplit with real 7014 collision.glb and rooms.json", () => {
@@ -19,13 +19,13 @@ describe("doorSplit with real 7014 collision.glb and rooms.json", () => {
 
   beforeAll(async () => {
     roomsJson = JSON.parse(
-      readFileSync(join(V2_HOUSES, "hou_236595179/rooms.json"), "utf8"),
+      readFileSync(join(HOUSES, "hou_236595179/rooms.json"), "utf8"),
     ) as Room[];
     const listingsJson = JSON.parse(readFileSync(LISTINGS, "utf8")) as Listing[];
     const listing7014 = listingsJson.find((l) => l.id === "hou_236595179")!;
     frontDoorPos = listing7014.world!.door as [number, number, number];
 
-    const glbBuf = readFileSync(join(V2_HOUSES, "hou_236595179/collision.glb"));
+    const glbBuf = readFileSync(join(HOUSES, "hou_236595179/collision.glb"));
     const ab = new ArrayBuffer(glbBuf.length);
     new Uint8Array(ab).set(glbBuf);
 
@@ -210,13 +210,13 @@ describe("doorSplit with real 6915 (hou_237901269)", () => {
 
   beforeAll(async () => {
     const roomsJson = JSON.parse(
-      readFileSync(join(V2_HOUSES, "hou_237901269/rooms.json"), "utf8"),
+      readFileSync(join(HOUSES, "hou_237901269/rooms.json"), "utf8"),
     ) as Room[];
     const listingsJson = JSON.parse(readFileSync(LISTINGS, "utf8")) as Listing[];
     const listing6915 = listingsJson.find((l) => l.id === "hou_237901269")!;
     frontDoorPos = listing6915.world!.door as [number, number, number];
 
-    const glbBuf = readFileSync(join(V2_HOUSES, "hou_237901269/collision.glb"));
+    const glbBuf = readFileSync(join(HOUSES, "hou_237901269/collision.glb"));
     const ab = new ArrayBuffer(glbBuf.length);
     new Uint8Array(ab).set(glbBuf);
 
