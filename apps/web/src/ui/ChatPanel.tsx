@@ -5,6 +5,8 @@ import { useStore } from "../store";
 import { startLooking, stopLooking, useLooking } from "./pointerLock";
 import { useBuild } from "../world/buildState";
 import { parseInlineMarkdown } from "./inlineMarkdown";
+import { AgentFeed } from "./AgentFeed";
+import { busyLine, subagentRows } from "./handoffs";
 
 function InlineMarkdown({ text }: { text: string }) {
   return (
@@ -41,6 +43,9 @@ export function ChatPanel() {
   const agentStatus = useStore((s) => s.agentStatus);
   const waiting = useStore((s) => s.waiting);
   const messages = useStore((s) => s.messages);
+  const subagents = useStore((s) => s.subagents);
+  const tools = useStore((s) => s.tools);
+  const todos = useStore((s) => s.todos);
   const looking = useLooking();
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState("");
@@ -50,6 +55,9 @@ export function ChatPanel() {
   const canSend = Boolean(sessionId) && !waiting;
   const started = messages.length > 0;
   const expanded = open && !looking;
+  // The feed belongs to the latest turn: it sits right after the player's last message.
+  const lastUser = messages.map((m) => m.role).lastIndexOf("user");
+  const busy = waiting ? busyLine(subagentRows(subagents, tools), tools) : null;
 
   // Build mode frees the cursor, which would expand this panel over the scene:
   // fold it to the dock when building starts (T opens it again).
@@ -63,7 +71,7 @@ export function ChatPanel() {
 
   useEffect(() => {
     log.current?.scrollTo(0, log.current.scrollHeight);
-  }, [messages, expanded]);
+  }, [messages, expanded, subagents, tools, todos]);
 
   function enterTalk() {
     stopLooking();
@@ -171,7 +179,7 @@ export function ChatPanel() {
             <span className="spin" aria-hidden />
             <span className="dock-copy">
               <strong>Concierge is working</strong>
-              <em>Keep playing · T to read</em>
+              <em>{busy ?? "Keep playing"} · T to read</em>
             </span>
           </>
         ) : (
@@ -198,7 +206,8 @@ export function ChatPanel() {
 
       <div className="chat-log" ref={log}>
         {!started ? <p className="hint">Pick a suggestion or type what you want this room to feel like.</p> : null}
-        {messages.map((m, i) =>
+        {lastUser < 0 ? <AgentFeed /> : null}
+        {messages.map((m, i) => [
           m.text ? (
             <p key={i} className={m.role}>
               {m.role === "agent" ? <InlineMarkdown text={m.text} /> : m.text}
@@ -209,7 +218,8 @@ export function ChatPanel() {
               ) : null}
             </p>
           ) : null,
-        )}
+          i === lastUser ? <AgentFeed key="feed" /> : null,
+        ])}
         {waiting ? <p className="hint thinking">Thinking…</p> : null}
       </div>
 
