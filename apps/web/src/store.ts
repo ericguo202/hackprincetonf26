@@ -1,7 +1,7 @@
 // The client seam (AGENTS.md section 6). Lane D writes network and agent state here;
 // Lane C reads it to render. C never opens a socket; D never touches three.js objects.
 import { create } from "zustand";
-import type { AnimState, GameMode } from "../../../contracts/game-state";
+import type { AnimState, GameMode, Weapon } from "../../../contracts/game-state";
 import type { Audit, PlacementPlan } from "./contracts.gen";
 
 export type Vec3 = [number, number, number];
@@ -18,6 +18,8 @@ export type NetPlayer = {
   hp: number;
   score: number;
   alive: boolean;
+  /** Held weapon (contracts v2.7.0). Absent from older servers: show the blaster. */
+  weapon?: Weapon;
 };
 export type PlacedObject = PlacementPlan["objects"][number] & { by_player: string };
 export type HouseFurniture = { plan_id: string; objects: PlacedObject[] };

@@ -32,6 +32,8 @@ export const Player = schema(
     hp: t.uint8().default(3),
     score: t.uint16().default(0),
     alive: t.boolean().default(true),
+    // Held weapon (v2.7.0), one of WEAPONS, set from `move.weapon`, so other players see it.
+    weapon: t.string().default("blaster"),
   },
   "Player",
 );

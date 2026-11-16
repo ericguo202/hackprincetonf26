@@ -1,8 +1,7 @@
 // Lane C: which weapon the local player holds (keys 1 and 2, weapons.ts).
 // Local to player/: the blaster reads it to attack, Player passes it to
-// <Character weapon> so the model holds it. Not network state: the wire
-// carries the weapon only in `fire` (contracts v2.4.0), so remote players
-// always show the blaster until Player state gains a weapon field.
+// <Character weapon> so the model holds it. net/game.ts sends it with each
+// `move` (contracts v2.7.0) so remote players draw it from Player.weapon.
 
 import { create } from "zustand";
 

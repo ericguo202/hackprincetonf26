@@ -104,8 +104,10 @@ function RemoteAvatar({ id, zone, buffers }: { id: string; zone: string; buffers
   const name = useStore((s) => s.players[id]?.name);
   const meId = useStore((s) => s.me.id);
   const lookRef = useRef(look);
-  // Remote players show the blaster in foam (the wire has no per-player weapon), nothing in explore.
-  const weapon = heldWeaponProp(useFoamMode(), "blaster");
+  // Remote players hold their selected weapon in foam (Player.weapon, v2.7.0), nothing in explore.
+  // Read straight from the store, not the interpolation buffer: it changes rarely and needs no smoothing.
+  const held = useStore((s) => s.players[id]?.weapon) ?? "blaster";
+  const weapon = heldWeaponProp(useFoamMode(), held);
   const footBelow = useRef(footBelowCentre("idle"));
 
   useFrame((_, dt) => {

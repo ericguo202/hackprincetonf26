@@ -1,4 +1,4 @@
-# Game service messages (contracts v2.6.1)
+# Game service messages (contracts v2.7.0)
 
 Colyseus 0.18, one room type `NeighborhoodRoom` keyed by `block_id`, up to 16 players.
 Shared state schema: `game-state.ts`. Positions are in the player's current zone frame
@@ -8,7 +8,7 @@ Shared state schema: `game-state.ts`. Positions are in the player's current zone
 
 | Message      | Payload                                        | Server rule                                                   |
 | ------------ | ---------------------------------------------- | ------------------------------------------------------------- |
-| `move`       | `{x, y, z, yaw, anim}`                         | 20 Hz; reject a jump over 3 m since the last accepted move, except in a teleport window (below); always reject non-finite values |
+| `move`       | `{x, y, z, yaw, anim, weapon?}`                | 20 Hz; reject a jump over 3 m since the last accepted move, except in a teleport window (below); always reject non-finite values |
 | `enter_zone` | `{zone}` (`"block"` or a `listing_id`)         | Sets `Player.zone`; a real change opens a teleport window     |
 | `fire`       | `{origin: [x,y,z], dir: [x,y,z], target_id?, weapon?}` | Foam mode only. Hit counts only if both alive, same zone, under the weapon's fire rate, in range, origin within 1.5 m of last position (rules below) |
 | `set_mode`   | `{mode: "explore" or "foam"}`                  | Host toggle                                                   |
@@ -32,6 +32,11 @@ server-side hit check that models the body should use the lower height.
 
 `weapon` (v2.4.0) is one of `blaster, noodle` (`WEAPONS` in `game-state.ts`).
 Absent means `blaster`, so older payloads stay valid.
+
+`move.weapon` (v2.7.0) is the weapon the player is holding, from the same list.
+The server copies it into `Player.weapon` (default `blaster`) so the other
+players draw the right one in hand. Absent keeps the current value (older
+clients); an unknown value is ignored.
 
 Fire rules (v2.4.3). `Player.hp` is 3 when full (the schema default).
 

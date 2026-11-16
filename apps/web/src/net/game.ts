@@ -3,6 +3,7 @@
 import { Client, type Room } from "@colyseus/sdk";
 import type { GameMode } from "../../../../contracts/game-state";
 import type { FirePayload } from "../player/blasterMath";
+import { useWeaponState } from "../player/weaponState";
 import { useStore } from "../store";
 import { applyBroadcast, BROADCAST_TYPES } from "./broadcasts";
 import { applyLocalEdit, type FurnitureEdit } from "./furnitureEdits";
@@ -41,7 +42,8 @@ export async function joinBlock(blockId: string, name: string): Promise<void> {
       room.send("enter_zone", { zone: me.zone });
       lastZone = me.zone;
     }
-    room.send("move", { x: me.pos[0], y: me.pos[1], z: me.pos[2], yaw: me.yaw, anim: me.anim });
+    const weapon = useWeaponState.getState().weapon;
+    room.send("move", { x: me.pos[0], y: me.pos[1], z: me.pos[2], yaw: me.yaw, anim: me.anim, weapon });
   }, 1000 / MOVE_HZ);
 }
 

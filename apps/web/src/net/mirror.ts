@@ -1,7 +1,8 @@
 // Lane D: structural sharing for the Colyseus -> store mirror. Patches arrive ~20 Hz per player
 // (every `move`); only the parts that actually changed get a new identity, so furniture, focus
 // and unchanged players keep their references and their subscribers do not re-render.
-import type { AnimState, GameMode } from "../../../../contracts/game-state";
+import type { AnimState, GameMode, Weapon } from "../../../../contracts/game-state";
+import { WEAPON_RULES } from "../player/weapons";
 import type { HouseFurniture, NetPlayer } from "../store";
 
 export type PlayerJSON = Omit<NetPlayer, "pos"> & { x: number; y: number; z: number };
@@ -36,7 +37,10 @@ function shallowEqual(a: object, b: object, skip?: string): boolean {
 }
 
 function mirrorPlayer(prev: NetPlayer | undefined, p: PlayerJSON): NetPlayer {
-  const next: NetPlayer = { ...p, anim: p.anim as AnimState, pos: [p.x, p.y, p.z] };
+  // The server stores a plain string; keep only weapons this client can draw.
+  const w = p.weapon as string | undefined;
+  const weapon = w && Object.hasOwn(WEAPON_RULES, w) ? (w as Weapon) : undefined;
+  const next: NetPlayer = { ...p, anim: p.anim as AnimState, weapon, pos: [p.x, p.y, p.z] };
   if (
     prev &&
     prev.pos[0] === next.pos[0] &&

@@ -51,6 +51,15 @@ describe("mirrorState", () => {
     expect(patch!.players!.b).toBe(s.players.b);
   });
 
+  it("carries a remote player's weapon, dropping unknown values", () => {
+    const s = seed();
+    const patch = mirrorState(s, json({ players: { a: { ...pj("a"), weapon: "noodle" }, b: pj("b") } }));
+    expect(patch!.players!.a.weapon).toBe("noodle");
+    expect(patch!.players!.b).toBe(s.players.b);
+    // Unknown to this client: mirrored as absent (blaster), so nothing changed.
+    expect(mirrorState(s, json({ players: { a: { ...pj("a"), weapon: "bazooka" as never }, b: pj("b") } }))).toBeNull();
+  });
+
   it("detects a non-position player field change", () => {
     const s = seed();
     const patch = mirrorState(s, json({ players: { a: { ...pj("a"), hp: 2 }, b: pj("b") } }));

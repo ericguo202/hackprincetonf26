@@ -32,7 +32,7 @@ export const TELEPORT_GRACE_MS = 1500;
 export const roomsByBlock = new Map<string, NeighborhoodRoom>();
 
 type JoinOptions = { block_id?: string; name?: string };
-type MovePayload = { x: number; y: number; z: number; yaw: number; anim: string };
+type MovePayload = { x: number; y: number; z: number; yaw: number; anim: string; weapon?: unknown };
 type FirePayload = { origin?: unknown; dir?: unknown; target_id?: unknown; weapon?: unknown };
 type FurniturePayload = {
   listing_id?: unknown;
@@ -109,6 +109,11 @@ export class NeighborhoodRoom extends Room<{ state: RoomState }> {
       p.z = m.z;
       p.yaw = m.yaw;
       if ((ANIM_STATES as readonly string[]).includes(m.anim)) p.anim = m.anim;
+      // Absent keeps the current weapon (pre-2.7 clients); an unknown value is ignored.
+      if (m.weapon !== undefined) {
+        const weapon = parseWeapon(m.weapon);
+        if (weapon) p.weapon = weapon;
+      }
     },
     enter_zone: (client: Client, m: { zone: string }) => {
       const p = this.state.players.get(client.sessionId);

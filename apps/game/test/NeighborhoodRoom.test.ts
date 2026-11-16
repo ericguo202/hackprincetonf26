@@ -44,6 +44,22 @@ describe("NeighborhoodRoom", () => {
     assert.strictEqual(room.state.players.get(client.sessionId)?.x, 1);
   });
 
+  it("relays the held weapon from move, so other players see it", async () => {
+    const room = await colyseus.createRoom("neighborhood", { block_id: BLOCK });
+    const client = await colyseus.connectTo(room, { name: "ana" });
+    const weapon = () => room.state.players.get(client.sessionId)?.weapon;
+    assert.strictEqual(weapon(), "blaster");
+
+    client.send("move", { ...move(0), weapon: "noodle" });
+    await room.waitForNextPatch();
+    assert.strictEqual(weapon(), "noodle");
+
+    client.send("move", move(0.1)); // no weapon field (pre-2.7 client): keep it
+    client.send("move", { ...move(0.2), weapon: "bazooka" }); // unknown: ignored
+    await room.waitForNextPatch();
+    assert.strictEqual(weapon(), "noodle");
+  });
+
   it("accepts the spawn jump after join, even after small moves", async () => {
     const room = await colyseus.createRoom("neighborhood", { block_id: BLOCK });
     const client = await colyseus.connectTo(room, { name: "ana" });
